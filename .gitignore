@@ -1,0 +1,17 @@
+# Builds (scripts/build_mac_app.sh): Wails writes the app to packaging/bin,
+# the script copies it to dist; build/vendor holds the static ffmpeg
+packaging/bin/
+dist/
+build/
+
+# OS and editors
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+.env
+*.log
+
+# what `wails dev` generates; the window uses window.go and window.runtime directly
+frontend/wailsjs/

@@ -1,0 +1,325 @@
+/* The page a hosting Mac serves (viewer.html). Terminal green on black.
+   Three layouts, chosen by host.js as data-mode on .app:
+     side     desktop: video left, chat column right (YouTube live)
+     stacked  upright phone: video on top, chat below
+     overlay  phone on its side: video fills, chat floats over it like
+              subtitles and fades
+   Nothing of ours sits on the picture: the corners and the bottom are the
+   browser's player's (volume, picture in picture, full screen). Our buttons
+   live in the chat header; the chat tab sits halfway down the right edge. */
+:root {
+    --green: #00ff00;
+    --text: #e6ffe6;
+    --name: #7dff7d;
+    --dim: #7a8a7a;
+    --line: rgba(0, 255, 0, 0.22);
+    --panel: #070907;
+    --font: Menlo, Monaco, 'Courier New', monospace;
+    --chat-width: 360px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #000; color: var(--green); font-family: var(--font); }
+/* The page never scrolls: on a phone the on-screen keyboard would otherwise
+   push the video off the top. host.js sizes .app to the part of the screen
+   the keyboard leaves (the visual viewport) instead. */
+html, body { overflow: hidden; overscroll-behavior: none; }
+body { position: fixed; inset: 0; }
+button { font-family: var(--font); }
+
+.app {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--chat-width);
+    height: 100vh;
+    height: 100dvh;
+    height: var(--visible-height, 100dvh);
+    transform: translateY(var(--visible-top, 0px));
+}
+
+/* ---------- the video ---------- */
+.stage { position: relative; min-width: 0; min-height: 0; background: #000; overflow: hidden; }
+.stage video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+
+/* A PDF read together covers the video (which shows a "reading" card meanwhile) */
+.doc { position: absolute; inset: 0; z-index: 3; background: #111; display: flex; flex-direction: column; }
+.doc[hidden] { display: none; }
+.doc-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; }
+.doc-scroll canvas { display: block; margin: auto; background: #fff; box-shadow: 0 0 24px rgba(0, 0, 0, 0.6); }
+.doc.fit-width .doc-scroll canvas { margin: 0 auto; }
+.doc-bar {
+    position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 10px;
+    padding: 4px 6px 4px 12px; font-size: 13px; color: var(--text);
+    background: rgba(0, 0, 0, 0.7); border: 1px solid var(--line); border-radius: 4px;
+}
+.doc-zoom {
+    background: none; border: 1px solid var(--line); border-radius: 3px; color: var(--green);
+    font-size: 12px; padding: 3px 8px; cursor: pointer;
+}
+
+/* The stream's state lives in the chat header. Over the video only when there
+   is no header (chat hidden, or floating over a full-screen video), and then
+   only while something is wrong: "Live" on the picture is just a distraction. */
+.badge {
+    display: none;
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5;
+    white-space: nowrap;
+    align-items: center; gap: 8px;
+    padding: 6px 12px; font-size: 13px;
+    background: rgba(0, 0, 0, 0.7); border: 1px solid var(--line); border-radius: 4px;
+}
+.app[data-mode="overlay"]:not(.is-live) .badge,
+.app.chat-hidden:not(.is-live) .badge { display: flex; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: #666; }
+.dot.live { background: #ff3b3b; box-shadow: 0 0 6px #ff3b3b; }
+
+.chat-tab {
+    display: none;
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 6;
+    padding: 14px 7px; font-size: 16px; cursor: pointer;
+    background: rgba(0, 0, 0, 0.7); color: var(--green);
+    border: 1px solid var(--line); border-right: none; border-radius: 6px 0 0 6px;
+}
+.chat-tab:hover { background: rgba(0, 40, 0, 0.85); }
+.app.chat-hidden .chat-tab,
+.app[data-mode="overlay"] .chat-tab { display: block; }
+
+/* Browsers only autoplay video muted, so say so until they turn it up (or
+   wave it away with the ✕, which leaves the sound off) */
+.sound-prompt {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; max-width: 90%;
+}
+.sound-prompt[hidden] { display: none; }
+.sound-button {
+    background: rgba(0, 0, 0, 0.92); color: var(--green); border: 1px solid rgba(0, 255, 0, 0.6);
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.3); border-radius: 4px; padding: 14px 34px 14px 22px;
+    font: 18px var(--font); cursor: pointer; max-width: 100%;
+}
+.sound-button:hover { background: rgba(0, 40, 0, 0.9); }
+.sound-dismiss {
+    position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; padding: 0;
+    background: none; border: none; border-radius: 3px; color: var(--dim); font-size: 14px; cursor: pointer;
+}
+.sound-dismiss:hover { color: var(--green); background: rgba(0, 255, 0, 0.12); }
+
+/* Movie subtitles, when a viewer turns them on */
+.captions {
+    position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%); z-index: 4;
+    width: max-content; max-width: 88%; text-align: center; pointer-events: none;
+    font: clamp(15px, 2.6vw, 30px)/1.3 -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    color: #fff;
+}
+.captions span {
+    display: inline; padding: 0.05em 0.35em; background: rgba(0, 0, 0, 0.75);
+    box-decoration-break: clone; -webkit-box-decoration-break: clone; white-space: pre-line;
+}
+.captions[hidden] { display: none; }
+
+.menu {
+    position: absolute; top: 100%; right: 8px; z-index: 9; min-width: 180px; font-size: 14px;
+    background: rgba(0, 0, 0, 0.92); border: 1px solid var(--line); border-radius: 4px; padding: 6px 0;
+}
+.menu button {
+    display: block; width: 100%; text-align: left; padding: 8px 14px;
+    background: none; border: none; color: var(--text); font-size: 14px; cursor: pointer;
+}
+.menu button:hover { background: rgba(0, 60, 0, 0.6); }
+.menu button.on::before { content: '✓ '; color: var(--green); }
+.menu .sep { border-top: 1px solid var(--line); margin: 6px 0; }
+.menu .small { color: var(--dim); font-size: 12px; padding: 4px 14px; }
+.menu[hidden] { display: none; }
+
+/* ---------- the chat ---------- */
+.chat {
+    display: flex; flex-direction: column; min-height: 0;
+    background: var(--panel); border-left: 1px solid var(--line);
+}
+.chat-head {
+    position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 14px;
+}
+.chat-head .title { font-weight: bold; }
+.chat-head > span { white-space: nowrap; }   /* when there's no room, the buttons go to a line of their own */
+.chat-head .count { color: var(--dim); font-size: 12px; }
+.stream-state { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text); }
+.stream-state .dot { width: 7px; height: 7px; }
+.chat-head .conn { color: var(--dim); font-size: 11px; }
+.chat-head .tools { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.head-btn {
+    background: none; color: var(--green); font: bold 12px var(--font); padding: 3px 7px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 3px;
+}
+.head-btn:hover { background: rgba(0, 40, 0, 0.85); }
+.head-btn.on { border-color: var(--green); box-shadow: 0 0 6px rgba(0, 255, 0, 0.4); }
+.head-btn[hidden] { display: none; }
+.chat-head .conn.connected { display: none; }   /* only worth saying when it isn't */
+.hide-chat {
+    background: none; border: 1px solid transparent; border-radius: 4px; color: var(--dim);
+    font-size: 15px; padding: 0 6px; cursor: pointer;
+}
+.hide-chat:hover { color: var(--green); border-color: var(--line); }
+
+/* Hidden chat: the video takes its room; a chat button with a count of what
+   arrived meanwhile brings it back */
+.unread {
+    position: absolute; top: -9px; left: -9px; min-width: 19px; height: 19px; padding: 0 5px;
+    border-radius: 10px; background: #ff3b3b; color: #fff; font: bold 11px/19px var(--font); text-align: center;
+}
+.unread[hidden] { display: none; }
+.app.chat-hidden .chat { display: none; }
+.app.chat-hidden[data-mode="side"] { grid-template-columns: minmax(0, 1fr); }
+.app.chat-hidden[data-mode="stacked"] { grid-template-rows: minmax(0, 1fr); }
+.app.chat-hidden[data-mode="stacked"] .stage { aspect-ratio: auto; }
+.online {
+    padding: 6px 14px; font-size: 11px; color: var(--dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--line);
+}
+.online:empty { display: none; }
+.messages {
+    flex: 1; min-height: 0; overflow-y: auto; padding: 10px 14px;
+    display: flex; flex-direction: column; gap: 7px; font-size: 13px; line-height: 1.45;
+}
+.msg { overflow-wrap: anywhere; }
+.msg .name { color: var(--name); font-weight: bold; margin-right: 6px; }
+.msg .text { color: var(--text); white-space: pre-wrap; }
+.msg .time { color: var(--dim); font-size: 10px; margin-left: 6px; }
+.msg.system { color: var(--dim); font-style: italic; }
+
+.composer { border-top: 1px solid var(--line); padding: 10px 14px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+.composer .row { display: flex; gap: 8px; }
+.composer input, .composer textarea {
+    flex: 1; min-width: 0; padding: 9px 10px;
+    background: #000; color: var(--green); border: 1px solid var(--line); border-radius: 4px;
+    font: 14px/1.4 var(--font); outline: none;
+}
+/* the message box grows with what's typed (host.js), up to about five lines */
+.composer textarea { resize: none; overflow-y: hidden; max-height: calc(5 * 1.4em + 20px); }
+.composer .row { align-items: flex-end; }
+.composer input:focus, .composer textarea:focus { border-color: rgba(0, 255, 0, 0.6); }
+.btn {
+    background: #002800; color: var(--green); border: 1px solid rgba(0, 255, 0, 0.5);
+    border-radius: 4px; padding: 8px 12px; cursor: pointer; white-space: nowrap;
+}
+/* Join chat: as tall as the name box beside it, in its type */
+.composer .btn { align-self: stretch; font: 14px/1.4 var(--font); }
+/* the name beside the message box: the box's own font, padding and border, so the two match */
+.chip {
+    flex: none; max-width: 40%; padding: 9px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background: none; color: var(--name); border: 1px solid var(--line); border-radius: 4px; cursor: pointer;
+    font: 14px/1.4 var(--font);
+}
+
+/* phones: a smaller sound button, and three chat lines over the video, not four */
+@media (max-width: 600px), (max-height: 500px) {
+    .sound-button { font-size: 14px; padding: 10px 30px 10px 14px; }
+}
+@media (max-height: 500px) {
+    .app[data-mode="overlay"] .msg:nth-last-child(n+4) { display: none; }
+    .app[data-mode="overlay"] .msg { font-size: 14px; }
+}
+
+/* ---------- upright phone: video on top, chat below ---------- */
+.app[data-mode="stacked"] { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+.app[data-mode="stacked"] .stage { aspect-ratio: 16 / 9; }
+/* a page is upright: reading on an upright phone, it gets most of the screen and the chat the rest */
+.app.reading[data-mode="stacked"]:not(.chat-hidden) { grid-template-rows: 68% minmax(0, 1fr); }
+.app.reading[data-mode="stacked"] .stage { aspect-ratio: auto; }
+.app[data-mode="stacked"] .chat { border-left: none; border-top: 1px solid var(--line); }
+.app[data-mode="stacked"] .composer input,
+.app[data-mode="stacked"] .composer textarea,
+.app[data-mode="stacked"] .chip { font-size: 16px; }   /* iOS zooms in on anything smaller */
+
+/* ---------- phone on its side: chat over the video ---------- */
+.app[data-mode="overlay"] { display: block; }
+.app[data-mode="overlay"] .stage { position: fixed; inset: 0; }
+.app[data-mode="overlay"] .chat {
+    position: fixed; left: 0; right: 0; bottom: var(--captions-room, 0px); z-index: 8;
+    background: none; border: none; pointer-events: none; align-items: center;
+}
+.app[data-mode="overlay"] .online { display: none; }
+/* the chat tab opens the header (CC, guide, hide) and the message box together, as one panel */
+.app[data-mode="overlay"] .chat-head {
+    display: none; order: 2; pointer-events: auto; width: min(92%, 620px); padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.85); border: 1px solid var(--line); border-bottom: none; border-radius: 6px 6px 0 0;
+}
+.app[data-mode="overlay"].composing .chat-head { display: flex; }
+.app[data-mode="overlay"] .messages { order: 1; }
+.app[data-mode="overlay"] .composer { order: 3; }
+.app[data-mode="overlay"] .menu { top: auto; bottom: 100%; }
+.app[data-mode="overlay"] .messages {
+    flex: none; width: min(92%, 820px); overflow: hidden;
+    justify-content: flex-end; align-items: center; gap: 4px; padding: 0 0 10px;
+}
+.app[data-mode="overlay"] .msg {
+    padding: 3px 10px; border-radius: 3px; text-align: center;
+    background: rgba(0, 0, 0, 0.72); text-shadow: 0 1px 2px #000;
+    font-size: clamp(13px, 2.1vw, 19px); transition: opacity 0.8s;
+}
+.app[data-mode="overlay"] .msg .time { display: none; }
+.app[data-mode="overlay"] .msg:not(.fresh) { opacity: 0; }
+.app[data-mode="overlay"] .msg.gone,
+.app[data-mode="overlay"] .msg:nth-last-child(n+5) { display: none; }   /* the newest four, like subtitles */
+.app[data-mode="overlay"] .composer {
+    display: none; pointer-events: auto; width: min(92%, 620px); margin-bottom: 12px;
+    background: rgba(0, 0, 0, 0.85); border: 1px solid var(--line); border-radius: 0 0 6px 6px;
+}
+.app[data-mode="overlay"].composing .composer { display: block; }
+.app[data-mode="overlay"] .captions { bottom: 5%; }
+.app[data-mode="overlay"] .sound-prompt { top: 30%; }
+
+/* the host quit: the page is wiped and says so */
+.ended {
+    position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+    padding: 24px; text-align: center; background: #000; color: var(--dim); font-size: 16px;
+}
+
+/* ---------- the guide: a cable TV listing ---------- */
+.guide {
+    position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+    padding: 16px; background: rgba(0, 0, 0, 0.6);
+}
+.guide[hidden] { display: none; }
+.guide-box {
+    width: min(760px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden;
+    background: #0b1f6b; border: 2px solid #8aa2ff; border-radius: 6px; box-shadow: 0 8px 40px rgba(0, 0, 0, 0.7);
+    font-family: 'Helvetica Neue', Arial, sans-serif; color: #fff;
+}
+.guide-head {
+    display: flex; align-items: baseline; gap: 14px; padding: 10px 14px;
+    background: linear-gradient(#22347f, #0a1650); border-bottom: 2px solid #8aa2ff;
+}
+.guide-title { font-weight: 900; font-size: 20px; letter-spacing: 0.08em; color: #ffd23f; text-shadow: 1px 1px 0 #000; }
+.guide-zone { font-size: 12px; color: #c9d4ff; }
+.guide-clock { margin-left: auto; font-weight: bold; font-size: 18px; font-variant-numeric: tabular-nums; color: #fff; }
+.guide-close { background: none; border: none; color: #c9d4ff; font-size: 18px; cursor: pointer; padding: 0 0 0 8px; }
+.guide-close:hover { color: #ffd23f; }
+.guide-rows { overflow-y: auto; }
+.guide-row {
+    display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 12px;
+    padding: 12px 14px; border-bottom: 1px solid #1d3aa8; background: #102a80;
+}
+.guide-row:nth-child(even) { background: #0d2370; }
+.guide-row .time { font-weight: 900; font-size: 18px; color: #ffd23f; font-variant-numeric: tabular-nums; text-align: right; }
+.guide-row .what { min-width: 0; }
+.guide-row .name { font-weight: bold; font-size: 17px; overflow-wrap: anywhere; }
+.guide-row .tags { margin-top: 3px; font-size: 11px; letter-spacing: 0.04em; color: #c9d4ff; }
+.guide-row .tag {
+    display: inline-block; padding: 1px 5px; margin-right: 6px; border-radius: 3px; font-weight: bold;
+    background: #ffd23f; color: #0b1f6b;
+}
+.guide-row .tag.now { background: #e8202a; color: #fff; }
+.guide-row .runtime { font-size: 14px; color: #c9d4ff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.guide-row .bar { grid-column: 2 / 4; height: 4px; background: #1d3aa8; border-radius: 2px; overflow: hidden; }
+.guide-row .bar span { display: block; height: 100%; background: #ffd23f; }
+.guide-row.now { background: #1a3aa0; box-shadow: inset 4px 0 0 #e8202a; }
+.guide-empty { padding: 28px 14px; text-align: center; color: #c9d4ff; }
+.guide-note { padding: 8px 14px; font-size: 12px; color: #c9d4ff; background: #0a1650; }
+@media (max-width: 600px) {
+    .guide { padding: 0; }
+    .guide-box { height: 100%; border-radius: 0; border: none; }
+    .guide-row { grid-template-columns: 68px 1fr auto; gap: 8px; padding: 10px; }
+    .guide-row .time { font-size: 15px; }
+    .guide-row .name { font-size: 15px; }
+    .guide-head { flex-wrap: wrap; gap: 4px 10px; }
+    .guide-title { font-size: 16px; white-space: nowrap; }
+    .guide-clock { font-size: 15px; white-space: nowrap; }
+    .guide-zone { order: 5; flex-basis: 100%; }      /* its own line under the title */
+}

@@ -1,0 +1,31 @@
+# TubeYap
+
+A macOS app for watching movies (and listening to music, and reading PDFs) with friends, hosted entirely from the host's
+own Mac, and leaving nothing behind when it quits. There is no server: the Mac
+runs MediaMTX and a small Go web server, and friends connect to it directly (or
+through a Cloudflare quick tunnel). Go, with a Wails v2 window; well-known libraries over anything hand-written.
+
+## Key files
+
+- `app.go` - the app's state, deliberately almost buttonless: a big Play/Stop button and a big Copy-link button (a "Making link" spinner until the link is ready; the link itself is never shown) over a list you drag videos, sound files and PDFs into and drag into order, Backspace removes the selected one. A PDF up turns the playhead slider into its pages (←/→ too; past the last page moves on); songs in a row skip the countdown. Adding a video (or Play) starts hosting; the copied link is Cloudflare's https one when cloudflared is there. Countdown, subtitles (text tracks offered to viewers; files dropped onto a movie) and encoding work without controls; settings live only in `~/.tubeyap.json` (`config.go`). Every state change runs on one goroutine (`run`), one job at a time; after each, the window is sent a `View`. The log goes to stderr
+- `frontend/` - the window: plain HTML/CSS/JS, no build step. It draws the `View` and calls `window.go.main.App` methods; it keeps only a drag in progress and a held slider
+- `main.go` - Wails options, the embedded files (`frontend/`, `host_web/`, `media/standby_opus.mp4`), `--selftest` (`selftest.go`)
+- `stream.go` - ffmpeg commands and the `Player`: one movie, song (its cover art and tags over a quiet full-frame sonogram plus soft bars, ffmpeg's showcqt, worked out small and scaled up), countdown card or document card (while a PDF is up) to the app's MediaMTX as H264 + Opus over RTSP at 1280x720 (letterboxed), 1s keyframes, accurate seeks; positions come from `-progress` and time viewers' subtitles; burns in subtitles on request, shifting timestamps so they stay right after a seek
+- `host.go` + `portmap.go` + `host_web/` - hosting. MediaMTX (loopback only, except the ICE port) behind a `net/http` site that needs the session key in every path (WHEP and HLS through `httputil.ReverseProxy`, chat on gorilla/websocket); chat, subtitles and the PDF up now (served at `/doc/<token>`, page synced over the chat socket) in memory; NAT-PMP/UPnP port forwards (jackpal/go-nat-pmp, huin/goupnp; 10-minute leases, never permanent); cloudflared quick tunnel, which also turns on Cloudflare's STUN for hole punching. MediaMTX and cloudflared run under a shell watchdog so they die with the app
+- `subtitles.go` - finds a movie's subtitle tracks and the files beside it; turns text ones into cues via ffmpeg's WebVTT; language names from golang.org/x/text. `media.go`: what a file holds, read from ffmpeg's own description of it (`inspect`; there's no ffprobe), PDF page counts (pdfcpu), titles from release names
+- `host_web/` - the viewer page (`viewer.html`, `host.js`, `host.css`, vendored `hls.min.js` and pdf.js 6.3.289's legacy build `pdf.min.mjs`/`pdf.worker.min.mjs`): YouTube-style layouts, WebRTC with HLS fallback, chat, CC menu, a PDF drawn over the video on the host's page; nothing of ours on the picture (the corners and bottom are the browser player's): CC and GUIDE live in the chat header, and full screen is the player's own, with a "Chat" subtitle track carrying chat (and subtitles) there; wipes itself when the host goes
+- `scripts/build_mac_app.sh` - `wails build` (pinned, through `go run`; `wails.json`, packaging in `packaging/`) into `dist/TubeYap.app`, with MediaMTX and cloudflared (from Homebrew) and `host_web/` in `Contents/Resources`; `BUNDLE_FFMPEG=1` for the app's own ffmpeg (`scripts/build_ffmpeg.sh`)
+- `scripts/test.sh` - `go vet`, `go test` (including a play-through of two clips on free ports) and `--selftest`
+- `.github/workflows/mac-app.yml` - release build on a `v*` tag: build with everything bundled, tests, self-test inside the app, zip attached to the release
+- `docs/release-plan.md` - what signed macOS, Linux and Windows releases need
+- `licenses/` - every bundled program, library and Go module with its licence text (README.md lists them); copied into the app as `Contents/Resources/Licenses`. TubeYap itself is MIT (`LICENSE`); its ffmpeg is GPL, so releases attach ffmpeg's exact sources (`scripts/build_ffmpeg.sh --fetch`)
+
+## Working on it
+
+- The repo is public (github.com/ftrain/tubeyap): nothing private in commits. The history before it is in the private, archived ftrain/minecast.
+- A new or upgraded dependency, bundled program or ffmpeg library: update its folder in `licenses/` and the tables in `licenses/README.md`.
+
+- Never run anything that hosts on the default ports (8765, 8189) while the user's app is hosting: give a `Host` `HTTPPort: freePort(), ICEPort: freePort(), MapPorts: false, CleanLeftovers: false` (and no `Cloudflared`), as `--selftest` and `TestPlayThroughTheList` (through `App.hostSetup`) do, and a temporary `HOME` so `~/.tubeyap.json` isn't touched. Host tests that skip those settings have twice stopped a live session. `wails dev` runs the real app: only with an empty `HOME`, or it starts hosting the saved list.
+- The app's ffmpeg is its own: `scripts/build_ffmpeg.sh` builds it static from pinned sources (x264, Opus, FreeType, FriBidi, HarfBuzz, libass, FFmpeg) into `build/ffmpeg/bin`, cut down to every decoder and container but only the encoders (libx264, libopus, png, webvtt), muxers and filters the app uses. A new filter or encoder in `stream.go` needs adding there too, or it fails only when streaming. There's no ffprobe: `inspect` reads ffmpeg's own description of a file. Homebrew's ffmpeg has no `drawtext`, so cards fail with it; `scripts/test.sh` uses the built one.
+- The window can be checked without the app: headless Chrome on `frontend/` with stand-in `window.go`/`window.runtime` objects.
+- The running app reads `host_web/` from `/Applications/TubeYap.app/Contents/Resources/host_web/` on every page load (the copy built in is the fallback), so viewer-page fixes can go live by copying files there; Go changes need a rebuild, installed once the app has quit.

@@ -1,0 +1,97 @@
+# Build "TubeYap.app" on an Apple Silicon runner and check it hosts, on every
+# push to main and every pull request: the zip is kept as the run's artifact
+# (Actions tab > the run > Artifacts). A v* tag also attaches it to a release:
+#   git tag v1.0.0 && git push origin v1.0.0
+# Run it by hand from the Actions tab (workflow_dispatch) for any branch.
+#
+# Release builds carry everything: MediaMTX and cloudflared (pinned release
+# binaries) and TubeYap's own cut-down static ffmpeg (scripts/build_ffmpeg.sh,
+# BUNDLE_FFMPEG), so they run on a Mac with nothing installed. They are only
+# ad-hoc signed: the first open needs System Settings > Privacy & Security >
+# Open Anyway (see README).
+name: Mac app
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:                   # a newer push to the same branch replaces a build still running
+  group: mac-app-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: macos-14          # Apple Silicon; the app is arm64 only
+    permissions:
+      contents: write          # to create the release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: MediaMTX and cloudflared
+        # Pinned release binaries, not Homebrew: the runner's Homebrew is
+        # behind (it gave MediaMTX 1.20.1, which can't read the Opus stand-by
+        # card), and these are the versions the app was tested with
+        env:
+          MEDIAMTX: v1.21.3
+          CLOUDFLARED: 2026.10.3
+        run: |
+          mkdir -p build/tools   # not vendor/: to Go that means vendored modules
+          curl -fsSL "https://github.com/bluenviron/mediamtx/releases/download/$MEDIAMTX/mediamtx_${MEDIAMTX}_darwin_arm64.tar.gz" | tar -xz -C build/tools mediamtx
+          curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/$CLOUDFLARED/cloudflared-darwin-arm64.tgz" | tar -xz -C build/tools
+          build/tools/mediamtx --version && build/tools/cloudflared --version
+          echo "MEDIAMTX_BIN=$PWD/build/tools/mediamtx" >> "$GITHUB_ENV"
+          echo "CLOUDFLARED_BIN=$PWD/build/tools/cloudflared" >> "$GITHUB_ENV"
+
+      - name: ffmpeg, cut down (cached until scripts/build_ffmpeg.sh changes)
+        id: ffmpeg
+        uses: actions/cache/restore@v4
+        with:
+          path: build/ffmpeg/bin
+          key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_ffmpeg.sh') }}
+
+      - name: Build ffmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: brew install meson ninja pkg-config && scripts/build_ffmpeg.sh
+
+      - name: Keep ffmpeg for next time
+        # saved now, not at the end: a later step failing would otherwise lose it
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/ffmpeg/bin
+          key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
+
+      - name: Build
+        run: BUNDLE_FFMPEG=1 scripts/build_mac_app.sh
+
+      - name: Tests
+        run: PATH="$PWD/build/tools:$PATH" scripts/test.sh
+
+      - name: Self-test the built app
+        # hosts from this runner (no router involved), checks the page, the
+        # stand-by stream and the WebRTC handshake, and publishes a countdown
+        # with the bundled ffmpeg
+        run: env -i HOME="$HOME" PATH=/usr/bin:/bin "dist/TubeYap.app/Contents/MacOS/TubeYap" --selftest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TubeYap-macos-arm64
+          path: dist/TubeYap-macos-arm64.zip
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # with the exact sources of the ffmpeg inside, as its GPL asks
+        run: |
+          scripts/build_ffmpeg.sh --fetch
+          gh release create "$GITHUB_REF_NAME" dist/TubeYap-macos-arm64.zip build/ffmpeg/src/* \
+            --title "TubeYap $GITHUB_REF_NAME" \
+            --notes "TubeYap-macos-arm64.zip is the app: Apple Silicon Macs, macOS 13 or later. Unzip, move to Applications, and the first time: System Settings > Privacy & Security > Open Anyway. The other files are the exact sources of the ffmpeg inside it (GPL), which scripts/build_ffmpeg.sh builds from."

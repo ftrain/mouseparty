@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="referrer" content="no-referrer">
+    <title>TubeYap</title>
+    <!-- Served by the host's Mac (host.go); every URL carries the session key.
+         Layout follows YouTube's live pages: chat beside the video on a desktop,
+         under it on an upright phone, floating over it like subtitles on a
+         phone on its side (data-mode, set by host.js). Nothing of ours sits on
+         the picture: that's the browser's own player's, full screen included. -->
+    <link rel="stylesheet" href="/{{KEY}}/assets/host.css">
+</head>
+<body>
+    <div class="app" id="app" data-mode="side">
+        <div class="stage" id="stage">
+            <video id="video" controls autoplay muted playsinline></video>
+            <div class="badge" id="streamStatus">
+                <span class="dot" id="statusIndicator"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+            <div class="sound-prompt" id="soundPrompt" hidden>
+                <button class="sound-button" id="soundButton">🔇 Sound is off &mdash; click to turn it on</button>
+                <button class="sound-dismiss" id="soundDismiss" title="Keep it off" aria-label="Dismiss, keep the sound off">✕</button>
+            </div>
+            <!-- A PDF the host is reading with everyone: drawn here by pdf.js, on the host's page -->
+            <div class="doc" id="doc" hidden>
+                <div class="doc-scroll" id="docScroll"><canvas id="docCanvas"></canvas></div>
+                <div class="doc-bar">
+                    <span id="docPage"></span>
+                    <button class="doc-zoom" id="docZoom" title="Fit the width (or double-click the page)">fit width</button>
+                </div>
+            </div>
+            <div class="captions" id="captions" hidden></div>
+            <!-- the chat, when there's no column for it: halfway down the right edge, where no player puts its controls -->
+            <button class="chat-tab" id="chatTab" title="Chat">💬<span class="unread" id="unread" hidden></span></button>
+        </div>
+
+        <!-- What's on, like a cable listing, in the viewer's own time zone (host.js fills it) -->
+        <div class="guide" id="guide" hidden>
+            <div class="guide-box" role="dialog" aria-label="What's on">
+                <div class="guide-head">
+                    <span class="guide-title">TUBEYAP GUIDE</span>
+                    <span class="guide-zone" id="guideZone"></span>
+                    <span class="guide-clock" id="guideClock"></span>
+                    <button class="guide-close" id="guideClose" title="Close">✕</button>
+                </div>
+                <div class="guide-rows" id="guideRows"></div>
+            </div>
+        </div>
+
+        <aside class="chat" id="chat">
+            <header class="chat-head">
+                <span class="title">Live chat</span>
+                <span class="stream-state"><span class="dot" id="headerDot"></span><span id="headerStatus">Connecting...</span></span>
+                <span class="count" id="viewerCount"></span>
+                <span class="conn" id="chatConnectionIndicator">connecting…</span>
+                <span class="tools">
+                    <button class="head-btn" id="captionsBtn" title="Subtitles" hidden>CC</button>
+                    <button class="head-btn" id="guideBtn" title="What's on">GUIDE</button>
+                    <button class="hide-chat" id="hideChat" title="Hide chat">⟩</button>
+                </span>
+                <div class="menu" id="captionsMenu" hidden></div>
+            </header>
+            <div class="online" id="onlineUsers"></div>
+            <div class="messages" id="chatMessagesOverlay"></div>
+            <div class="composer">
+                <div class="row" id="joinOverlay">
+                    <input type="text" id="usernameInput" placeholder="Your name..." maxlength="30" autocomplete="nickname" />
+                    <button id="joinBtn" class="btn">Join chat</button>
+                </div>
+                <div class="row" id="chatInputBox" style="display: none;">
+                    <button id="nameBtn" class="chip" title="Change name"><span id="currentUserDisplay"></span></button>
+                    <textarea id="messageInput" rows="1" placeholder="Say something..." maxlength="500" autocomplete="off"></textarea>
+                </div>
+            </div>
+        </aside>
+    </div>
+    <script>window.TUBEYAP_BASE = '/{{KEY}}';</script>
+    <script src="/{{KEY}}/assets/hls.min.js"></script>
+    <script src="/{{KEY}}/assets/host.js"></script>
+</body>
+</html>
