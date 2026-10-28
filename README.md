@@ -85,7 +85,7 @@ one. Each movie's `subs` setting in `~/.tubeyap.json` is one of:
 ## How hosting works
 
 Your Mac is the whole server. MediaMTX sends the video to each viewer over
-WebRTC; the app's own small web server (`host.go`) serves the viewer page, the
+WebRTC; the app's own small web server (`web.go`) serves the viewer page, the
 WebRTC handshake, an HLS fallback and the chat. Every URL carries a random
 session key, and nothing answers without it.
 
@@ -211,7 +211,11 @@ main.go             the Wails app: window options, embedded files, --selftest (s
 app.go              the list, playback, and what the two buttons do
 frontend/           the window: index.html, app.css, app.js
 stream.go           ffmpeg: a movie, song or card to MediaMTX as H.264 + Opus over RTSP
-host.go             hosting: MediaMTX, the viewer site, chat, the Cloudflare link
+host.go             hosting: runs MediaMTX and cloudflared, starts and stops a session
+web.go              the viewer site: page, WebRTC handshake and HLS proxies, the key check
+chat.go             the chat, one websocket per viewer
+session.go          what viewers' pages show beside the video: subtitles, guide, PDF page
+tunnel.go           the Cloudflare link
 portmap.go          asks the router (NAT-PMP / UPnP) to forward ports
 subtitles.go        finds a movie's subtitles and turns text ones into timed lines
 media.go            what a file holds (from ffmpeg), PDF pages, titles from file names
