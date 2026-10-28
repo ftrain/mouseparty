@@ -13,8 +13,9 @@ type Config struct {
 	OpenRouterPorts bool    `json:"open_router_ports"` // ask the router (NAT-PMP/UPnP) to let friends in; false = this network only
 	Bitrate         string  `json:"bitrate"`
 	Preset          string  `json:"preset"`
-	Skip            Number  `json:"skip"`      // minutes into the first movie played
-	Countdown       Number  `json:"countdown"` // seconds of "up next" card before each movie; 0 for none
+	Skip            Number  `json:"skip"`        // minutes into the first movie played
+	Countdown       Number  `json:"countdown"`   // seconds of "up next" card before each movie; 0 for none
+	AppMinutes      Number  `json:"app_minutes"` // how long an app from the Apps menu runs
 	Queue           []*Item `json:"queue"`
 	Position        int     `json:"position"` // queue row now playing, or next to play
 }
@@ -77,7 +78,7 @@ func configPath() string {
 }
 
 func loadConfig() *Config {
-	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, Queue: []*Item{}}
+	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, AppMinutes: 10, Queue: []*Item{}}
 	if b, err := os.ReadFile(configPath()); err == nil {
 		json.Unmarshal(b, cfg)
 	}

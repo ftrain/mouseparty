@@ -19,6 +19,7 @@ const (
 	history = 200 // chat lines kept for people who join late
 	nameMax = 30
 	textMax = 500
+	appRate = 60 // app messages a second from one socket; more are dropped
 )
 
 // chatConn is one viewer's socket. Everything sent to it goes through out, in
@@ -26,6 +27,7 @@ const (
 type chatConn struct {
 	ws   *websocket.Conn
 	out  chan []byte
+	id   int // this socket, for apps (a viewer with two tabs is two)
 	name string
 }
 
@@ -59,10 +61,13 @@ func (c *chatConn) write(done <-chan struct{}) {
 
 // Chat is the in-memory chat for one session: who is here, and the last few hundred lines
 type Chat struct {
-	hello   func() map[string]any // more for the greeting: subtitles, the movie clock, the guide, a PDF
+	hello   func() map[string]any               // more for the greeting: subtitles, the movie clock, the guide, a PDF, an app
+	app     func(from Viewer, m map[string]any) // a message for the app running (apps.go)
+	left    func(who Viewer)                    // a socket closed
 	mu      sync.Mutex
 	conns   map[*chatConn]bool
 	history []map[string]any
+	lastID  int
 }
 
 func (c *Chat) names() []string {
@@ -120,8 +125,11 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	conn := &chatConn{ws: ws, out: make(chan []byte, 256)}
 	c.mu.Lock()
+	c.lastID++
+	conn.id = c.lastID
 	c.conns[conn] = true
-	hello := map[string]any{"type": "hello", "history": append([]map[string]any{}, c.history...), "online": c.names()}
+	hello := map[string]any{"type": "hello", "history": append([]map[string]any{}, c.history...), "online": c.names(),
+		"you": conn.id}
 	c.mu.Unlock()
 	for k, v := range c.hello() {
 		hello[k] = v
@@ -145,6 +153,9 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		c.mu.Unlock()
 		ws.Close()
+		if c.left != nil {
+			c.left(Viewer{conn.id, name})
+		}
 		if name != "" && !still {
 			c.say(map[string]any{"type": "system", "text": name + " left"})
 			c.online()
@@ -152,6 +163,7 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	var last time.Time
+	appWindow, appCount := time.Now(), 0
 	for {
 		kind, data, err := ws.ReadMessage()
 		if err != nil {
@@ -191,6 +203,16 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 			if name != "" && text != "" && time.Since(last) > 300*time.Millisecond { // a little flood control
 				last = time.Now()
 				c.say(map[string]any{"type": "msg", "name": name, "text": text})
+			}
+		case "app":
+			if time.Since(appWindow) > time.Second {
+				appWindow, appCount = time.Now(), 0
+			}
+			if appCount++; appCount <= appRate && c.app != nil {
+				c.mu.Lock()
+				name := conn.name
+				c.mu.Unlock()
+				c.app(Viewer{conn.id, name}, m)
 			}
 		}
 	}

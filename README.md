@@ -39,6 +39,17 @@ The window is two big buttons over a list.
 - Between movies there's an "up next" countdown. Songs in a row play straight
   through.
 
+### Apps
+
+The **Apps** menu puts something on everyone's page for ten minutes (`app_minutes`)
+while the movie carries on: **Graffiti**, where everyone draws on the video, and
+**Room**, a floor that fills the screen where everyone in the chat walks around
+as a dot and what they say shows over their head. Choose it again to stop it.
+You join in by opening the link yourself. Viewers can turn an app off for
+themselves (its button in the chat header, with the time left). They're
+wireframes, there to try the idea; in the browser player's full screen they
+don't show.
+
 That's all of it. The few settings are in `~/.tubeyap.json` (below), and the log
 goes to stderr: run `/Applications/TubeYap.app/Contents/MacOS/TubeYap` from
 Terminal to read it.
@@ -80,6 +91,7 @@ one. Each movie's `subs` setting in `~/.tubeyap.json` is one of:
 | `preset` | `"veryfast"` | x264's speed/quality trade |
 | `countdown` | `10` | seconds of "up next" card before each movie; 0 for none |
 | `skip` | `0` | minutes into the first movie played |
+| `app_minutes` | `10` | how long an app from the Apps menu runs |
 | `open_router_ports` | `true` | ask the router to let friends in; `false` keeps to your own network and the Cloudflare link |
 
 ## How hosting works
@@ -216,6 +228,8 @@ web.go              the viewer site: page, WebRTC handshake and HLS proxies, the
 chat.go             the chat, one websocket per viewer
 session.go          what viewers' pages show beside the video: subtitles, guide, PDF page
 tunnel.go           the Cloudflare link
+apps.go             apps on the viewers' pages: the Activity interface, over the chat socket
+graffiti.go, room.go  the two apps (their scripts are host_web/apps/)
 portmap.go          asks the router (NAT-PMP / UPnP) to forward ports
 subtitles.go        finds a movie's subtitles and turns text ones into timed lines
 media.go            what a file holds (from ffmpeg), PDF pages, titles from file names

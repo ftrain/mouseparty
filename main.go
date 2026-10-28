@@ -61,6 +61,7 @@ func main() {
 		OnShutdown:       app.shutdown,
 		DragAndDrop:      &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: true},
 		Bind:             []any{app},
+		Menu:             app.menu(),
 		Mac: &mac.Options{
 			About: &mac.AboutInfo{Title: "TubeYap", Message: "Watch movies with friends, hosted from this Mac.\n\n" +
 				"MIT licence. It includes ffmpeg (GPL), MediaMTX, cloudflared and more, each under its own " +

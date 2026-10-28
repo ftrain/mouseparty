@@ -173,7 +173,8 @@ func (h *Host) docJSON() map[string]any {
 }
 
 func (h *Host) hello() map[string]any {
-	return map[string]any{"subs": h.subsJSON(), "clock": h.clockJSON(), "schedule": h.scheduleJSON(), "doc": h.docJSON()}
+	return map[string]any{"subs": h.subsJSON(), "clock": h.clockJSON(), "schedule": h.scheduleJSON(), "doc": h.docJSON(),
+		"apps": h.apps.hello()}
 }
 
 func (h *Host) broadcast(msg any) {

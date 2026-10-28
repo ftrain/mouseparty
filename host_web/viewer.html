@@ -33,6 +33,8 @@
                     <button class="doc-zoom" id="docZoom" title="Fit the width (or double-click the page)">fit width</button>
                 </div>
             </div>
+            <!-- An app the host has put on everyone's page for a while (apps.go): host.js loads its script from apps/ -->
+            <div class="app-layer" id="appLayer" hidden></div>
             <div class="captions" id="captions" hidden></div>
             <!-- the chat, when there's no column for it: halfway down the right edge, where no player puts its controls -->
             <button class="chat-tab" id="chatTab" title="Chat">💬<span class="unread" id="unread" hidden></span></button>
@@ -59,6 +61,7 @@
                 <span class="conn" id="chatConnectionIndicator">connecting…</span>
                 <span class="tools">
                     <button class="head-btn" id="captionsBtn" title="Subtitles" hidden>CC</button>
+                    <button class="head-btn" id="appBtn" title="Turn the app off and on, for you" hidden></button>
                     <button class="head-btn" id="guideBtn" title="What's on">GUIDE</button>
                     <button class="hide-chat" id="hideChat" title="Hide chat">⟩</button>
                 </span>

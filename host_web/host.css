@@ -42,6 +42,14 @@ button { font-family: var(--font); }
 /* A PDF read together covers the video (which shows a "reading" card meanwhile) */
 .doc { position: absolute; inset: 0; z-index: 3; background: #111; display: flex; flex-direction: column; }
 .doc[hidden] { display: none; }
+/* An app: over the video, or filling the stage (cover); app-off lets the video through, for this viewer */
+.app-layer { position: absolute; inset: 0; z-index: 3; }
+.app-layer[hidden] { display: none; }
+.app-layer canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; touch-action: none; }
+.app.app-cover .app-layer { background: #fff; }
+.app.app-off .app-layer { pointer-events: none; opacity: 0.25; }
+.app.app-cover.app-off .app-layer { display: none; }
+.app.app-off #appBtn { opacity: 0.5; }
 .doc-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; }
 .doc-scroll canvas { display: block; margin: auto; background: #fff; box-shadow: 0 0 24px rgba(0, 0, 0, 0.6); }
 .doc.fit-width .doc-scroll canvas { margin: 0 auto; }

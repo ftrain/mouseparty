@@ -177,6 +177,7 @@ function endSession(why) {
     document.getElementById('onlineUsers').textContent = '';
     schedule = { rows: [], skew: 0 };
     closePdf();
+    setApp(null);
     doc = null;
     document.getElementById('doc').hidden = true;
     document.title = 'TubeYap';
@@ -219,6 +220,12 @@ function connectChat() {
             setClock(m.clock);
             setSchedule(m.schedule);
             setDoc(m.doc && m.doc.doc);
+            myId = m.you;
+            setApp(m.apps);
+        } else if (m.type === 'apps') {
+            setApp(m);
+        } else if (m.type === 'app') {
+            if (appNow && appNow.inst.message) appNow.inst.message(m);
         } else if (m.type === 'doc') {
             setDoc(m.doc);
         } else if (m.type === 'subs') {
@@ -231,6 +238,7 @@ function connectChat() {
             updateOnline(m.online);
         } else {
             show(m, true);
+            if (m.type === 'msg' && appNow && appNow.inst.said) appNow.inst.said(m.name, m.text);
         }
     };
 }
@@ -752,3 +760,69 @@ connectChat();
 startWebRTC();
 pollStatus();
 setInterval(() => { if (!ended) pollStatus(); }, STATUS_POLL_MS);
+
+// ---------- apps (apps.go) ----------
+// The host can put an app on everyone's page for a while: over the video
+// (graffiti) or filling the stage (a room). Each is a script, apps/<name>.js, that
+// sets TubeYap.apps[name] to a function of (ctx, state) returning whichever of
+// {message(m), said(name, text), resize(), stop()} it needs. ctx.send(m) goes to
+// the app on the host; its messages come back to message(m).
+window.TubeYap = { apps: {} };
+const appLayer = document.getElementById('appLayer');
+const appBtn = document.getElementById('appBtn');
+let myId = null;           // this page's socket, as the host numbers them
+let appNow = null;         // {info, inst}
+let appGen = 0;            // a newer setApp wins over one still loading its script
+let appTimer = null;
+
+function loadAppScript(name) {
+    if (TubeYap.apps[name]) return Promise.resolve(TubeYap.apps[name]);
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = `${BASE}/apps/${encodeURIComponent(name)}.js`;
+        s.onload = () => (TubeYap.apps[name] ? resolve(TubeYap.apps[name]) : reject(new Error(name)));
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+}
+
+async function setApp(m) {
+    const gen = ++appGen;
+    if (appNow && appNow.inst.stop) appNow.inst.stop();
+    appNow = null;
+    clearInterval(appTimer);
+    appLayer.textContent = '';
+    const info = m && m.app;
+    app.classList.toggle('app-cover', !!(info && info.cover));
+    app.classList.remove('app-off');
+    appLayer.hidden = appBtn.hidden = !info;
+    if (!info) return;
+    let start;
+    try { start = await loadAppScript(info.name); } catch (e) { return; }
+    if (gen !== appGen) return;
+    const ends = Date.now() + info.left * 1000;
+    const ctx = {
+        layer: appLayer,
+        send: (msg) => send({ ...msg, type: 'app', app: info.name }),
+        me: () => ({ id: myId, name: myName }),
+        videoBox,
+    };
+    appNow = { info, inst: start(ctx, m.state) || {} };
+    const tick = () => {
+        const s = Math.max(0, Math.round((ends - Date.now()) / 1000));
+        appBtn.textContent = `${info.title.toUpperCase()} ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    };
+    tick();
+    appTimer = setInterval(tick, 1000);
+}
+
+// over the video: let clicks through to the player; a room: peek at the video
+appBtn.onclick = () => app.classList.toggle('app-off');
+new ResizeObserver(() => { if (appNow && appNow.inst.resize) appNow.inst.resize(); }).observe(appLayer);
+
+// videoBox: where the 16:9 picture sits in the app layer (which covers the stage, as the video does)
+function videoBox() {
+    const w = appLayer.clientWidth, h = appLayer.clientHeight;
+    const vw = Math.min(w, h * 16 / 9), vh = vw * 9 / 16;
+    return { x: (w - vw) / 2, y: (h - vh) / 2, w: vw, h: vh };
+}

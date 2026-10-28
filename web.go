@@ -63,6 +63,16 @@ func (h *Host) startWeb() error {
 		}
 		w.Write(b)
 	})
+	mux.HandleFunc("GET /{key}/apps/{name}", func(w http.ResponseWriter, r *http.Request) { // an app's script
+		name, _ := strings.CutSuffix(r.PathValue("name"), ".js")
+		b, err := fs.ReadFile(web, "apps/"+name+".js")
+		if _, known := appKind(name); !known || err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/javascript")
+		w.Write(b)
+	})
 	whep := h.whepProxy()
 	mux.Handle("POST /{key}/whep", whep)
 	mux.Handle("PATCH /{key}/whep/{session}", whep)
