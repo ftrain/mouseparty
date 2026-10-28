@@ -45,6 +45,8 @@ The **Apps** menu puts something on everyone's page for ten minutes (`app_minute
 while the movie carries on: **Graffiti**, where everyone draws on the video, and
 **Room**, a floor that fills the screen where everyone in the chat walks around
 as a dot and what they say shows over their head. Choose it again to stop it.
+Or give a movie its own app: the **+** on its row, just before its running time,
+picks one, which then runs for exactly as long as that movie plays.
 You join in by opening the link yourself. Viewers can turn an app off for
 themselves (its button in the chat header, with the time left). They're
 wireframes, there to try the idea; in the browser player's full screen they

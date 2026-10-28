@@ -54,7 +54,7 @@ func TestAppsOverChat(t *testing.T) {
 
 	a.WriteJSON(map[string]any{"type": "app", "app": "graffiti", "kind": "line", "c": 9, "w": 1, "p": [][]float64{{0.1, 0.1}, {2, 0.5}}})
 	a.WriteJSON(map[string]any{"type": "app", "app": "graffiti", "kind": "line", "c": 1, "w": 1, "p": [][]float64{{0.1, 0.1}}}) // one point: no line
-	a.WriteJSON(map[string]any{"type": "app", "app": "room", "kind": "go", "x": 0.5, "y": 0.5})                               // not the app running
+	a.WriteJSON(map[string]any{"type": "app", "app": "room", "kind": "go", "x": 0.5, "y": 0.5})                                 // not the app running
 	m := next(a, "app")
 	l := m["line"].(map[string]any)
 	if l["c"] != float64(graffitiColors-1) || l["p"].([]any)[1].([]any)[0] != 1.0 { // clamped

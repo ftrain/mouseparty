@@ -46,10 +46,14 @@ function render(v) {
         const row = document.createElement('div');
         row.className = 'row' + (r.played ? ' played' : '') + (r.now ? ' now' : '') + (i === v.selected ? ' selected' : '');
         row.dataset.index = i;
-        row.innerHTML = '<span class="mark"></span><span class="title"></span><span class="length"></span>';
+        row.innerHTML = '<span class="mark"></span><span class="title"></span><span class="add"></span><span class="length"></span>';
         row.children[0].textContent = r.now ? '▶' : '';
         row.children[1].textContent = r.title;
-        row.children[2].textContent = r.length;
+        const app = v.apps.find((a) => a.name === r.app);
+        row.children[2].textContent = app ? app.title : '+';
+        row.children[2].classList.toggle('set', !!app);
+        row.children[2].title = app ? `${app.title} while this plays` : 'An app while this plays';
+        row.children[3].textContent = r.length;
         list.appendChild(row);
     });
     $('hint').style.display = v.rows.length ? 'none' : '';
@@ -63,8 +67,43 @@ function rowAt(x, y) {
 $('play').addEventListener('click', () => view?.playOn && App().PlayClicked());
 $('link').addEventListener('click', () => view?.linkPress && App().LinkClicked());
 
+// a row's +: which app comes with it (apps.go), from a little menu
+let appMenu = null;
+function closeAppMenu() { appMenu?.remove(); appMenu = null; }
+function openAppMenu(add, i) {
+    closeAppMenu();
+    appMenu = document.createElement('div');
+    appMenu.className = 'app-menu';
+    const current = view.rows[i].app;
+    const choices = [...view.apps, ...(current ? [{ name: '', title: 'No app' }] : [])];
+    for (const c of choices) {
+        const item = document.createElement('div');
+        item.textContent = (c.name && c.name === current ? '✓ ' : '') + c.title;
+        item.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            App().SetRowApp(i, c.name);
+            closeAppMenu();
+        });
+        appMenu.appendChild(item);
+    }
+    document.body.appendChild(appMenu);
+    const r = add.getBoundingClientRect();
+    appMenu.style.left = `${Math.min(r.left, window.innerWidth - appMenu.offsetWidth - 8)}px`;
+    appMenu.style.top = `${r.bottom + appMenu.offsetHeight > window.innerHeight ? r.top - appMenu.offsetHeight : r.bottom}px`;
+}
+window.addEventListener('mousedown', closeAppMenu);
+
 // rows: click selects, double-click plays, drag moves
 $('list').addEventListener('mousedown', (e) => {
+    const add = e.target.closest('.add');
+    if (add) {
+        e.stopPropagation();
+        const i = rowAt(e.clientX, e.clientY);
+        if (appMenu && appMenu.dataset.row === String(i)) return closeAppMenu();
+        openAppMenu(add, i);
+        appMenu.dataset.row = i;
+        return;
+    }
     const i = rowAt(e.clientX, e.clientY);
     dragFrom = i;
     App().Select(i ?? -1);
@@ -81,12 +120,13 @@ window.addEventListener('mousemove', (e) => {
 window.addEventListener('mouseup', () => { dragFrom = null; });
 $('list').addEventListener('dblclick', (e) => {
     const i = rowAt(e.clientX, e.clientY);
-    if (i !== null) App().PlayRow(i);
+    if (i !== null && !e.target.closest('.add')) App().PlayRow(i);
 });
 
 // keys: Backspace removes the selected one; arrows and Page Up/Down turn a PDF's pages
 window.addEventListener('keydown', (e) => {
-    if (e.key === 'Backspace' || e.key === 'Delete') App().Remove();
+    if (appMenu && e.key === 'Escape') closeAppMenu();
+    else if (e.key === 'Backspace' || e.key === 'Delete') App().Remove();
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') App().TurnPage(-1);
     else if (e.key === 'ArrowRight' || e.key === 'PageDown') App().TurnPage(1);
     else return;

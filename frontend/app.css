@@ -113,7 +113,7 @@ body {
 
 .row {
     display: grid;
-    grid-template-columns: 28px 1fr auto;
+    grid-template-columns: 28px 1fr auto auto;
     align-items: center;
     height: 32px;
     padding-right: 12px;
@@ -124,7 +124,26 @@ body {
 .row:nth-child(even of .row) { background: var(--row-alt); }
 .row .mark { text-align: center; font-size: 11px; }
 .row .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .length { color: var(--muted); font-variant-numeric: tabular-nums; padding-left: 12px; }
+.row .length { color: var(--muted); font-variant-numeric: tabular-nums; padding-left: 8px; }
+/* a row's +, or the app it brings */
+.row .add { color: var(--muted); padding: 0 6px; margin-left: 8px; border-radius: 4px; font-size: 12px; line-height: 20px; cursor: pointer; }
+.row .add:not(.set) { font-size: 16px; opacity: 0.4; }
+.row:hover .add, .row.selected .add, .row .add.set { opacity: 1; }
+.row .add:hover { background: rgba(127, 127, 127, 0.2); }
+.row .add.set { border: 1px solid currentColor; line-height: 18px; }
+.row.selected .add { color: rgba(255, 255, 255, 0.85); }
+.app-menu {
+    position: fixed;
+    z-index: 10;
+    min-width: 120px;
+    padding: 4px 0;
+    background: var(--row);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+.app-menu div { padding: 4px 12px; }
+.app-menu div:hover { background: var(--selected); color: white; }
 .row.played { color: var(--played); }
 .row.now { font-weight: 600; }
 .row.selected, .row.selected:nth-child(even of .row) { background: var(--selected); color: white; }

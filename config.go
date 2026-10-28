@@ -31,6 +31,7 @@ type Item struct {
 	Subtitles *[]Track      `json:"subtitles,omitempty"` // what was found; nil until looked for
 	Subs      *SubsSettings `json:"subs,omitempty"`      // what to do with them
 	Audio     *[]AudioTrack `json:"audio,omitempty"`     // its sound tracks; nil until looked at
+	App       string        `json:"app,omitempty"`       // an app on viewers' pages while it plays (apps.go)
 }
 
 func (it *Item) kind() string {

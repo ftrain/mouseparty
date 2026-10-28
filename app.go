@@ -28,15 +28,21 @@ const startGap = 3.0 // seconds ffmpeg takes to start a movie or card, for the g
 
 // What the window shows; it draws exactly this.
 type View struct {
-	Play      string `json:"play"`      // "play" or "stop"
-	PlayOn    bool   `json:"playOn"`    // in colour, and can be pressed
-	Link      string `json:"link"`      // "copy" or "spinner"
-	LinkOn    bool   `json:"linkOn"`    // in colour
-	LinkPress bool   `json:"linkPress"` // can be pressed
-	LinkNote  string `json:"linkNote"`  // under the icon: "Making link", "Copied", "Wi-Fi only"...
-	Rows      []Row  `json:"rows"`
-	Selected  int    `json:"selected"` // -1: none
-	Slider    Slider `json:"slider"`
+	Play      string      `json:"play"`      // "play" or "stop"
+	PlayOn    bool        `json:"playOn"`    // in colour, and can be pressed
+	Link      string      `json:"link"`      // "copy" or "spinner"
+	LinkOn    bool        `json:"linkOn"`    // in colour
+	LinkPress bool        `json:"linkPress"` // can be pressed
+	LinkNote  string      `json:"linkNote"`  // under the icon: "Making link", "Copied", "Wi-Fi only"...
+	Rows      []Row       `json:"rows"`
+	Selected  int         `json:"selected"` // -1: none
+	Slider    Slider      `json:"slider"`
+	Apps      []AppChoice `json:"apps"` // what a row's + offers
+}
+
+type AppChoice struct {
+	Name  string `json:"name"`
+	Title string `json:"title"`
 }
 
 type Row struct {
@@ -44,6 +50,7 @@ type Row struct {
 	Length string `json:"length"`
 	Now    bool   `json:"now"`    // playing
 	Played bool   `json:"played"` // above the one playing, or next to play
+	App    string `json:"app"`    // the app it brings: its name, "" none
 }
 
 // Slider: the playhead (seconds into the movie), or a PDF's pages
@@ -100,6 +107,7 @@ type App struct {
 	appName      string      // the app running on viewers' pages (apps.go); "" none
 	appWanted    string      // to start once hosting is
 	appRun       int         // counts apps started, so an old one's timer stops nothing
+	appOwner     *Item       // the row whose app is running: it stops when that does; nil, the menu's
 	appItems     map[string]*menu.MenuItem
 
 	cueMu    sync.Mutex
@@ -187,6 +195,7 @@ func (a *App) Seek(seconds float64)         { a.do(func() { a.seek(seconds) }) }
 func (a *App) ShowPage(page int)            { a.do(func() { a.showPage(page) }) }
 func (a *App) TurnPage(step int)            { a.do(func() { a.turnPage(step) }) }
 func (a *App) AddPaths(p []string, row int) { go a.addPaths(p, row) }
+func (a *App) SetRowApp(i int, name string) { a.do(func() { a.setRowApp(i, name) }) }
 
 // ---------- what the app is doing ----------
 // One state, worked out from the facts, decides what can be pressed:
@@ -225,6 +234,9 @@ func (a *App) state() string {
 func (a *App) view() View {
 	state := a.state()
 	v := View{Play: "play", PlayOn: state == "ready", Link: "copy", Selected: a.selected, Rows: []Row{}}
+	for _, k := range appKinds {
+		v.Apps = append(v.Apps, AppChoice{k.Name, k.Title})
+	}
 	if a.playing {
 		v.Play, v.PlayOn = "stop", true
 	}
@@ -256,7 +268,7 @@ func (a *App) view() View {
 			length = formatTime(it.Duration)
 		}
 		v.Rows = append(v.Rows, Row{Title: title, Length: length, Now: a.playing && i == a.cfg.Position,
-			Played: i < a.cfg.Position})
+			Played: i < a.cfg.Position, App: it.App})
 	}
 	v.Slider = a.slider(state)
 	return v
@@ -557,6 +569,14 @@ func (a *App) startCurrent(skip float64) {
 	if err != nil {
 		a.log("Could not start ffmpeg: " + err.Error())
 		a.current, a.phase, a.playing = nil, "", false
+		return
+	}
+	if it.App != "" && a.appOwner != it { // its app, for as long as it plays (a seek keeps it going)
+		d := 24 * time.Hour // a PDF: until it's put away
+		if it.Duration > skip*60 {
+			d = time.Duration((it.Duration - skip*60) * float64(time.Second))
+		}
+		a.startApp(it.App, d, it)
 	}
 }
 
@@ -610,6 +630,9 @@ func (a *App) finished(code int) {
 		name = filepath.Base(it.Path)
 	}
 	a.subToken = ""
+	if it != nil && a.appOwner == it {
+		a.stopApp()
+	}
 	if a.host != nil && a.host.Running() {
 		a.host.ClearSubtitles()
 		a.host.ClearDocument()
@@ -1015,11 +1038,17 @@ func (a *App) runApp(name string) {
 	if d <= 0 {
 		d = 10 * time.Minute
 	}
-	if !a.host.StartApp(name, d) {
+	a.startApp(name, d, nil)
+}
+
+// startApp puts the app on viewers' pages for d; owner is the row it came with, if any
+func (a *App) startApp(name string, d time.Duration, owner *Item) {
+	defer a.updateMenu()
+	if a.host == nil || !a.host.Running() || !a.host.StartApp(name, d) {
 		return
 	}
-	a.log(fmt.Sprintf("%s for %v.", name, d))
-	a.appName = name
+	a.log(fmt.Sprintf("%s for %v.", name, d.Round(time.Second)))
+	a.appName, a.appOwner = name, owner
 	a.appRun++
 	run := a.appRun
 	a.after(d, func() {
@@ -1033,9 +1062,35 @@ func (a *App) stopApp() {
 	if a.host != nil {
 		a.host.StopApp()
 	}
-	a.appName, a.appWanted = "", ""
+	a.appName, a.appWanted, a.appOwner = "", "", nil
 	a.appRun++
 	a.updateMenu()
+}
+
+// setRowApp: the app a row brings while it plays ("" none); if it's playing, now
+func (a *App) setRowApp(i int, name string) {
+	if i < 0 || i >= len(a.cfg.Queue) {
+		return
+	}
+	if _, ok := appKind(name); !ok {
+		name = ""
+	}
+	it := a.cfg.Queue[i]
+	it.App = name
+	a.save()
+	if it != a.current || a.phase == "countdown" {
+		return
+	}
+	if a.appOwner == it {
+		a.stopApp()
+	}
+	if name != "" {
+		d := 24 * time.Hour
+		if pos, length, ok := a.playhead(); ok && length > pos {
+			d = time.Duration((length - pos) * float64(time.Second))
+		}
+		a.startApp(name, d, it)
+	}
 }
 
 // ---------- the viewers' guide ----------

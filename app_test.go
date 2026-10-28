@@ -10,7 +10,8 @@ import (
 
 // The whole app without its window: host on free ports (no router, no tunnel),
 // add two short clips, Play, and watch it count down, play both, seek, and stop
-// at the end. Needs ffmpeg (with drawtext) and MediaMTX.
+// at the end; the first brings graffiti, for as long as it plays. Needs ffmpeg
+// (with drawtext) and MediaMTX.
 func TestPlayThroughTheList(t *testing.T) {
 	if findTool("mediamtx") == "" || findTool("ffmpeg") == "" {
 		t.Skip("needs mediamtx and ffmpeg")
@@ -58,13 +59,34 @@ func TestPlayThroughTheList(t *testing.T) {
 		t.Fatalf("%+v", v)
 	}
 
+	a.SetRowApp(0, "graffiti")
+	if v := a.GetView(); v.Rows[0].App != "graffiti" || v.Rows[1].App != "" {
+		t.Fatalf("%+v", v.Rows)
+	}
+	app := func() (name any) {
+		a.wait(func() { name = a.host.apps.hello()["app"] })
+		if name != nil {
+			name = name.(map[string]any)["name"]
+		}
+		return
+	}
+
 	a.PlayClicked()
 	until("Stop, counting down", 5, func(v View) bool { return v.Play == "stop" && v.Rows[0].Now && !v.Slider.On })
 	until("the first clip, seekable", 10, func(View) bool { return state() == "movie" })
 	until("the playhead moving", 5, func(v View) bool { return v.Slider.On && v.Slider.Max > 3.9 && v.Slider.Value > 0.3 })
 	a.Seek(2.5)
+	if app() != "graffiti" {
+		t.Fatal("no graffiti with the first clip")
+	}
 	until("back from the seek", 10, func(v View) bool { return state() == "movie" && v.Slider.Value >= 2.5 })
+	if app() != "graffiti" {
+		t.Fatal("the seek stopped the graffiti")
+	}
 	until("on to the second", 15, func(v View) bool { return v.Rows[1].Now && v.Rows[0].Played })
+	if app() != nil {
+		t.Fatal("graffiti outlasted its clip")
+	}
 	v = until("the end of the list", 20, func(v View) bool { return v.Play == "play" && v.PlayOn })
 	if !v.Rows[0].Played || !v.Rows[1].Played {
 		t.Fatalf("%+v", v)
