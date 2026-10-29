@@ -1,23 +1,72 @@
 // Word Grid (apps/wordgrid.go): find words in the letter grid; unique ones score.
+// Type a word (or click letters) and its path lights up; Enter sends it.
 TubeYap.apps.wordgrid = (ctx, view) => {
     const L = TubeYap.lib, h = L.h;
+
+    // path: the dice spelling w, each a neighbour of the last and used once
+    // (as apps/wordgrid.go's onGrid); null if there's none
+    const path = (grid, w) => {
+        const from = (i, rest, used) => {
+            if (used.includes(i) || !rest.startsWith(grid[i])) return null;
+            used = [...used, i];
+            rest = rest.slice(grid[i].length);
+            if (!rest) return used;
+            for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+                const r = Math.floor(i / 4) + dr, c = i % 4 + dc;
+                if ((dr || dc) && r >= 0 && r < 4 && c >= 0 && c < 4) {
+                    const p = from(r * 4 + c, rest, used);
+                    if (p) return p;
+                }
+            }
+            return null;
+        };
+        for (let i = 0; i < 16; i++) { const p = from(i, w, []); if (p) return p; }
+        return null;
+    };
+
+    let input = null;
+    const typed = () => (input ? input.value.toLowerCase().replace(/[^a-z]/g, '') : '');
     const m = L.mount(ctx, 'cover', (v, kit) => {
-        const grid = h('div', { class: 'grid', style: 'grid-template-columns:repeat(4,56px);grid-auto-rows:56px;font-size:24px' },
-            v.grid.map((l) => h('div', { class: 'cell' }, l === 'qu' ? 'Qu' : l.toUpperCase())));
+        if (!input && v.named) {
+            input = L.input(kit, 'word', 'Type a word, Enter', (w) => kit.send({ kind: 'word', word: w }), { size: 18 });
+            input.addEventListener('input', () => m.redraw());
+            input.style.fontSize = '20px';
+            input.style.textTransform = 'uppercase';
+        }
+        const w = v.phase === 'play' ? typed() : '';
+        const lit = w ? path(v.grid, w) : null;
+        if (input) input.style.borderColor = w && !lit ? '#d33' : '#000';
+        const grid = h('div', { class: 'grid', style: 'grid-template-columns:repeat(4,64px);grid-auto-rows:64px;font-size:28px' },
+            v.grid.map((l, i) => {
+                const k = lit ? lit.indexOf(i) : -1;
+                return h('div', {
+                    class: 'cell',
+                    style: (k >= 0 ? 'background:#000;color:#fff;' : '') + (input && v.phase === 'play' ? 'cursor:pointer;position:relative' : 'position:relative'),
+                    on: { click: () => { if (!input || v.phase !== 'play') return; input.value += l; input.focus(); m.redraw(); } },
+                }, l === 'qu' ? 'Qu' : l.toUpperCase(), k >= 0 ? h('sub', { style: 'position:absolute;right:4px;bottom:2px;font-size:10px' }, k + 1) : null);
+            }));
         if (v.phase === 'results') {
             return [h('h2', {}, 'Word Grid — results (next grid in ', L.timer(v.left), ')'),
                 h('div', { class: 'cols' }, grid, h('div', {}, v.results.map((r) => h('p', {}, h('b', {}, `${r.name} ${r.score}: `),
-                    r.words.map((w) => h('span', { style: w.unique ? '' : 'text-decoration:line-through;color:#999' }, w.word + ' '))))),
+                    r.words.map((x) => h('span', { style: x.unique ? '' : 'text-decoration:line-through;color:#999' }, x.word + ' '))))),
                 L.board(v.board, 'Total'))];
         }
         return [h('h2', {}, 'Word Grid — ', L.timer(v.left)),
-            h('p', { class: 'muted' }, 'Chain neighbouring letters (each once) into words of three or more. Only words nobody else finds score.'),
+            h('p', { class: 'muted' }, 'Spell words of three or more letters by chaining neighbouring dice (sideways, up, down or diagonally; each die once). Type or click the letters, then Enter. Only words nobody else finds score; longer ones score more.'),
             h('div', { class: 'cols' }, grid, h('div', {},
-                v.named ? L.input(kit, 'word', 'Type a word, Enter', (w) => kit.send({ kind: 'word', word: w })) : h('p', { class: 'muted' }, 'Join the chat to play.'),
-                h('h3', {}, `Yours (${v.mine.length})`), h('p', {}, v.mine.join(' ')),
-                h('h3', {}, 'Everyone'), h('p', {}, v.counts.map((c) => `${c.name} ${c.found}`).join(' · ')))),
+                input ? h('div', {}, input, ' ', L.button('Clear', () => { input.value = ''; input.focus(); m.redraw(); })) : h('p', { class: 'muted' }, 'Join the chat to play.'),
+                w && !lit ? h('p', { style: 'color:#d33' }, 'Not in the grid') : null,
+                h('h3', {}, `Yours (${v.mine.length})`), h('p', {}, v.mine.map((x) => x.toUpperCase()).join(' ')),
+                h('h3', {}, 'Everyone'), h('p', {}, v.counts.length ? v.counts.map((c) => `${c.name} ${c.found}`).join(' · ') : 'Nobody has found one yet.'))),
         ];
     });
     m.draw(view);
-    return { view: m.draw, message(e) { if (e.kind === 'said' && e.why) m.kit.note(`${e.word.toUpperCase()}: ${e.why}`); } };
+    return {
+        view: m.draw,
+        message(e) {
+            if (e.kind !== 'said') return;
+            m.kit.note(e.why ? `${e.word.toUpperCase()}: ${e.why}` : `✓ ${e.word.toUpperCase()}`);
+            m.redraw();
+        },
+    };
 };
