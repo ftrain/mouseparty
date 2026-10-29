@@ -1,11 +1,11 @@
-# Build "TubeYap.app" on an Apple Silicon runner and check it hosts, on every
+# Build "Open House Party.app" on an Apple Silicon runner and check it hosts, on every
 # push to main and every pull request: the zip is kept as the run's artifact
 # (Actions tab > the run > Artifacts). A v* tag also attaches it to a release:
 #   git tag v1.0.0 && git push origin v1.0.0
 # Run it by hand from the Actions tab (workflow_dispatch) for any branch.
 #
 # Release builds carry everything: MediaMTX and cloudflared (pinned release
-# binaries) and TubeYap's own cut-down static ffmpeg (scripts/build_ffmpeg.sh,
+# binaries) and Open House Party's own cut-down static ffmpeg (scripts/build_ffmpeg.sh,
 # BUNDLE_FFMPEG), so they run on a Mac with nothing installed. They are only
 # ad-hoc signed: the first open needs System Settings > Privacy & Security >
 # Open Anyway (see README).
@@ -78,12 +78,12 @@ jobs:
         # hosts from this runner (no router involved), checks the page, the
         # stand-by stream and the WebRTC handshake, and publishes a countdown
         # with the bundled ffmpeg
-        run: env -i HOME="$HOME" PATH=/usr/bin:/bin "dist/TubeYap.app/Contents/MacOS/TubeYap" --selftest
+        run: env -i HOME="$HOME" PATH=/usr/bin:/bin "dist/Open House Party.app/Contents/MacOS/OpenHouseParty" --selftest
 
       - uses: actions/upload-artifact@v4
         with:
-          name: TubeYap-macos-arm64
-          path: dist/TubeYap-macos-arm64.zip
+          name: OpenHouseParty-macos-arm64
+          path: dist/OpenHouseParty-macos-arm64.zip
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -92,6 +92,6 @@ jobs:
         # with the exact sources of the ffmpeg inside, as its GPL asks
         run: |
           scripts/build_ffmpeg.sh --fetch
-          gh release create "$GITHUB_REF_NAME" dist/TubeYap-macos-arm64.zip build/ffmpeg/src/* \
-            --title "TubeYap $GITHUB_REF_NAME" \
-            --notes "TubeYap-macos-arm64.zip is the app: Apple Silicon Macs, macOS 13 or later. Unzip, move to Applications, and the first time: System Settings > Privacy & Security > Open Anyway. The other files are the exact sources of the ffmpeg inside it (GPL), which scripts/build_ffmpeg.sh builds from."
+          gh release create "$GITHUB_REF_NAME" dist/OpenHouseParty-macos-arm64.zip build/ffmpeg/src/* \
+            --title "Open House Party $GITHUB_REF_NAME" \
+            --notes "OpenHouseParty-macos-arm64.zip is the app: Apple Silicon Macs, macOS 13 or later. Unzip, move to Applications, and the first time: System Settings > Privacy & Security > Open Anyway. The other files are the exact sources of the ffmpeg inside it (GPL), which scripts/build_ffmpeg.sh builds from."

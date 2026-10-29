@@ -1,6 +1,6 @@
 // Blanks (apps/blanks.go): fill in the blank, then vote for the best.
-TubeYap.apps.blanks = (ctx, view) => {
-    const L = TubeYap.lib, h = L.h;
+OpenHouseParty.apps.blanks = (ctx, view) => {
+    const L = OpenHouseParty.lib, h = L.h;
     const m = L.mount(ctx, 'cover', (v, kit) => {
         const out = [h('h2', {}, 'Blanks'), h('p', { style: 'font-size:22px' }, v.prompt)];
         if (v.phase === 'write') {

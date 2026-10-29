@@ -42,15 +42,45 @@ button { font-family: var(--font); }
 /* A PDF read together covers the video (which shows a "reading" card meanwhile) */
 .doc { position: absolute; inset: 0; z-index: 3; background: #111; display: flex; flex-direction: column; }
 .doc[hidden] { display: none; }
-/* An app: over the video, or filling the stage (cover); app-off lets the video through, for this viewer */
-.app-layer { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
-.app-layer > * { pointer-events: auto; }   /* the app's boxes and canvas; around them, the player */
-.app-layer[hidden] { display: none; }
-.app-layer canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; touch-action: none; }
-.app.app-cover .app-layer { background: #fff; }
-.app.app-off .app-layer, .app.app-off .app-layer > * { pointer-events: none; opacity: 0.25; }
-.app.app-cover.app-off .app-layer { display: none; }
-.app.app-off #appBtn { opacity: 0.5; }
+/* The apps' windows (host.js), over the video: each moved by its bar and sized
+   by its four corners, by each viewer for themselves. Around them, the player. */
+.desk { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.win {
+    position: absolute; display: flex; flex-direction: column; pointer-events: auto;
+    background: #fff; border: 1px solid var(--green); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+}
+.win[hidden] { display: none; }
+.win-bar {
+    flex: none; display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 3px 0 8px;
+    background: #000; color: var(--green); font-size: 12px; cursor: move; user-select: none; touch-action: none;
+}
+.win-icon svg { display: block; width: 14px; height: 14px; }
+.win-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.win-btn {
+    width: 22px; height: 22px; padding: 0; border: none; border-radius: 3px; cursor: pointer;
+    background: none; color: var(--dim); font-size: 13px;
+}
+.win-btn:hover { color: var(--green); background: rgba(0, 255, 0, 0.12); }
+.win-body { position: relative; flex: 1; min-height: 0; overflow: hidden; color: #000; }
+.win-body canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; touch-action: none; }
+.win-grip {
+    position: absolute; z-index: 2; width: 12px; height: 12px; touch-action: none;
+    background: var(--green); border: 2px solid #000; border-radius: 2px;
+}
+.win-grip.nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.win-grip.ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.win-grip.sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.win-grip.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.win.moving .win-body { pointer-events: none; }   /* a drag over an app's canvas stays a drag */
+/* see-through (Graffiti): the picture shows through, under a dashed edge */
+.win.glass { background: none; border: 1px dashed rgba(0, 255, 0, 0.5); box-shadow: none; }
+.win.glass .win-bar { background: rgba(0, 0, 0, 0.6); }
+/* on a phone: one at a time, filling its place; nothing to move or size */
+.app:not([data-mode="side"]) .win-grip { display: none; }
+.app:not([data-mode="side"]) .win-bar { cursor: default; }
+.win.filled { inset: 0; border: none; box-shadow: none; }
+.win.filled .win-min { display: none; }                 /* a tab: Chat or another tab puts it away */
+.app[data-mode="overlay"] .desk > .win { top: 44px !important; }   /* under the tabs */
 .doc-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; }
 .doc-scroll canvas { display: block; margin: auto; background: #fff; box-shadow: 0 0 24px rgba(0, 0, 0, 0.6); }
 .doc.fit-width .doc-scroll canvas { margin: 0 auto; }
@@ -182,6 +212,24 @@ button { font-family: var(--font); }
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--line);
 }
 .online:empty { display: none; }
+/* the apps open: a chip each (hide or show it); on a phone, tabs: Chat (or the video) and one each */
+.app-tabs { display: flex; gap: 6px; padding: 6px 14px; overflow-x: auto; border-bottom: 1px solid var(--line); flex: none; }
+.app-tabs[hidden] { display: none; }
+.app-chip {
+    display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 3px 8px; cursor: pointer; white-space: nowrap;
+    background: none; color: var(--dim); border: 1px solid var(--line); border-radius: 3px; font: 12px var(--font);
+}
+.app-chip svg { width: 13px; height: 13px; }
+.app-chip.on { color: var(--green); border-color: var(--green); }
+.desk > .app-tabs {   /* a phone on its side: over the top of the picture */
+    position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1000000; padding: 0; border: none;
+    pointer-events: auto;
+}
+.desk > .app-tabs .app-chip { background: rgba(0, 0, 0, 0.75); padding: 6px 10px; }
+/* an upright phone: an app's tab shows it in the chat's place; the message box stays */
+.dock { display: none; position: relative; flex: 1; min-height: 0; }
+.app.app-tab .dock { display: block; }
+.app.app-tab .messages { display: none; }
 .messages {
     flex: 1; min-height: 0; overflow-y: auto; padding: 10px 14px;
     display: flex; flex-direction: column; gap: 7px; font-size: 13px; line-height: 1.45;
@@ -192,7 +240,27 @@ button { font-family: var(--font); }
 .msg .time { color: var(--dim); font-size: 10px; margin-left: 6px; }
 .msg.system { color: var(--dim); font-style: italic; }
 
-.composer { border-top: 1px solid var(--line); padding: 10px 14px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+.composer { position: relative; border-top: 1px solid var(--line); padding: 10px 14px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+/* the + beside the name or message box, and the apps it offers */
+.composer .plus { flex: none; padding: 8px 12px; font-weight: bold; }
+.picker {
+    position: absolute; bottom: 100%; right: 8px; z-index: 9; margin-bottom: 6px;
+    display: grid; grid-template-columns: repeat(4, 76px); gap: 2px; padding: 8px;
+    background: rgba(0, 0, 0, 0.95); border: 1px solid var(--line); border-radius: 6px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+}
+.picker[hidden] { display: none; }
+.picker-head { grid-column: 1 / -1; padding: 0 4px 6px; color: var(--dim); font-size: 12px; }
+.picker-app {
+    display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 2px 6px; cursor: pointer;
+    background: none; border: none; border-radius: 4px; color: var(--text); font: 11px var(--font); text-align: center;
+}
+.picker-app svg { width: 26px; height: 26px; color: var(--green); }
+.picker-app:hover { background: rgba(0, 255, 0, 0.12); }
+.picker-app:disabled { opacity: 0.35; cursor: default; }
+@media (max-width: 600px) {
+    .picker { left: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 .composer .row { display: flex; gap: 8px; }
 .composer input, .composer textarea {
     flex: 1; min-width: 0; padding: 9px 10px;
@@ -278,7 +346,10 @@ button { font-family: var(--font); }
 .ended {
     position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
     padding: 24px; text-align: center; background: #000; color: var(--dim); font-size: 16px;
+    flex-direction: column; gap: 4px;
 }
+.ended p { margin: 0; }
+.ended a { color: var(--green); }
 
 /* ---------- the guide: a cable TV listing ---------- */
 .guide {

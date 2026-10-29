@@ -1,6 +1,6 @@
 package main
 
-// Host a TubeYap session from this Mac: no server anywhere but here.
+// Host a Open House Party session from this Mac: no server anywhere but here.
 //
 // Viewers get a page from this Mac (WebRTC video, with HLS from here as the
 // fallback, and chat). Every URL carries a random session key and nothing answers
@@ -183,16 +183,17 @@ func (h *Host) start() error {
 	}
 	key := make([]byte, 16)
 	rand.Read(key)
-	tmp, err := os.MkdirTemp("", "tubeyap-host-")
+	tmp, err := os.MkdirTemp("", "openhouseparty-host-")
 	if err != nil {
 		return err
 	}
 	h.mu.Lock()
 	h.key = base64.RawURLEncoding.EncodeToString(key)
 	h.chat = &Chat{conns: map[*chatConn]bool{}}
-	h.apps = &appHost{chat: h.chat, movie: h}
+	h.apps = newAppHost(h.chat, h)
 	h.chat.hello = h.greeting
-	h.chat.app, h.chat.joined, h.chat.left = h.apps.message, h.apps.joined, h.apps.left
+	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
+	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
 	h.ports = map[string]int{"api": freePort(), "rtsp": freePort(), "hls": freePort(), "webrtc": freePort()}
 	h.tmp = tmp
 	h.stdins = map[*exec.Cmd]io.WriteCloser{}
@@ -266,6 +267,9 @@ func (h *Host) Stop() {
 	for _, p := range procs {
 		stopGroup(p)
 	}
+	if h.apps != nil {
+		h.apps.closeAll()
+	}
 	if chat != nil {
 		chat.closeAll()
 	}
@@ -284,7 +288,7 @@ func (h *Host) Stop() {
 
 // killLeftovers: a session that crashed or was force-quit leaves MediaMTX (and
 // cloudflared) running, holding the ports. Ours are recognisable: MediaMTX runs a
-// tubeyap-host-* config, cloudflared tunnels to our port. Only orphans go (parent
+// openhouseparty-host-* config, cloudflared tunnels to our port. Only orphans go (parent
 // 1: their app is gone); a live session's belong to its app, which may be another
 // copy of this one, or a self-test running beside it.
 func (h *Host) killLeftovers() {
@@ -299,7 +303,7 @@ func (h *Host) killLeftovers() {
 			continue
 		}
 		cmd := strings.Join(f[2:], " ")
-		if (strings.Contains(cmd, "mediamtx") && strings.Contains(cmd, "/tubeyap-host-") && strings.HasSuffix(cmd, "mediamtx.yml")) ||
+		if (strings.Contains(cmd, "mediamtx") && strings.Contains(cmd, "/openhouseparty-host-") && strings.HasSuffix(cmd, "mediamtx.yml")) ||
 			(strings.Contains(cmd, "cloudflared") && strings.HasSuffix(cmd, tunnel)) {
 			h.Log("Stopping a leftover from an earlier session: " + filepath.Base(f[2]))
 			var pid int
@@ -313,7 +317,7 @@ func (h *Host) killLeftovers() {
 	if err != nil {
 		return
 	}
-	dirs, _ := filepath.Glob(filepath.Join(os.TempDir(), "tubeyap-host-*"))
+	dirs, _ := filepath.Glob(filepath.Join(os.TempDir(), "openhouseparty-host-*"))
 	for _, d := range dirs {
 		if !strings.Contains(string(out), d) {
 			os.RemoveAll(d)
@@ -362,7 +366,7 @@ func (h *Host) viewers() int {
 // spawn runs a tool under the watchdog, in the session's folder (anything a tool
 // writes beside itself, like MediaMTX's certificates, goes with the session)
 func (h *Host) spawn(name, bin string, args ...string) (*exec.Cmd, error) {
-	cmd := exec.Command("/bin/sh", append([]string{"-c", watchdog, "tubeyap-watch", bin}, args...)...)
+	cmd := exec.Command("/bin/sh", append([]string{"-c", watchdog, "openhouseparty-watch", bin}, args...)...)
 	cmd.Dir = h.tmp
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdin, err := cmd.StdinPipe()

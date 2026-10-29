@@ -1,18 +1,20 @@
-# TubeYap
+# Open House Party
 
-Watch movies with friends, hosted from your own Mac, and gone when you quit.
+Have friends over, online: a movie on, chat beside it, and games on the table,
+hosted from your own Mac and gone when you quit.
 
-Drag movies (or music, or a PDF) into the window, press Play, and paste the link
+Drag movies (or music, or PDFs) into the window, press Play, and paste the link
 into your group chat. Friends open it in a browser: the movie plays, with a chat
-beside it. There is no server anywhere but your Mac. Quit, and the session, the
-chat and the link are gone.
+beside it, and anyone can open games and toys over it, like windows on a desktop
+with the movie always playing behind. There is no server anywhere but your Mac.
+Quit, and the party, the chat and the link are gone.
 
 ## Getting it
 
 - **Download:** the app is on this repo's
-  [Releases](https://github.com/ftrain/tubeyap/releases) page, for Apple Silicon
+  [Releases](https://github.com/ftrain/openhouseparty/releases) page, for Apple Silicon
   Macs on macOS 13 or later. Every push to `main` is also built, and its zip kept
-  under the run's Artifacts in the [Actions](https://github.com/ftrain/tubeyap/actions)
+  under the run's Artifacts in the [Actions](https://github.com/ftrain/openhouseparty/actions)
   tab. It isn't signed by Apple yet, so the first time macOS says it can't verify
   it: System Settings > Privacy & Security > **Open Anyway**.
 - **Build it:** see [Building](#building) below.
@@ -23,9 +25,10 @@ Everything the app needs is inside it: its own ffmpeg, MediaMTX and cloudflared.
 
 The window is two big buttons over a list.
 
-- **Add:** drag videos, music or PDFs (or folders of them) from Finder into the
-  list. Drag rows up and down to reorder; select one and press Backspace to take
-  it out.
+- **Add:** drag videos, sound files or PDFs (or folders of them) from Finder
+  into the list: anything ffmpeg plays. Drag rows up and down to reorder; select
+  one and press Backspace to take it out. A row goes grey while its file can't be
+  played (a drive unplugged); it's skipped, and comes back when the file does.
 - **The link:** adding something starts hosting. The right-hand button says
   "Making link" while it gets one, then becomes a copy button: press it and
   paste the link to your friends. The link itself is never shown. "Wi-Fi only"
@@ -33,7 +36,7 @@ The window is two big buttons over a list.
   means Cloudflare didn't give one (press it to ask again).
 - **Play:** select something and press **Play** to start there; with nothing
   selected it carries on down the list. It becomes **Stop** until you press it
-  again or the list runs out. Double-click a row to jump to it.
+  again or the list runs out. Double-click a row to jump to it, even mid-movie.
 - **The slider** moves around in the movie playing. For a PDF it's the page,
   and so are the arrow keys (past the last page, the list moves on).
 - Between movies there's an "up next" countdown. Songs in a row play straight
@@ -41,38 +44,41 @@ The window is two big buttons over a list.
 
 ### Apps
 
-Games and toys on everyone's page while the movie carries on. Give a movie its
-own: the **+** on its row, just before its running time, opens a picker of
-icons, and that app runs for exactly as long as the movie plays. Or start one
-any time from the **Apps** menu, for ten minutes (`app_minutes`); choose it again
-to stop it. One at a time.
+Games and toys on everyone's page while the movie carries on, like a desktop
+with the movie always playing behind it. They live on the viewers' page, not in
+the Mac app: anyone watching opens one for everyone with the **+** beside the
+chat box, and anyone closes one with its **✕** (the chat says who). Several can
+be open at once (up to eight).
 
-| | | |
-|---|---|---|
-| **Graffiti** | over the video | everyone draws on the picture |
-| **Bingo** | over the video | a card of words from the movie's own subtitles, filled in as they're said (called out, with no subtitles) |
-| **Anagrams** | over the video | first to unscramble the word |
-| **Polls** | over the video | anyone asks, everyone votes |
-| **Room** | full screen | everyone walks around as a dot; chat shows over their heads |
-| **Word Grid** | full screen | three minutes to find words in a 4×4 letter grid; only words nobody else found score |
-| **Tiles** | full screen | the crossword tile game, two to four players, private racks |
-| **Sketch** | full screen | one draws a secret word, the rest guess |
-| **Blanks** | full screen | fill in the blank, then vote for the best |
-| **Spies** | full screen | two teams; spymasters give one-word clues to find their agents |
-| **Werewolf** | full screen | wolves hidden in the village; night kills, day votes |
+Each opens as a window over the video. Each viewer arranges their own: drag its
+title bar to move it, its four corners to size it (a corner, or the whole
+screen; double-click the bar for the whole picture and back), and **–** to hide
+it for yourself; the chips under the chat's header show and hide them. On an
+upright phone each app is a tab beside Chat, under the video; on a phone on its
+side, the tab chosen fills the screen. Graffiti is see-through and stays lined up
+with the picture, under the other windows.
+
+| | |
+|---|---|
+| **Graffiti** | everyone draws on the picture |
+| **Bingo** | a card of words from the movie's own subtitles, filled in as they're said (called out, with no subtitles) |
+| **Anagrams** | first to unscramble the word |
+| **Polls** | anyone asks, everyone votes |
+| **Room** | everyone walks around as a dot; chat shows over their heads |
+| **Word Grid** | three minutes to find words in a 4×4 letter grid; only words nobody else found score |
+| **Tiles** | the crossword tile game, two to four players, private racks |
+| **Sketch** | one draws a secret word, the rest guess |
+| **Blanks** | fill in the blank, then vote for the best |
+| **Spies** | two teams; spymasters give one-word clues to find their agents |
+| **Werewolf** | wolves hidden in the village; night kills, day votes |
 
 Games with turns or teams open with a lobby: join, and it starts once enough
 have. Words are checked against ENABLE. You join in by opening the link
-yourself; viewers can turn an app off for themselves (its button in the chat
-header, with the time left). They're wireframes; in the browser player's full
-screen they don't show.
-You join in by opening the link yourself. Viewers can turn an app off for
-themselves (its button in the chat header, with the time left). They're
-wireframes, there to try the idea; in the browser player's full screen they
-don't show.
+yourself. They're wireframes, there to try the idea; in the browser player's
+full screen they don't show.
 
-That's all of it. The few settings are in `~/.tubeyap.json` (below), and the log
-goes to stderr: run `/Applications/TubeYap.app/Contents/MacOS/TubeYap` from
+That's all of it. The few settings are in `~/.openhouseparty.json` (below), and the log
+goes to stderr: run `/Applications/Open House Party.app/Contents/MacOS/OpenHouseParty` from
 Terminal to read it.
 
 ### What it plays
@@ -90,7 +96,7 @@ Terminal to read it.
 The app looks for subtitles when a movie is added: text and picture tracks inside
 the file, and files beside it named after it (`Movie.srt`, `Movie.en.srt`,
 `Movie.French.forced.srt`). Drop an `.srt`, `.vtt` or `.ass` onto a movie to add
-one. Each movie's `subs` setting in `~/.tubeyap.json` is one of:
+one. Each movie's `subs` setting in `~/.openhouseparty.json` is one of:
 
 - `viewers` (the default when there are text subtitles): every text track
   becomes a language in a **CC** menu on the viewer page. Each viewer turns them
@@ -104,7 +110,7 @@ one. Each movie's `subs` setting in `~/.tubeyap.json` is one of:
 
 ### Settings
 
-`~/.tubeyap.json` holds the list and these, none of them in the window:
+`~/.openhouseparty.json` holds the list and these, none of them in the window:
 
 | Setting | Default | |
 |---|---|---|
@@ -112,7 +118,6 @@ one. Each movie's `subs` setting in `~/.tubeyap.json` is one of:
 | `preset` | `"veryfast"` | x264's speed/quality trade |
 | `countdown` | `10` | seconds of "up next" card before each movie; 0 for none |
 | `skip` | `0` | minutes into the first movie played |
-| `app_minutes` | `10` | how long an app from the Apps menu runs |
 | `open_router_ports` | `true` | ask the router to let friends in; `false` keeps to your own network and the Cloudflare link |
 
 ## How hosting works
@@ -155,14 +160,14 @@ minutes; a crashed session's folder is cleared on the next start; and the link
 is taken off the clipboard on quit. What the app can't erase: Cloudflare's own
 logs, and the dead link in viewers' histories.
 
-On your Mac, `~/.tubeyap.json` keeps the list and settings, and nothing about a
+On your Mac, `~/.openhouseparty.json` keeps the list and settings, and nothing about a
 session.
 
 ## The viewer page
 
 Laid out like YouTube live: chat in a column beside the video on a desktop,
 under it on an upright phone, and floating over the video like subtitles on a
-phone turned on its side. Nothing of TubeYap's sits on the picture: that's the
+phone turned on its side. Nothing of Open House Party's sits on the picture: that's the
 browser's own player, with its volume, picture-in-picture and full-screen
 buttons. In full screen, the chat and the subtitles come along as a "Chat"
 subtitle track, in every browser and on iPhones and iPads.
@@ -181,8 +186,8 @@ Needs a Mac with Apple Silicon, Xcode's command-line tools and Go
 
 ```bash
 brew install mediamtx cloudflared meson ninja cmake pkg-config
-scripts/build_ffmpeg.sh                    # TubeYap's own ffmpeg, once (about 10 minutes)
-BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # -> dist/TubeYap.app and dist/TubeYap-macos-arm64.zip
+scripts/build_ffmpeg.sh                    # Open House Party's own ffmpeg, once (about 10 minutes)
+BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # -> dist/Open House Party.app and dist/OpenHouseParty-macos-arm64.zip
 ```
 
 - **The app** is Go with a [Wails](https://wails.io) window. The build runs a
@@ -190,13 +195,13 @@ BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # -> dist/TubeYap.app and dist/TubeYa
   is plain HTML, CSS and JavaScript (`frontend/`) with no build step.
 - **ffmpeg:** `scripts/build_ffmpeg.sh` builds a static ffmpeg from pinned,
   checksummed sources (FFmpeg, x264, Opus, FreeType, FriBidi, HarfBuzz, libass),
-  cut down to what TubeYap uses. It reads anything (every decoder and container)
+  cut down to what Open House Party uses. It reads anything (every decoder and container)
   but writes only H.264 and Opus over RTSP, PNG covers and WebVTT subtitles,
   with only the filters the app uses: 20 MB instead of 60-plus. Homebrew's
   ffmpeg works for trying things, but it has no `drawtext`, so the cards fail
   with it. There's no ffprobe: the app reads files with ffmpeg alone.
 - **Running from source:** `go run github.com/wailsapp/wails/v2/cmd/wails@v2.17.0 dev -skipbindings`.
-  It starts hosting whatever is in your `~/.tubeyap.json` list.
+  It starts hosting whatever is in your `~/.openhouseparty.json` list.
 - **Signed builds:** `SIGN_IDENTITY="Developer ID Application: …"
   NOTARY_PROFILE=… BUNDLE_FFMPEG=1 scripts/build_mac_app.sh` signs with the
   hardened runtime and notarizes. See `docs/release-plan.md` for what proper
@@ -215,7 +220,7 @@ Vets everything and runs the tests. They cover:
 - router port forwarding, against fake NAT-PMP and UPnP routers
 - subtitles and languages, and reading files with ffmpeg, checked against ffprobe
 
-Then it runs the app's self-test (`TubeYap --selftest`). That hosts on free
+Then it runs the app's self-test (`OpenHouseParty --selftest`). That hosts on free
 ports, touching neither the router nor a session that's running, checks the
 page, the stand-by stream and the WebRTC handshake, and publishes a short
 countdown.
@@ -255,18 +260,18 @@ apps/               the apps: the Activity interface and the library games share
 portmap.go          asks the router (NAT-PMP / UPnP) to forward ports
 subtitles.go        finds a movie's subtitles and turns text ones into timed lines
 media.go            what a file holds (from ffmpeg), PDF pages, titles from file names
-config.go, tools.go ~/.tubeyap.json; finding the bundled tools
+config.go, tools.go ~/.openhouseparty.json; finding the bundled tools
 host_web/           the viewer page: viewer.html, host.js, host.css, hls.js, pdf.js
 media/              the stand-by card MediaMTX loops between movies
 packaging/          the app icon and the Info.plist Wails builds with
 scripts/            build_mac_app.sh, build_ffmpeg.sh, test.sh, make_standby_card.sh
-licenses/           everything TubeYap is made of, and under what licences
+licenses/           everything Open House Party is made of, and under what licences
 *_test.go           the tests
 ```
 
 ## Licence
 
-TubeYap is under the [MIT licence](LICENSE). The app bundles ffmpeg, which as
+Open House Party is under the [MIT licence](LICENSE). The app bundles ffmpeg, which as
 built (with x264) is under the GPL, and MediaMTX, cloudflared, hls.js, pdf.js and
 some Go libraries under MIT, BSD and Apache licences. [`licenses/`](licenses/README.md)
 lists every one, with its licence text, and the built app carries the same

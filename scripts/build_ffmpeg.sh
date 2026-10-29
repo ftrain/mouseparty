@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the ffmpeg TubeYap ships: static (nothing outside macOS to link), and cut
+# Build the ffmpeg Open House Party ships: static (nothing outside macOS to link), and cut
 # down to what the app uses. It still reads anything (every decoder, container
 # and parser), but it writes only H.264 (x264) and Opus over RTSP, PNG (a song's
 # cover) and WebVTT (subtitles for viewers), plus Matroska and MP4 for the tests;
@@ -105,7 +105,7 @@ PROTOCOLS=file,pipe,tcp,udp,rtp
 # what stream.go and subtitles.go name; the sources (color, anullsrc; testsrc and
 # sine for the tests); and what ffmpeg inserts itself: format and rate conversion,
 # trimming for -ss/-t, and turning phone videos the right way up
-FILTERS=drawtext,subtitles,ass,scale,pad,setsar,setpts,asetpts,overlay,split,asplit,showcqt,blend,colorchannelmixer
+FILTERS=drawtext,subtitles,ass,scale,pad,setsar,setpts,asetpts,overlay,split,asplit,showcqt,gblur,lagfun,vstack,colorchannelmixer
 FILTERS=$FILTERS,color,anullsrc,testsrc,sine
 FILTERS=$FILTERS,buffer,buffersink,abuffer,abuffersink,null,anull,copy,acopy,format,aformat,aresample,fps,trim,atrim
 FILTERS=$FILTERS,transpose,hflip,vflip,crop,setparams

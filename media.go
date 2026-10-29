@@ -15,11 +15,28 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
 
+// What can be dropped in, by name: the usual names of what ffmpeg reads (it has
+// every demuxer and decoder). Whether a file turns out to be sound or a picture
+// is ffmpeg's to say when it's added; a file by itself with an unusual name is
+// asked about (playable).
 var (
-	videoExts = exts(".mp4", ".mkv", ".mov", ".avi", ".m4v", ".webm", ".ts", ".mpg", ".mpeg")
-	audioExts = exts(".mp3", ".m4a", ".aac", ".flac", ".wav", ".aif", ".aiff", ".ogg", ".opus", ".m4b")
-	docExts   = exts(".pdf")
+	videoExts = exts(".mp4", ".m4v", ".mkv", ".mk3d", ".mov", ".qt", ".avi", ".webm", ".ts", ".mts", ".m2ts", ".m2t",
+		".tp", ".trp", ".mpg", ".mpeg", ".mpe", ".m1v", ".m2v", ".vob", ".evo", ".wmv", ".asf", ".flv", ".f4v", ".3gp",
+		".3g2", ".ogv", ".ogm", ".rm", ".rmvb", ".divx", ".xvid", ".dv", ".dif", ".mxf", ".nut", ".y4m", ".h264", ".264",
+		".h265", ".265", ".hevc", ".ivf", ".gxf", ".bik", ".smk", ".nsv", ".amv", ".wtv", ".dvr-ms", ".vro", ".mjpeg",
+		".mjpg", ".roq", ".avs", ".cpk", ".nuv", ".mod", ".tod", ".mqv")
+	audioExts = exts(".mp3", ".mp2", ".mp1", ".m4a", ".m4b", ".m4r", ".aac", ".adts", ".flac", ".wav", ".wave", ".w64",
+		".aif", ".aiff", ".aifc", ".caf", ".ogg", ".oga", ".opus", ".spx", ".wma", ".ac3", ".eac3", ".ec3", ".dts",
+		".dtshd", ".thd", ".mlp", ".ape", ".wv", ".tta", ".tak", ".mka", ".mpc", ".ra", ".amr", ".awb", ".au", ".snd",
+		".voc", ".ofr", ".dsf", ".dff", ".shn", ".gsm", ".qcp", ".8svx", ".sln", ".xa", ".rf64", ".bwf")
+	docExts = exts(".pdf")
 )
+
+// playable: ffmpeg finds sound, or a moving picture at least a second long (not a still image), in it
+func playable(path string) bool {
+	p := probe(path)
+	return p.Error == "" && (p.Audio != "" || (p.Video != "" && p.Duration >= 1))
+}
 
 func exts(e ...string) map[string]bool {
 	m := map[string]bool{}

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="referrer" content="no-referrer">
-    <title>TubeYap</title>
+    <title>Open House Party</title>
     <!-- Served by the host's Mac (host.go); every URL carries the session key.
          Layout follows YouTube's live pages: chat beside the video on a desktop,
          under it on an upright phone, floating over it like subtitles on a
@@ -33,8 +33,8 @@
                     <button class="doc-zoom" id="docZoom" title="Fit the width (or double-click the page)">fit width</button>
                 </div>
             </div>
-            <!-- An app the host has put on everyone's page for a while (apps.go): host.js loads its script from apps/ -->
-            <div class="app-layer" id="appLayer" hidden></div>
+            <!-- The apps open (apps.go), each a window this viewer moves and sizes: host.js loads their scripts from apps/ -->
+            <div class="desk" id="desk"></div>
             <div class="captions" id="captions" hidden></div>
             <!-- the chat, when there's no column for it: halfway down the right edge, where no player puts its controls -->
             <button class="chat-tab" id="chatTab" title="Chat">💬<span class="unread" id="unread" hidden></span></button>
@@ -44,7 +44,7 @@
         <div class="guide" id="guide" hidden>
             <div class="guide-box" role="dialog" aria-label="What's on">
                 <div class="guide-head">
-                    <span class="guide-title">TUBEYAP GUIDE</span>
+                    <span class="guide-title">OPEN HOUSE PARTY GUIDE</span>
                     <span class="guide-zone" id="guideZone"></span>
                     <span class="guide-clock" id="guideClock"></span>
                     <button class="guide-close" id="guideClose" title="Close">✕</button>
@@ -61,27 +61,32 @@
                 <span class="conn" id="chatConnectionIndicator">connecting…</span>
                 <span class="tools">
                     <button class="head-btn" id="captionsBtn" title="Subtitles" hidden>CC</button>
-                    <button class="head-btn" id="appBtn" title="Turn the app off and on, for you" hidden></button>
                     <button class="head-btn" id="guideBtn" title="What's on">GUIDE</button>
                     <button class="hide-chat" id="hideChat" title="Hide chat">⟩</button>
                 </span>
                 <div class="menu" id="captionsMenu" hidden></div>
             </header>
             <div class="online" id="onlineUsers"></div>
+            <!-- the apps open: hide or show one (a desktop), or on a phone a tab each beside Chat -->
+            <div class="app-tabs" id="appTabs" hidden></div>
+            <div class="dock" id="dock"></div>
             <div class="messages" id="chatMessagesOverlay"></div>
             <div class="composer">
+                <div class="picker" id="picker" hidden></div>
                 <div class="row" id="joinOverlay">
                     <input type="text" id="usernameInput" placeholder="Your name..." maxlength="30" autocomplete="nickname" />
                     <button id="joinBtn" class="btn">Join chat</button>
+                    <button class="btn plus" title="Open an app for everyone" aria-label="Open an app">+</button>
                 </div>
                 <div class="row" id="chatInputBox" style="display: none;">
                     <button id="nameBtn" class="chip" title="Change name"><span id="currentUserDisplay"></span></button>
                     <textarea id="messageInput" rows="1" placeholder="Say something..." maxlength="500" autocomplete="off"></textarea>
+                    <button class="btn plus" title="Open an app for everyone" aria-label="Open an app">+</button>
                 </div>
             </div>
         </aside>
     </div>
-    <script>window.TUBEYAP_BASE = '/{{KEY}}';</script>
+    <script>window.OPENHOUSEPARTY_BASE = '/{{KEY}}';</script>
     <script src="/{{KEY}}/assets/hls.min.js"></script>
     <script src="/{{KEY}}/assets/host.js"></script>
 </body>

@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ftrain/tubeyap/apps"
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -29,22 +28,15 @@ const startGap = 3.0 // seconds ffmpeg takes to start a movie or card, for the g
 
 // What the window shows; it draws exactly this.
 type View struct {
-	Play      string      `json:"play"`      // "play" or "stop"
-	PlayOn    bool        `json:"playOn"`    // in colour, and can be pressed
-	Link      string      `json:"link"`      // "copy" or "spinner"
-	LinkOn    bool        `json:"linkOn"`    // in colour
-	LinkPress bool        `json:"linkPress"` // can be pressed
-	LinkNote  string      `json:"linkNote"`  // under the icon: "Making link", "Copied", "Wi-Fi only"...
-	Rows      []Row       `json:"rows"`
-	Selected  int         `json:"selected"` // -1: none
-	Slider    Slider      `json:"slider"`
-	Apps      []AppChoice `json:"apps"` // what a row's + offers
-}
-
-type AppChoice struct {
-	Name  string `json:"name"`
-	Title string `json:"title"`
-	Icon  string `json:"icon"` // a Lucide icon (frontend/icons.js)
+	Play      string `json:"play"`      // "play" or "stop"
+	PlayOn    bool   `json:"playOn"`    // in colour, and can be pressed
+	Link      string `json:"link"`      // "copy" or "spinner"
+	LinkOn    bool   `json:"linkOn"`    // in colour
+	LinkPress bool   `json:"linkPress"` // can be pressed
+	LinkNote  string `json:"linkNote"`  // under the icon: "Making link", "Copied", "Wi-Fi only"...
+	Rows      []Row  `json:"rows"`
+	Selected  int    `json:"selected"` // -1: none
+	Slider    Slider `json:"slider"`
 }
 
 type Row struct {
@@ -52,7 +44,7 @@ type Row struct {
 	Length string `json:"length"`
 	Now    bool   `json:"now"`    // playing
 	Played bool   `json:"played"` // above the one playing, or next to play
-	App    string `json:"app"`    // the app it brings: its name, "" none
+	Off    bool   `json:"off"`    // can't play: its file is gone (a drive unplugged) or unreadable
 }
 
 // Slider: the playhead (seconds into the movie), or a PDF's pages
@@ -106,11 +98,6 @@ type App struct {
 	language     string      // "en": the audio played, the subtitles offered first
 	standby      []byte      // the card MediaMTX loops between movies
 	hostSetup    func(*Host) // tests: free ports, no router, no tunnel
-	appName      string      // the app running on viewers' pages (apps.go); "" none
-	appWanted    string      // to start once hosting is
-	appRun       int         // counts apps started, so an old one's timer stops nothing
-	appOwner     *Item       // the row whose app is running: it stops when that does; nil, the menu's
-	appItems     map[string]*menu.MenuItem
 
 	cueMu    sync.Mutex
 	cueCache map[cueKey][]Cue
@@ -170,6 +157,7 @@ func (a *App) startup(ctx context.Context) {
 	go a.run()
 	a.every(500*time.Millisecond, func() {})            // the playhead moves
 	a.every(2*time.Second, func() { a.sendSchedule() }) // and the guide follows
+	go a.watchFiles()
 	a.do(func() {
 		a.checkTools()
 		a.scanSubtitles()
@@ -197,7 +185,6 @@ func (a *App) Seek(seconds float64)         { a.do(func() { a.seek(seconds) }) }
 func (a *App) ShowPage(page int)            { a.do(func() { a.showPage(page) }) }
 func (a *App) TurnPage(step int)            { a.do(func() { a.turnPage(step) }) }
 func (a *App) AddPaths(p []string, row int) { go a.addPaths(p, row) }
-func (a *App) SetRowApp(i int, name string) { a.do(func() { a.setRowApp(i, name) }) }
 
 // ---------- what the app is doing ----------
 // One state, worked out from the facts, decides what can be pressed:
@@ -236,9 +223,6 @@ func (a *App) state() string {
 func (a *App) view() View {
 	state := a.state()
 	v := View{Play: "play", PlayOn: state == "ready", Link: "copy", Selected: a.selected, Rows: []Row{}}
-	for _, k := range apps.Kinds {
-		v.Apps = append(v.Apps, AppChoice{k.Name, k.Title, k.Icon})
-	}
 	if a.playing {
 		v.Play, v.PlayOn = "stop", true
 	}
@@ -270,7 +254,7 @@ func (a *App) view() View {
 			length = formatTime(it.Duration)
 		}
 		v.Rows = append(v.Rows, Row{Title: title, Length: length, Now: a.playing && i == a.cfg.Position,
-			Played: i < a.cfg.Position, App: it.App})
+			Played: i < a.cfg.Position, Off: off(it)})
 	}
 	v.Slider = a.slider(state)
 	return v
@@ -393,6 +377,8 @@ func (a *App) addPaths(paths []string, row int) {
 			files = append(files, p)
 		case subExts[ext(p)]:
 			subs = append(subs, p)
+		case err == nil && playable(p): // dropped by itself, in a format with no usual name: ffmpeg says it plays
+			files = append(files, p)
 		default:
 			a.log("Not a video, sound or PDF file, skipped: " + filepath.Base(p))
 		}
@@ -440,18 +426,27 @@ func (a *App) addPaths(paths []string, row int) {
 	})
 }
 
+// playRow: a double-click. Not playing: play it. Playing: stop what's on, at any
+// moment (a seek or a switch under way, the gap between two), and play it next.
 func (a *App) playRow(i int) {
-	if i < 0 || i >= len(a.cfg.Queue) {
+	if i < 0 || i >= len(a.cfg.Queue) || off(a.cfg.Queue[i]) {
 		return
 	}
-	switch state := a.state(); {
-	case state == "ready":
+	switch {
+	case a.state() == "ready":
 		a.playing = true
 		a.play(i)
-	case (state == "countdown" || state == "movie" || state == "doc") && i != a.cfg.Position:
+	case !a.playing: // stopping, or no link yet
+	case a.phase != "": // streaming, or a seek or switch on its way: finished plays i
+		if i == a.cfg.Position && a.jumpTo < 0 && a.seekTo == nil {
+			return // the one on now
+		}
 		a.log("Switching to " + filepath.Base(a.cfg.Queue[i].Path))
-		a.jumpTo = i
+		a.jumpTo, a.seekTo = i, nil
 		a.player.Stop()
+	default: // between two: the next one up is this one
+		a.cfg.Position = i
+		a.save()
 	}
 }
 
@@ -501,11 +496,19 @@ func (a *App) play(index int) {
 		return
 	}
 	pos := a.cfg.Position
-	if index >= 0 {
+	if index >= 0 && index < len(q) && !off(q[index]) {
 		pos = index
+	} else if pos >= len(q) {
+		pos = 0
+	}
+	for pos < len(q) && off(q[pos]) { // greyed out: on to the next that can play
+		pos++
 	}
 	if pos >= len(q) {
-		pos = 0
+		a.log("Nothing further down the list can play.")
+		a.cfg.Position, a.playing = len(q), false
+		a.save()
+		return
 	}
 	a.cfg.Position = pos
 	a.current = q[pos]
@@ -571,14 +574,6 @@ func (a *App) startCurrent(skip float64) {
 	if err != nil {
 		a.log("Could not start ffmpeg: " + err.Error())
 		a.current, a.phase, a.playing = nil, "", false
-		return
-	}
-	if it.App != "" && a.appOwner != it { // its app, for as long as it plays (a seek keeps it going)
-		d := 24 * time.Hour // a PDF: until it's put away
-		if it.Duration > skip*60 {
-			d = time.Duration((it.Duration - skip*60) * float64(time.Second))
-		}
-		a.startApp(it.App, d, it)
 	}
 }
 
@@ -632,9 +627,6 @@ func (a *App) finished(code int) {
 		name = filepath.Base(it.Path)
 	}
 	a.subToken = ""
-	if it != nil && a.appOwner == it {
-		a.stopApp()
-	}
 	if a.host != nil && a.host.Running() {
 		a.host.ClearSubtitles()
 		a.host.ClearDocument()
@@ -709,7 +701,7 @@ func (a *App) showPage(page int) {
 // ---------- subtitles ----------
 // Each movie has Subtitles (what was found: tracks in the file and files beside
 // it) and Subs, what to do with them. Text subtitles are offered to viewers;
-// "burn" and the offset are only in ~/.tubeyap.json.
+// "burn" and the offset are only in ~/.openhouseparty.json.
 
 func subsSettings(it *Item) *SubsSettings {
 	if it.Subs == nil {
@@ -979,8 +971,6 @@ func (a *App) hostReady(err error) {
 	if err != nil {
 		a.log("Hosting failed: " + err.Error())
 		a.host, a.hostFailed, a.playing = nil, err.Error(), false
-		a.appWanted = ""
-		a.updateMenu()
 		return
 	}
 	a.log("Hosting. Link for friends: " + a.link())
@@ -989,110 +979,48 @@ func (a *App) hostReady(err error) {
 	}
 	a.scheduleSent = ""
 	a.sendSchedule()
-	if name := a.appWanted; name != "" {
-		a.runApp(name)
+}
+
+// ---------- files that can't be played now ----------
+
+// off: a row that can't play, greyed out: its file is gone, or ffmpeg couldn't read it when it was added
+func off(it *Item) bool {
+	return it.Missing || (it.Note != "" && it.Note != "didn't play")
+}
+
+// watchFiles looks every few seconds for files that have gone, or come back (a
+// drive unplugged and plugged in again). Off the app's goroutine: a network
+// drive that has stopped answering can hold a look at it up for a long time.
+func (a *App) watchFiles() {
+	for {
+		var paths []string
+		a.wait(func() {
+			for _, it := range a.cfg.Queue {
+				paths = append(paths, it.Path)
+			}
+		})
+		gone := map[string]bool{}
+		for _, p := range paths {
+			if _, err := os.Stat(p); err != nil {
+				gone[p] = true
+			}
+		}
+		a.do(func() {
+			for _, it := range a.cfg.Queue {
+				it.Missing = gone[it.Path]
+			}
+		})
+		time.Sleep(3 * time.Second)
 	}
 }
 
-// ---------- apps on the viewers' pages ----------
-
-// menu: the Mac's menu bar, with Apps; ticked is the one running, and choosing it again stops it
+// menu: the Mac's menu bar
 func (a *App) menu() *menu.Menu {
 	m := menu.NewMenu()
 	m.Append(menu.AppMenu())
 	m.Append(menu.EditMenu())
-	sub := m.AddSubmenu("Apps")
-	a.appItems = map[string]*menu.MenuItem{}
-	for _, k := range apps.Kinds {
-		a.appItems[k.Name] = sub.AddCheckbox(k.Title, false, nil, func(*menu.CallbackData) {
-			a.do(func() {
-				if a.appName == k.Name || a.appWanted == k.Name {
-					a.stopApp()
-				} else {
-					a.runApp(k.Name)
-				}
-			})
-		})
-	}
 	m.Append(menu.WindowMenu())
 	return m
-}
-
-func (a *App) updateMenu() {
-	for name, item := range a.appItems {
-		item.SetChecked(name == a.appName || name == a.appWanted)
-	}
-	if a.ctx != nil {
-		runtime.MenuUpdateApplicationMenu(a.ctx)
-	}
-}
-
-// runApp puts the app called name on viewers' pages for app_minutes, hosting first if need be
-func (a *App) runApp(name string) {
-	defer a.updateMenu()
-	if a.host == nil || !a.host.Running() || a.hostStarting {
-		a.appWanted = name
-		a.hostStart()
-		return
-	}
-	a.appWanted = ""
-	d := time.Duration(float64(a.cfg.AppMinutes) * float64(time.Minute))
-	if d <= 0 {
-		d = 10 * time.Minute
-	}
-	a.startApp(name, d, nil)
-}
-
-// startApp puts the app on viewers' pages for d; owner is the row it came with, if any
-func (a *App) startApp(name string, d time.Duration, owner *Item) {
-	defer a.updateMenu()
-	if a.host == nil || !a.host.Running() || !a.host.StartApp(name, d) {
-		return
-	}
-	a.log(fmt.Sprintf("%s for %v.", name, d.Round(time.Second)))
-	a.appName, a.appOwner = name, owner
-	a.appRun++
-	run := a.appRun
-	a.after(d, func() {
-		if a.appRun == run {
-			a.stopApp()
-		}
-	})
-}
-
-func (a *App) stopApp() {
-	if a.host != nil {
-		a.host.StopApp()
-	}
-	a.appName, a.appWanted, a.appOwner = "", "", nil
-	a.appRun++
-	a.updateMenu()
-}
-
-// setRowApp: the app a row brings while it plays ("" none); if it's playing, now
-func (a *App) setRowApp(i int, name string) {
-	if i < 0 || i >= len(a.cfg.Queue) {
-		return
-	}
-	if _, ok := apps.Lookup(name); !ok {
-		name = ""
-	}
-	it := a.cfg.Queue[i]
-	it.App = name
-	a.save()
-	if it != a.current || a.phase == "countdown" {
-		return
-	}
-	if a.appOwner == it {
-		a.stopApp()
-	}
-	if name != "" {
-		d := 24 * time.Hour
-		if pos, length, ok := a.playhead(); ok && length > pos {
-			d = time.Duration((length - pos) * float64(time.Second))
-		}
-		a.startApp(name, d, it)
-	}
 }
 
 // ---------- the viewers' guide ----------

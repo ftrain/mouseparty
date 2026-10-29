@@ -130,8 +130,8 @@ func TestWhatEachKindOfFileBecomes(t *testing.T) {
 func TestASongsPictureIsItsCoverAndNameOverItsSound(t *testing.T) {
 	graph, files := audioCard(SoundInfo{Title: "So What", Artist: "Miles Davis"}, "track01", 2, "0:a:0", nil)
 	defer removeAll(files)
-	for _, want := range []string{"[2:v]scale=300:300", "[0:a:0]asplit[a][heard];[heard]asplit[h1][h2]",
-		"blend=all_mode=lighten[spectrum];[1:v][spectrum]overlay=0:0", "[card][cover]overlay=120:210"} {
+	for _, want := range []string{"[2:v]scale=300:300", "[0:a:0]asplit[a][heard];[heard]showcqt=",
+		"lagfun=decay=0.975", "vstack,scale=1280:720:flags=bicubic,gblur=sigma=10[spectrum];[1:v][spectrum]overlay=0:0", "[card][cover]overlay=120:210"} {
 		if !strings.Contains(graph, want) {
 			t.Errorf("no %q in %s", want, graph)
 		}

@@ -1,14 +1,14 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "TubeYap",
-  "outputfilename": "TubeYap",
+  "name": "OpenHouseParty",
+  "outputfilename": "OpenHouseParty",
   "frontend:dir": "frontend",
   "frontend:install": "",
   "frontend:build": "",
   "build:dir": "packaging",
   "info": {
-    "productName": "TubeYap",
+    "productName": "Open House Party",
     "productVersion": "1.0.0",
-    "comments": "Watch movies with friends, hosted from this Mac."
+    "comments": "Have friends over: movies, chat and games, hosted from this Mac."
   }
 }

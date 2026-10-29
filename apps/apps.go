@@ -1,5 +1,7 @@
-// Package apps is what everyone does together on the viewer page for a while:
-// games, drawing, polls. One runs at a time, over the video or filling the screen.
+// Package apps is what everyone does together on the viewer page: games,
+// drawing, polls. Any viewer opens one, or closes one, from the page; several
+// run at once, each a window over the video that every viewer places and sizes
+// for themselves (on a phone, a tab beside the chat).
 //
 // An app is an Activity (the rules, on the host's Mac) and a script,
 // host_web/apps/<name>.js, that draws it. The Activity keeps all the state and
@@ -43,28 +45,30 @@ func (Base) Tick(*Room, time.Time) {}
 func (Base) Joined(*Room, Viewer)  {}
 func (Base) Left(*Room, Viewer)    {}
 
-// Kind is an app TubeYap offers
+// Kind is an app Open House Party offers
 type Kind struct {
 	Name  string // its script is host_web/apps/<Name>.js
 	Title string
-	Icon  string // a Lucide icon's name, for the Mac's app picker
-	Cover bool   // fills the screen, rather than sitting over the video
+	Icon  string // a Lucide icon's name, for the viewers' app picker (host_web/apps/icons.js)
+	Glass bool   // see-through, drawn on the picture itself (and lined up with it), not on a page of its own
+	Size  string // how big its window first opens: "full" (the whole video), "big" or "small" (a corner)
+	Min   int    // players it needs: 1 if one will do (its lobby's minimum, for the picker to say)
 	New   func(r *Room) Activity
 }
 
 // Kinds: every app, in the order the picker shows them
 var Kinds = []Kind{
-	{"graffiti", "Graffiti", "spray-can", false, func(*Room) Activity { return &graffiti{} }},
-	{"room", "Room", "door-open", true, func(*Room) Activity { return &room{avatars: map[int]*avatar{}} }},
-	{"bingo", "Bingo", "grid-3x3", false, newBingo},
-	{"wordgrid", "Word Grid", "dices", true, newWordGrid},
-	{"tiles", "Tiles", "spell-check", true, newTiles},
-	{"anagram", "Anagrams", "shuffle", false, newAnagram},
-	{"sketch", "Sketch", "pencil-line", true, newSketch},
-	{"blanks", "Blanks", "text-cursor-input", true, newBlanks},
-	{"spies", "Spies", "venetian-mask", true, newSpies},
-	{"werewolf", "Werewolf", "moon-star", true, newWerewolf},
-	{"poll", "Polls", "chart-column", false, newPoll},
+	{"graffiti", "Graffiti", "spray-can", true, "full", 1, func(*Room) Activity { return &graffiti{} }},
+	{"room", "Room", "door-open", false, "big", 1, func(*Room) Activity { return &room{avatars: map[int]*avatar{}} }},
+	{"bingo", "Bingo", "grid-3x3", false, "small", 1, newBingo},
+	{"wordgrid", "Word Grid", "dices", false, "big", 1, newWordGrid},
+	{"tiles", "Tiles", "spell-check", false, "big", 1, newTiles},
+	{"anagram", "Anagrams", "shuffle", false, "small", 1, newAnagram},
+	{"sketch", "Sketch", "pencil-line", false, "big", 2, newSketch},
+	{"blanks", "Blanks", "text-cursor-input", false, "big", 1, newBlanks},
+	{"spies", "Spies", "venetian-mask", false, "big", 4, newSpies},
+	{"werewolf", "Werewolf", "moon-star", false, "big", 4, newWerewolf},
+	{"poll", "Polls", "chart-column", false, "small", 1, newPoll},
 }
 
 func Lookup(name string) (Kind, bool) {
@@ -91,8 +95,8 @@ type Line struct {
 type Room struct {
 	Movie Movie
 	Rand  *rand.Rand
-	Ends  time.Time // when the app stops
 
+	id      int                              // which app this is, of those open: on everything sent
 	send    func(to int, msg map[string]any) // to 0: every page
 	viewers func() []Viewer
 	changed bool
@@ -100,13 +104,13 @@ type Room struct {
 
 // All sends every page an event; the script gets it in message(m)
 func (r *Room) All(m Msg) {
-	m["type"] = "app"
+	m["type"], m["id"] = "app", r.id
 	r.send(0, m)
 }
 
 // To sends one page an event
 func (r *Room) To(id int, m Msg) {
-	m["type"] = "app"
+	m["type"], m["id"] = "app", r.id
 	r.send(id, m)
 }
 
@@ -119,42 +123,38 @@ func (r *Room) Viewers() []Viewer { return r.viewers() }
 // Session runs one app for a session's viewers, from Start to Stop
 type Session struct {
 	Kind Kind
+	ID   int // this one, of the apps open: on every message to and from it
+	By   string
 	mu   sync.Mutex
 	act  Activity
 	room *Room
 	stop chan struct{}
 }
 
-// Start runs kind for d. send delivers a message to one page (to > 0) or all
-// (0); viewers lists the pages open. It sends each page the app and its view.
-func Start(kind Kind, d time.Duration, send func(to int, msg map[string]any), viewers func() []Viewer, movie Movie) *Session {
-	r := &Room{Movie: movie, Rand: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())), Ends: time.Now().Add(d),
-		send: send, viewers: viewers}
-	s := &Session{Kind: kind, room: r, stop: make(chan struct{})}
+// Start runs kind, numbered id, until Stop; by is who opened it. send delivers
+// a message to one page (to > 0) or all (0); viewers lists the pages open. The
+// caller hands each page the app (Info).
+func Start(kind Kind, id int, by string, send func(to int, msg map[string]any), viewers func() []Viewer, movie Movie) *Session {
+	r := &Room{Movie: movie, Rand: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())), id: id, send: send, viewers: viewers}
+	s := &Session{Kind: kind, ID: id, By: by, room: r, stop: make(chan struct{})}
 	s.mu.Lock()
 	s.act = kind.New(r)
 	s.mu.Unlock()
-	for _, v := range viewers() {
-		send(v.ID, s.Hello(v))
-	}
 	go s.tick()
 	return s
 }
 
-// Hello: the app and this viewer's view, for a page arriving (or the app starting)
-func (s *Session) Hello(v Viewer) map[string]any {
+// Info: the app, and this viewer's view of it, for a page arriving (or the app opening)
+func (s *Session) Info(v Viewer) map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := s.Kind
-	return map[string]any{"type": "apps", "app": map[string]any{"name": k.Name, "title": k.Title, "cover": k.Cover,
-		"left": time.Until(s.room.Ends).Seconds()}, "view": s.act.View(v)}
+	return map[string]any{"id": s.ID, "name": k.Name, "title": k.Title, "icon": k.Icon, "glass": k.Glass, "size": k.Size,
+		"by": s.By, "view": s.act.View(v)}
 }
 
-// Message hands a viewer's message to the app, if it's for this one (not one since stopped)
+// Message hands a viewer's message to the app
 func (s *Session) Message(from Viewer, m map[string]any) {
-	if m["app"] != s.Kind.Name {
-		return
-	}
 	s.call(func(r *Room) { s.act.Message(r, from, m) })
 }
 
@@ -204,7 +204,7 @@ func (s *Session) call(fn func(r *Room)) {
 	if s.room.changed {
 		s.room.changed = false
 		for _, v := range s.room.viewers() {
-			s.room.send(v.ID, map[string]any{"type": "app", "kind": "view", "view": s.act.View(v)})
+			s.room.send(v.ID, map[string]any{"type": "app", "id": s.ID, "kind": "view", "view": s.act.View(v)})
 		}
 	}
 }

@@ -6,7 +6,7 @@ package main
 import (
 	"time"
 
-	"github.com/ftrain/tubeyap/apps"
+	"github.com/ftrain/openhouseparty/apps"
 )
 
 // SubTrack is a subtitle track handed to viewers; Cues are fetched separately
@@ -180,10 +180,15 @@ func (h *Host) hello() map[string]any {
 	return map[string]any{"subs": h.subsJSON(), "clock": h.clockJSON(), "schedule": h.scheduleJSON(), "doc": h.docJSON()}
 }
 
-// greeting: hello, and the app up now as this viewer sees it, for their socket
+// greeting: hello, and the apps open as this viewer sees them, for their socket
 func (h *Host) greeting(v apps.Viewer) map[string]any {
 	g := h.hello()
 	g["apps"] = h.apps.hello(v)
+	kinds := []map[string]any{}
+	for _, k := range apps.Kinds {
+		kinds = append(kinds, map[string]any{"name": k.Name, "title": k.Title, "icon": k.Icon, "min": k.Min})
+	}
+	g["kinds"], g["appsMax"] = kinds, appsMax // what the + offers
 	return g
 }
 

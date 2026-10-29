@@ -1,15 +1,15 @@
-# What TubeYap is made of, and under what licences
+# What Open House Party is made of, and under what licences
 
-TubeYap's own code is under the MIT licence (`../LICENSE`). The app also ships,
+Open House Party's own code is under the MIT licence (`../LICENSE`). The app also ships,
 or is built from, the work below. Each folder here holds that work's licence as
 its authors publish it, and the built app carries this whole folder in
-`TubeYap.app/Contents/Resources/Licenses`.
+`Open House Party.app/Contents/Resources/Licenses`.
 
 ## Programs bundled in the app
 
 | | Version | Licence | Source |
 |---|---|---|---|
-| **ffmpeg**, TubeYap's own build (`scripts/build_ffmpeg.sh`) | 9.0.2 | **GPL-2.0-or-later** as built (it includes x264); FFmpeg itself is LGPL-2.1-or-later | see below |
+| **ffmpeg**, Open House Party's own build (`scripts/build_ffmpeg.sh`) | 9.0.2 | **GPL-2.0-or-later** as built (it includes x264); FFmpeg itself is LGPL-2.1-or-later | see below |
 | [MediaMTX](https://github.com/bluenviron/mediamtx) | 1.21.3 | MIT | `mediamtx/` |
 | [cloudflared](https://github.com/cloudflare/cloudflared) | 2026.10.3 | Apache-2.0 | `cloudflared/` |
 
@@ -26,7 +26,7 @@ checked against its SHA-256 by `scripts/build_ffmpeg.sh`:
 | [HarfBuzz](https://harfbuzz.github.io) | 15.0.0 | Old MIT | `harfbuzz/` |
 | [libass](https://github.com/libass/libass) | 0.17.5 | ISC | `libass/` |
 
-**ffmpeg's source.** Every GitHub release of TubeYap has these exact source
+**ffmpeg's source.** Every GitHub release of Open House Party has these exact source
 archives attached beside the app, and `scripts/build_ffmpeg.sh` rebuilds the
 same ffmpeg from them: the configuration it uses is in that script.
 
@@ -41,7 +41,7 @@ same ffmpeg from them: the configuration it uses is in that script.
 
 | | Version | Licence | |
 |---|---|---|---|
-| [Lucide](https://lucide.dev) icons, the few the app picker uses (`frontend/icons.js`) | lucide-static 0.460.0 | ISC | `lucide/` |
+| [Lucide](https://lucide.dev) icons, the few the app picker uses (`host_web/apps/icons.js`) | lucide-static 0.460.0 | ISC | `lucide/` |
 | [ENABLE](https://github.com/dolph/dictionary) word list, for the word games (`apps/enable.txt.gz`) | dolph/dictionary@233d25a | Public domain | `enable/` |
 
 ## Go code compiled into the app

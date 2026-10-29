@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ftrain/tubeyap/apps"
+	"github.com/ftrain/openhouseparty/apps"
 )
 
 var assets = map[string]bool{"host.js": true, "host.css": true, "hls.min.js": true, "pdf.min.mjs": true, "pdf.worker.min.mjs": true}
@@ -68,7 +68,7 @@ func (h *Host) startWeb() error {
 	mux.HandleFunc("GET /{key}/apps/{name}", func(w http.ResponseWriter, r *http.Request) { // an app's script
 		name, _ := strings.CutSuffix(r.PathValue("name"), ".js")
 		b, err := fs.ReadFile(web, "apps/"+name+".js")
-		if _, known := apps.Lookup(name); (!known && name != "lib") || err != nil {
+		if _, known := apps.Lookup(name); (!known && name != "lib" && name != "icons") || err != nil {
 			http.NotFound(w, r)
 			return
 		}

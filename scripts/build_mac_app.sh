@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build "TubeYap.app": the Go app (Wails, pinned, run through `go run`) with what
+# Build "Open House Party.app": the Go app (Wails, pinned, run through `go run`) with what
 # hosting from the Mac needs inside it: MediaMTX and cloudflared, and optionally
 # ffmpeg. Apple Silicon only (macOS 13+, Go's own minimum).
 #
@@ -8,22 +8,23 @@
 # CLOUDFLARED_BIN. Without cloudflared the app still hosts, with a direct link only.
 #
 #   scripts/build_mac_app.sh                   uses this Mac's ffmpeg (Homebrew) at runtime
-#   BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   ships TubeYap's own cut-down ffmpeg inside the app
-#   SIGN_IDENTITY="Developer ID Application: ..." NOTARY_PROFILE=tubeyap \
+#   BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   ships Open House Party's own cut-down ffmpeg inside the app
+#   SIGN_IDENTITY="Developer ID Application: ..." NOTARY_PROFILE=openhouseparty \
 #       BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   for other Macs: signed + notarized
 #
 # NOTARY_PROFILE is a keychain profile from `xcrun notarytool store-credentials`.
-# Output: dist/TubeYap.app and dist/TubeYap-macos-arm64.zip (DIST=<dir> to put them elsewhere)
+# Output: dist/Open House Party.app and dist/OpenHouseParty-macos-arm64.zip (DIST=<dir> to put them elsewhere)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_NAME='TubeYap'
+APP_NAME='Open House Party'   # the app in Finder and the menu bar
+BIN='OpenHouseParty'          # its program inside (wails.json's outputfilename)
 WAILS=github.com/wailsapp/wails/v2/cmd/wails@v2.17.0   # the same version as go.mod's
 DIST=${DIST:-dist}
 
 TOOLS=()
 if [ -n "${BUNDLE_FFMPEG:-}" ]; then
-# TubeYap's own ffmpeg: static, and cut down to what the app uses (20 MB, not
+# Open House Party's own ffmpeg: static, and cut down to what the app uses (20 MB, not
 # 60+), built from pinned sources by scripts/build_ffmpeg.sh the first time.
 # Homebrew's links against ~80 Homebrew dylibs, so it can't be copied into an
 # app, and lacks drawtext, which the cards need. The app uses ffmpeg alone, never
@@ -63,7 +64,7 @@ done
 go run "$WAILS" build -platform darwin/arm64 -skipbindings -trimpath -clean
 rm -rf "$DIST/$APP_NAME.app"
 mkdir -p "$DIST"
-ditto "packaging/bin/$APP_NAME.app" "$DIST/$APP_NAME.app"
+ditto "packaging/bin/$BIN.app" "$DIST/$APP_NAME.app"
 APP="$DIST/$APP_NAME.app"
 mkdir -p "$APP/Contents/Resources/bin"          # main.go's bundledBin looks here
 for bin in "${TOOLS[@]}"; do
@@ -71,9 +72,9 @@ for bin in "${TOOLS[@]}"; do
 done
 # the viewer page, read from here on every page load (it's built in too)
 ditto host_web "$APP/Contents/Resources/host_web"
-# TubeYap's licence and everything else's, ffmpeg's GPL among them (licenses/README.md)
+# Open House Party's licence and everything else's, ffmpeg's GPL among them (licenses/README.md)
 mkdir -p "$APP/Contents/Resources/Licenses"
-cp LICENSE "$APP/Contents/Resources/Licenses/TubeYap-LICENSE"
+cp LICENSE "$APP/Contents/Resources/Licenses/OpenHouseParty-LICENSE"
 ditto licenses "$APP/Contents/Resources/Licenses"
 [ -n "${BUNDLE_FFMPEG:-}" ] && /usr/libexec/PlistBuddy -c 'Set :NSHumanReadableCopyright "ffmpeg is GPL; see https://ffmpeg.org/legal.html"' "$APP/Contents/Info.plist"
 
@@ -87,7 +88,7 @@ else
 fi
 codesign --verify --deep --strict "$APP"
 
-ZIP="$DIST/TubeYap-macos-arm64.zip"
+ZIP="$DIST/OpenHouseParty-macos-arm64.zip"
 rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
 if [ -n "${SIGN_IDENTITY:-}" ] && [ -n "${NOTARY_PROFILE:-}" ]; then

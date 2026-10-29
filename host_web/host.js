@@ -1,10 +1,10 @@
-// TubeYap viewer for a session hosted from someone's Mac (host.go).
+// Open House Party viewer for a session hosted from someone's Mac (host.go).
 // Video: WebRTC straight from the host (WHEP), or HLS from the host if WebRTC
 // can't get through. Chat: a WebSocket to the host. BASE is /<session key>.
 // Nothing here talks to any other server, except a STUN server when the host
 // shares through Cloudflare (it lists it in /status): that lets WebRTC punch
 // through both ends' routers.
-const BASE = window.TUBEYAP_BASE;
+const BASE = window.OPENHOUSEPARTY_BASE;
 // Sessions are meant to leave nothing behind: what the page remembers (your
 // name, subtitle language, whether chat is hidden) lasts only as long as the tab
 const store = window.sessionStorage;
@@ -152,14 +152,14 @@ async function pollStatus() {
         hostSeen = Date.now();
     } catch (e) {
         setStatus('Host unreachable', false);    // they quit, or their connection dropped
-        if (Date.now() - hostSeen > HOST_GONE_MS) endSession('The host has gone, and the session with them.');
+        if (Date.now() - hostSeen > HOST_GONE_MS) endSession();
     }
 }
 
 // When the host quits, the session is over: nothing of it stays on this page
 let ended = false;
 let hostSeen = Date.now();
-function endSession(why) {
+function endSession() {
     if (ended) return;
     ended = true;
     try { pcRef && pcRef.close(); } catch (e) {}
@@ -177,15 +177,20 @@ function endSession(why) {
     document.getElementById('onlineUsers').textContent = '';
     schedule = { rows: [], skew: 0 };
     closePdf();
-    setApp(null);
+    setApps([]);
     doc = null;
     document.getElementById('doc').hidden = true;
-    document.title = 'TubeYap';
+    document.title = 'Open House Party';
     document.getElementById('guide').hidden = true;
     document.getElementById('viewerCount').textContent = '';
     try { store.clear(); } catch (e) {}
     setStatus('Session ended', false);
-    const note = Object.assign(document.createElement('div'), { className: 'ended', textContent: why });
+    const note = Object.assign(document.createElement('div'), { className: 'ended' });
+    const link = Object.assign(document.createElement('a'), { href: 'https://github.com/ftrain/openhouseparty', target: '_blank',
+        rel: 'noopener', textContent: 'github.com/ftrain/openhouseparty' });
+    note.append(Object.assign(document.createElement('p'), { textContent: 'Your host quit the program.' }),
+        Object.assign(document.createElement('p'), { textContent: 'Want to run your own? Check out ' }));
+    note.lastChild.append(link);
     document.getElementById('stage').appendChild(note);
     document.getElementById('soundPrompt').hidden = true;
     if (ws) { ws.onclose = null; ws.close(); }
@@ -194,7 +199,7 @@ function endSession(why) {
 // ---------- chat ----------
 let ws = null;
 let myName = null;
-try { myName = store.getItem('tubeyapName'); } catch (e) {}
+try { myName = store.getItem('openhousepartyName'); } catch (e) {}
 let retry = 1000;
 const box = document.getElementById('chatMessagesOverlay');
 
@@ -204,7 +209,7 @@ function connectChat() {
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${BASE}/ws`);
     ws.onopen = () => { retry = 1000; setChatState('connected'); if (myName) send({ type: 'join', name: myName }); };
     ws.onclose = (e) => {
-        if (e.code === 1001) return endSession('The host ended the session.');   // they quit the app
+        if (e.code === 1001) return endSession();   // they quit the app
         if (ended) return;
         setChatState('disconnected');
         setTimeout(connectChat, retry);
@@ -221,13 +226,17 @@ function connectChat() {
             setSchedule(m.schedule);
             setDoc(m.doc && m.doc.doc);
             myId = m.you;
-            setApp(m.apps);
+            appKinds = m.kinds || [];
+            appsMax = m.appsMax || 8;
+            setApps(m.apps || []);
         } else if (m.type === 'apps') {
-            setApp(m);
+            if (m.op === 'open') openApp(m.app);
+            else if (m.op === 'close') closeApp(m.id);
         } else if (m.type === 'app') {
-            if (!appNow) return;
-            if (m.kind === 'view') { if (appNow.inst.view) appNow.inst.view(m.view); }
-            else if (appNow.inst.message) appNow.inst.message(m);
+            const w = wins.get(m.id);
+            if (!w || !w.inst) return;
+            if (m.kind === 'view') { if (w.inst.view) w.inst.view(m.view); }
+            else if (w.inst.message) w.inst.message(m);
         } else if (m.type === 'doc') {
             setDoc(m.doc);
         } else if (m.type === 'subs') {
@@ -240,7 +249,7 @@ function connectChat() {
             updateOnline(m.online);
         } else {
             show(m, true);
-            if (m.type === 'msg' && appNow && appNow.inst.said) appNow.inst.said(m.name, m.text);
+            if (m.type === 'msg') for (const w of wins.values()) if (w.inst && w.inst.said) w.inst.said(m.name, m.text);
         }
     };
 }
@@ -251,7 +260,7 @@ function join(name) {
     name = name.trim().slice(0, 30);
     if (!name) return;
     myName = name;
-    try { store.setItem('tubeyapName', name); } catch (e) {}
+    try { store.setItem('openhousepartyName', name); } catch (e) {}
     send({ type: 'join', name });
     showChatInput();
 }
@@ -337,7 +346,7 @@ document.getElementById('nameBtn').addEventListener('click', () => {
 // Remembered per device. While hidden, the chat tab on the video's right edge
 // counts the messages that arrive (not your own, not joins and leaves).
 let chatHidden = false;
-try { chatHidden = store.getItem('tubeyapChatHidden') === '1'; } catch (e) {}
+try { chatHidden = store.getItem('openhousepartyChatHidden') === '1'; } catch (e) {}
 let unread = 0;
 const chatTab = document.getElementById('chatTab');
 const unreadEl = document.getElementById('unread');
@@ -357,7 +366,7 @@ function setChatHidden(hidden) {
         box.scrollTop = box.scrollHeight;
     }
     showUnread();
-    try { store.setItem('tubeyapChatHidden', hidden ? '1' : '0'); } catch (e) {}
+    try { store.setItem('openhousepartyChatHidden', hidden ? '1' : '0'); } catch (e) {}
 }
 document.getElementById('hideChat').addEventListener('click', () => setChatHidden(true));
 setChatHidden(chatHidden);
@@ -378,6 +387,7 @@ function layout() {
         app.dataset.mode = m;
         if (m !== 'overlay') app.classList.remove('composing');
         box.scrollTop = box.scrollHeight;
+        queueMicrotask(arrangeApps);    // the apps' windows move too (after the page's script has all run)
     }
 }
 
@@ -456,7 +466,7 @@ let chosen = null;         // the track id showing, or null
 let cueList = [];          // [[start, end, text]] in movie seconds
 let nudge = 0;             // seconds: positive shows them later
 let wanted = null;         // remembered across movies: a language (or label), or 'off'; null until they pick
-try { wanted = store.getItem('tubeyapSubs'); } catch (e) {}
+try { wanted = store.getItem('openhousepartySubs'); } catch (e) {}
 
 function setSubs(s) {
     if (!s) return;
@@ -486,7 +496,7 @@ async function choose(id, remember = true) {
     const t = subs.tracks.find((t) => t.id === id);
     if (remember) {
         wanted = t ? (t.lang || t.label) : 'off';
-        try { store.setItem('tubeyapSubs', wanted); } catch (e) {}
+        try { store.setItem('openhousepartySubs', wanted); } catch (e) {}
     }
     ccBtn.classList.toggle('on', !!id);
     buildMenu();
@@ -572,7 +582,7 @@ function setSchedule(m) {
     schedule = { rows: m.rows, skew: Date.now() / 1000 - m.now };   // add skew to a host time to get ours
     // the tab is named after what's on (the first row has a start time once the host presses Play)
     const on = m.rows[0];
-    document.title = on && on.start != null ? on.title : 'TubeYap';
+    document.title = on && on.start != null ? on.title : 'Open House Party';
     if (!guide.hidden) renderGuide();
 }
 
@@ -764,20 +774,31 @@ pollStatus();
 setInterval(() => { if (!ended) pollStatus(); }, STATUS_POLL_MS);
 
 // ---------- apps (apps.go) ----------
-// The host can put an app on everyone's page for a while: over the video
-// (graffiti) or filling the stage (a room). Each is a script, apps/<name>.js, that
-// sets TubeYap.apps[name] to a function of (ctx, view) returning whichever of
-// {view(v), message(m), said(name, text), resize(), stop()} it needs, usually with
-// apps/lib.js's help. ctx.send(m) goes to the app on the host (apps/); this
-// viewer's view of it comes back to view(v) whenever it changes, and its events
-// to message(m).
-window.TubeYap = { apps: {} };
-const appLayer = document.getElementById('appLayer');
-const appBtn = document.getElementById('appBtn');
+// Anyone opens an app for everyone with the + by the chat box, and anyone closes
+// one with its ✕. Several can be open; each is a window over the video that this
+// viewer alone moves (its title bar), sizes (its corners) and hides (–), like a
+// desktop with the movie always playing behind it. On a phone there's no room
+// for windows: upright, each app is a tab beside Chat under the video; on its
+// side, the app chosen fills the screen. A see-through app (Graffiti) stays on
+// the picture itself, lined up with it, in every layout.
+//
+// Each app is a script, apps/<name>.js, that sets OpenHouseParty.apps[name] to a
+// function of (ctx, view) returning whichever of {view(v), message(m),
+// said(name, text), resize(), stop()} it needs, usually with apps/lib.js's help.
+// ctx.layer is the window's inside; ctx.send(m) goes to the app on the host;
+// this viewer's view comes back to view(v) whenever it changes, events to message(m).
+window.OpenHouseParty = { apps: {} };
+const desk = document.getElementById('desk');
+const dock = document.getElementById('dock');
+const tabsEl = document.getElementById('appTabs');
+const picker = document.getElementById('picker');
 let myId = null;           // this page's socket, as the host numbers them
-let appNow = null;         // {info, inst}
-let appGen = 0;            // a newer setApp wins over one still loading its script
-let appTimer = null;
+let appKinds = [];         // what the + offers: {name, title, icon}
+let appsMax = 8;
+const wins = new Map();    // app id -> {info, el, body, inst, place: {x, y, w, h} (of the stage), hidden}
+let zTop = 0, zGlass = 0;   // stacking: see-through windows are on the picture, so always under the others
+let tab = null;            // on a phone: the app shown (its id), or null for the chat (upright) or the video (on its side)
+let openedHere = null;     // the name of the app this page just asked for: shown when it arrives
 
 function script(name) {
     return new Promise((resolve, reject) => {
@@ -791,49 +812,227 @@ function script(name) {
 
 // loadAppScript: lib.js (what they all share) once, then the app's own
 async function loadAppScript(name) {
-    if (!TubeYap.lib) await script('lib');
-    if (!TubeYap.apps[name]) await script(name);
-    if (!TubeYap.apps[name]) throw new Error(name);
-    return TubeYap.apps[name];
+    if (!OpenHouseParty.lib) await script('lib');
+    if (!OpenHouseParty.apps[name]) await script(name);
+    if (!OpenHouseParty.apps[name]) throw new Error(name);
+    return OpenHouseParty.apps[name];
 }
 
-async function setApp(m) {
-    const gen = ++appGen;
-    if (appNow && appNow.inst.stop) appNow.inst.stop();
-    appNow = null;
-    clearInterval(appTimer);
-    appLayer.textContent = '';
-    const info = m && m.app;
-    app.classList.toggle('app-cover', !!(info && info.cover));
-    app.classList.remove('app-off');
-    appLayer.hidden = appBtn.hidden = !info;
-    if (!info) return;
+async function icons() {
+    if (typeof lucide !== 'function') await script('icons');
+}
+const icon = (name) => (typeof lucide === 'function' ? lucide(name) : '');
+
+const compact = () => app.dataset.mode !== 'side';
+
+// where a new window goes, in fractions of the stage: the whole picture, most of it, or a corner
+function firstPlace(size) {
+    const n = [...wins.values()].filter((w) => !w.info.glass).length % 5, step = 0.035 * n;
+    if (size === 'full') return { x: 0, y: 0, w: 1, h: 1 };
+    if (size === 'small') return { x: 0.6 - step, y: 0.04 + step, w: 0.38, h: 0.55 };
+    return { x: 0.08 + step, y: 0.06 + step, w: 0.8, h: 0.84 };
+}
+
+function setApps(list) {
+    for (const id of [...wins.keys()]) if (!list.some((a) => a.id === id)) closeApp(id);
+    for (const a of list) openApp(a);     // the ones already up start again, where they were, from the view just sent
+}
+
+async function openApp(info) {
+    let w = wins.get(info.id);
+    if (!w) {
+        w = { info, place: firstPlace(info.size), hidden: false };
+        w.el = document.createElement('div');
+        w.el.className = 'win' + (info.glass ? ' glass' : '');
+        w.el.innerHTML = '<div class="win-bar"><span class="win-icon"></span><span class="win-title"></span>' +
+            '<button class="win-btn win-min" title="Hide it (for you)">–</button>' +
+            '<button class="win-btn win-close" title="Close it for everyone">✕</button></div>' +
+            '<div class="win-body"></div>' +
+            ['nw', 'ne', 'sw', 'se'].map((c) => `<div class="win-grip ${c}" data-corner="${c}"></div>`).join('');
+        w.body = w.el.querySelector('.win-body');
+        w.el.querySelector('.win-title').textContent = info.title;
+        w.el.querySelector('.win-bar').title = info.by ? `${info.title}, opened by ${info.by}` : info.title;
+        w.el.querySelector('.win-close').onclick = () => send({ type: 'app_close', id: info.id });
+        w.el.querySelector('.win-min').onclick = () => { w.hidden = true; arrangeApps(); };
+        w.el.addEventListener('pointerdown', () => front(w), true);
+        windowHandles(w);
+        new ResizeObserver(() => { if (w.inst && w.inst.resize) w.inst.resize(); }).observe(w.body);
+        wins.set(info.id, w);
+        if (info.name === openedHere) {   // asked for here: show it
+            openedHere = null;
+            tab = info.glass ? tab : info.id;
+        }
+        front(w);
+        arrangeApps();
+        icons().then(() => { w.el.querySelector('.win-icon').innerHTML = icon(info.icon); renderTabs(); });
+    }
+    w.info = info;
+    if (w.inst && w.inst.stop) w.inst.stop();
+    w.inst = null;
+    w.body.textContent = '';
     let start;
     try { start = await loadAppScript(info.name); } catch (e) { return; }
-    if (gen !== appGen) return;
-    const ends = Date.now() + info.left * 1000;
+    if (wins.get(info.id) !== w || w.info !== info) return;    // closed, or started again, meanwhile
     const ctx = {
-        layer: appLayer,
-        send: (msg) => send({ ...msg, type: 'app', app: info.name }),
+        layer: w.body,
+        send: (msg) => send({ ...msg, type: 'app', id: info.id }),
         me: () => ({ id: myId, name: myName }),
-        videoBox,
+        videoBox: () => videoBox(w),
     };
-    appNow = { info, inst: start(ctx, m.view) || {} };
-    const tick = () => {
-        const s = Math.max(0, Math.round((ends - Date.now()) / 1000));
-        appBtn.textContent = `${info.title.toUpperCase()} ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-    };
-    tick();
-    appTimer = setInterval(tick, 1000);
+    w.inst = start(ctx, info.view) || {};
 }
 
-// over the video: let clicks through to the player; a room: peek at the video
-appBtn.onclick = () => app.classList.toggle('app-off');
-new ResizeObserver(() => { if (appNow && appNow.inst.resize) appNow.inst.resize(); }).observe(appLayer);
-
-// videoBox: where the 16:9 picture sits in the app layer (which covers the stage, as the video does)
-function videoBox() {
-    const w = appLayer.clientWidth, h = appLayer.clientHeight;
-    const vw = Math.min(w, h * 16 / 9), vh = vw * 9 / 16;
-    return { x: (w - vw) / 2, y: (h - vh) / 2, w: vw, h: vh };
+function closeApp(id) {
+    const w = wins.get(id);
+    if (!w) return;
+    if (w.inst && w.inst.stop) w.inst.stop();
+    w.el.remove();
+    wins.delete(id);
+    if (tab === id) tab = null;
+    arrangeApps();
 }
+
+function front(w) {
+    w.el.style.zIndex = w.info.glass ? ++zGlass : 100000 + ++zTop;
+}
+
+// arrangeApps: every window where it belongs for this layout, and the tabs
+function arrangeApps() {
+    const mode = app.dataset.mode;
+    if (tab !== null && !wins.has(tab)) tab = null;
+    for (const w of wins.values()) {
+        const docked = mode === 'stacked' && !w.info.glass;   // upright phone: under the video, in the chat's place
+        const parent = docked ? dock : desk;
+        if (w.el.parentNode !== parent) parent.appendChild(w.el);
+        const shown = compact() && !w.info.glass ? tab === w.info.id : !w.hidden;
+        w.el.hidden = !shown;
+        w.el.classList.toggle('filled', compact() && !w.info.glass);
+        if (!compact() || w.info.glass) {
+            const p = compact() ? { x: 0, y: 0, w: 1, h: 1 } : w.place;
+            Object.assign(w.el.style, { left: `${p.x * 100}%`, top: `${p.y * 100}%`, width: `${p.w * 100}%`, height: `${p.h * 100}%` });
+        } else {
+            Object.assign(w.el.style, { left: '', top: '', width: '', height: '' });
+        }
+    }
+    app.classList.toggle('app-tab', mode === 'stacked' && tab !== null);
+    renderTabs();
+}
+
+// the tabs: on a desktop, a chip each to hide or show it; on a phone, Chat (or the video) and a tab each
+function renderTabs() {
+    const list = [...wins.values()];
+    const mode = app.dataset.mode;
+    tabsEl.hidden = !list.length;
+    if (mode === 'overlay' ? tabsEl.parentNode !== desk : tabsEl.parentNode !== dock.parentNode) {
+        if (mode === 'overlay') desk.appendChild(tabsEl); else dock.parentNode.insertBefore(tabsEl, dock);
+    }
+    tabsEl.textContent = '';
+    const chip = (label, on, click, iconName, title) => {
+        const b = document.createElement('button');
+        b.className = 'app-chip' + (on ? ' on' : '');
+        b.innerHTML = iconName ? icon(iconName) : '';
+        b.append(label);
+        b.title = title || '';
+        b.onclick = click;
+        tabsEl.appendChild(b);
+    };
+    if (compact()) chip(mode === 'stacked' ? 'Chat' : 'Video', tab === null, () => { tab = null; arrangeApps(); });
+    for (const w of list) {
+        const on = compact() && !w.info.glass ? tab === w.info.id : !w.hidden;
+        chip(w.info.title, on, () => {
+            if (compact() && !w.info.glass) tab = tab === w.info.id ? null : w.info.id;
+            else { w.hidden = !w.hidden; if (!w.hidden) front(w); }
+            arrangeApps();
+        }, w.info.icon, compact() ? '' : (w.hidden ? 'Show it' : 'Hide it (for you)'));
+    }
+}
+
+// moving a window by its title bar, and sizing it by its corners, within the stage
+function windowHandles(w) {
+    const MIN_W = 180, MIN_H = 120;
+    const startDrag = (e, corner) => {
+        if (compact() || e.button > 0 || e.target.closest('.win-btn')) return;
+        e.preventDefault();
+        const stage = desk.getBoundingClientRect(), p0 = { ...w.place }, x0 = e.clientX, y0 = e.clientY;
+        const minW = Math.min(1, MIN_W / stage.width), minH = Math.min(1, MIN_H / stage.height);
+        w.el.classList.add('moving');
+        const move = (ev) => {
+            const dx = (ev.clientX - x0) / stage.width, dy = (ev.clientY - y0) / stage.height;
+            const p = { ...p0 };
+            if (!corner) {
+                p.x = Math.min(Math.max(p0.x + dx, 0), 1 - p0.w);
+                p.y = Math.min(Math.max(p0.y + dy, 0), 1 - p0.h);
+            } else {
+                if (corner.includes('w')) { p.x = Math.min(Math.max(p0.x + dx, 0), p0.x + p0.w - minW); p.w = p0.x + p0.w - p.x; }
+                if (corner.includes('e')) p.w = Math.min(Math.max(p0.w + dx, minW), 1 - p0.x);
+                if (corner.includes('n')) { p.y = Math.min(Math.max(p0.y + dy, 0), p0.y + p0.h - minH); p.h = p0.y + p0.h - p.y; }
+                if (corner.includes('s')) p.h = Math.min(Math.max(p0.h + dy, minH), 1 - p0.y);
+            }
+            w.place = p;
+            arrangeApps();
+        };
+        const up = () => {
+            w.el.classList.remove('moving');
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerup', up);
+            window.removeEventListener('pointercancel', up);
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+        window.addEventListener('pointercancel', up);
+    };
+    w.el.querySelector('.win-bar').addEventListener('pointerdown', (e) => startDrag(e, null));
+    w.el.querySelector('.win-bar').addEventListener('dblclick', (e) => {   // the whole picture, and back
+        if (compact() || e.target.closest('.win-btn')) return;
+        const full = w.place.x === 0 && w.place.y === 0 && w.place.w === 1 && w.place.h === 1;
+        w.place = full ? (w.unfull || firstPlace(w.info.size === 'full' ? 'big' : w.info.size)) : { x: 0, y: 0, w: 1, h: 1 };
+        if (!full) w.unfull = w.place === w.unfull ? null : { ...w.place };
+        arrangeApps();
+    });
+    for (const g of w.el.querySelectorAll('.win-grip')) g.addEventListener('pointerdown', (e) => startDrag(e, g.dataset.corner));
+}
+
+// videoBox: a 16:9 picture in the app's window, for apps that draw. See-through
+// apps: where the video's picture really is, so what's drawn lines up with the
+// movie for everyone; the others: the biggest 16:9 that fits the window.
+function videoBox(w) {
+    const body = w.body.getBoundingClientRect();
+    if (w.info.glass) {
+        const st = desk.getBoundingClientRect();
+        const vw = Math.min(st.width, st.height * 16 / 9), vh = vw * 9 / 16;
+        return { x: st.left + (st.width - vw) / 2 - body.left, y: st.top + (st.height - vh) / 2 - body.top, w: vw, h: vh };
+    }
+    const vw = Math.min(body.width, body.height * 16 / 9), vh = vw * 9 / 16;
+    return { x: (body.width - vw) / 2, y: (body.height - vh) / 2, w: vw, h: vh };
+}
+
+// the +: a grid of every app, to open one for everyone
+async function togglePicker(anchor) {
+    if (!picker.hidden) { picker.hidden = true; return; }
+    await icons();
+    picker.textContent = '';
+    const full = wins.size >= appsMax;
+    const head = document.createElement('div');
+    head.className = 'picker-head';
+    head.textContent = full ? `${appsMax} apps are open: close one first` : 'Open an app for everyone';
+    picker.appendChild(head);
+    for (const k of appKinds) {
+        const b = document.createElement('button');
+        b.className = 'picker-app';
+        b.disabled = full;
+        b.innerHTML = icon(k.icon) + '<span></span>';
+        b.lastChild.textContent = k.min > 1 ? `${k.title} ${k.min}+` : k.title;
+        if (k.min > 1) b.title = `Needs ${k.min} players`;
+        b.onclick = () => {
+            openedHere = k.name;
+            send({ type: 'app_open', name: k.name });
+            picker.hidden = true;
+        };
+        picker.appendChild(b);
+    }
+    picker.hidden = false;
+}
+for (const b of document.querySelectorAll('.plus')) b.addEventListener('click', (e) => { e.stopPropagation(); togglePicker(b); });
+document.addEventListener('pointerdown', (e) => { if (!picker.hidden && !picker.contains(e.target) && !e.target.closest('.plus')) picker.hidden = true; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') picker.hidden = true; });
+arrangeApps();

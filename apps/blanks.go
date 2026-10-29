@@ -113,7 +113,7 @@ func (b *blanks) Tick(r *Room, now time.Time) {
 	}
 	switch b.phase {
 	case "write":
-		if len(b.answers) < 2 { // nothing to vote between yet: more time
+		if len(b.answers) == 0 || (len(b.answers) < 2 && b.players.Len() > 1) { // nothing to vote between yet: more time (alone, one will do)
 			b.timer.Set(blanksWrite / 2)
 			return
 		}

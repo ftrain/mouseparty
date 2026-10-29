@@ -1,8 +1,8 @@
 // Bingo (apps/bingo.go): a card of words from the movie's subtitles that fills
 // itself in as they're said (or as the host calls them). Over the video.
-TubeYap.apps.bingo = (ctx, view) => {
-    const { h, mount } = TubeYap.lib;
-    const m = mount(ctx, 'tl', (v, kit) => [
+OpenHouseParty.apps.bingo = (ctx, view) => {
+    const { h, mount } = OpenHouseParty.lib;
+    const m = mount(ctx, 'cover', (v, kit) => [
         h('h2', {}, 'Bingo'),
         v.card ? h('div', { class: 'grid', style: 'grid-template-columns:repeat(5,64px);grid-auto-rows:40px;font-size:11px' },
             v.card.map((w, i) => h('div', { class: 'cell', style: v.marked[i] ? 'background:#000;color:#fff' : '' }, w || 'FREE')))

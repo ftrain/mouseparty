@@ -1,6 +1,6 @@
 // Spies (apps/spies.go): spymasters give one-word clues; their team finds their agents.
-TubeYap.apps.spies = (ctx, view) => {
-    const L = TubeYap.lib, h = L.h;
+OpenHouseParty.apps.spies = (ctx, view) => {
+    const L = OpenHouseParty.lib, h = L.h;
     const COLOR = { red: '#d33', blue: '#36c', neutral: '#ccc', assassin: '#000' };
     const m = L.mount(ctx, 'cover', (v, kit) => {
         if (v.phase === 'lobby') return L.lobby(v.lobby, kit, 'Spies', 'Two teams. Each spymaster knows which words are their agents and gives one-word clues with a number; their team picks the words. Avoid the assassin.');

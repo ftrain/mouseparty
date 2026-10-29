@@ -7,15 +7,14 @@ import (
 	"strconv"
 )
 
-// The queue and settings live in ~/.tubeyap.json; nothing about a session does.
+// The queue and settings live in ~/.openhouseparty.json; nothing about a session does.
 // None of the settings are in the window: the file is the place to change them.
 type Config struct {
 	OpenRouterPorts bool    `json:"open_router_ports"` // ask the router (NAT-PMP/UPnP) to let friends in; false = this network only
 	Bitrate         string  `json:"bitrate"`
 	Preset          string  `json:"preset"`
-	Skip            Number  `json:"skip"`        // minutes into the first movie played
-	Countdown       Number  `json:"countdown"`   // seconds of "up next" card before each movie; 0 for none
-	AppMinutes      Number  `json:"app_minutes"` // how long an app from the Apps menu runs
+	Skip            Number  `json:"skip"`      // minutes into the first movie played
+	Countdown       Number  `json:"countdown"` // seconds of "up next" card before each movie; 0 for none
 	Queue           []*Item `json:"queue"`
 	Position        int     `json:"position"` // queue row now playing, or next to play
 }
@@ -31,7 +30,7 @@ type Item struct {
 	Subtitles *[]Track      `json:"subtitles,omitempty"` // what was found; nil until looked for
 	Subs      *SubsSettings `json:"subs,omitempty"`      // what to do with them
 	Audio     *[]AudioTrack `json:"audio,omitempty"`     // its sound tracks; nil until looked at
-	App       string        `json:"app,omitempty"`       // an app on viewers' pages while it plays (apps.go)
+	Missing   bool          `json:"-"`                   // its file isn't there now (App.watchFiles)
 }
 
 func (it *Item) kind() string {
@@ -75,11 +74,20 @@ func (n *Number) UnmarshalJSON(b []byte) error {
 
 func configPath() string {
 	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".openhouseparty.json")
+}
+
+// oldConfigPath: where the app kept them when it was called TubeYap
+func oldConfigPath() string {
+	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".tubeyap.json")
 }
 
 func loadConfig() *Config {
-	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, AppMinutes: 10, Queue: []*Item{}}
+	if _, err := os.Stat(configPath()); os.IsNotExist(err) {
+		os.Rename(oldConfigPath(), configPath()) // the list from before the new name, moved over (not copied: nothing left behind)
+	}
+	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, Queue: []*Item{}}
 	if b, err := os.ReadFile(configPath()); err == nil {
 		json.Unmarshal(b, cfg)
 	}

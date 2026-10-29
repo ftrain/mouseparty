@@ -15,7 +15,7 @@ type sent struct {
 
 func testRoom(viewers ...Viewer) (*Room, *[]sent) {
 	var out []sent
-	r := &Room{Rand: rand.New(rand.NewPCG(1, 2)), Ends: time.Now().Add(time.Hour),
+	r := &Room{Rand: rand.New(rand.NewPCG(1, 2)),
 		send:    func(to int, m map[string]any) { out = append(out, sent{to, m}) },
 		viewers: func() []Viewer { return viewers }}
 	return r, &out
@@ -89,22 +89,18 @@ func TestSessionSendsViews(t *testing.T) {
 	var out []sent
 	viewers := []Viewer{ann, bob}
 	kind, _ := Lookup("anagram")
-	s := Start(kind, time.Minute, func(to int, m map[string]any) { out = append(out, sent{to, m}) },
+	s := Start(kind, 3, "Ann", func(to int, m map[string]any) { out = append(out, sent{to, m}) },
 		func() []Viewer { return viewers }, nil)
 	defer s.Stop()
-	if len(out) != 2 || out[0].msg["type"] != "apps" || out[0].msg["view"] == nil {
-		t.Fatal(out)
-	}
-	s.Message(ann, map[string]any{"type": "app", "app": "spies", "kind": "guess", "guess": "x"}) // another app's
-	if len(out) != 2 {
-		t.Fatal("answered a message for another app")
+	if info := s.Info(ann); len(out) != 0 || info["id"] != 3 || info["name"] != "anagram" || info["by"] != "Ann" || info["view"] == nil {
+		t.Fatal(info, out)
 	}
 	word := s.act.(*anagram).word
-	s.Message(bob, map[string]any{"type": "app", "app": "anagram", "kind": "guess", "guess": word})
-	if len(out) != 4 || out[2].msg["kind"] != "view" || out[3].to != 2 {
-		t.Fatal(out[2:])
+	s.Message(bob, map[string]any{"type": "app", "id": 3.0, "kind": "guess", "guess": word})
+	if len(out) != 2 || out[0].msg["kind"] != "view" || out[0].msg["id"] != 3 || out[1].to != 2 {
+		t.Fatal(out)
 	}
-	if v := out[3].msg["view"].(map[string]any); v["winner"] != "Bob" || v["answer"] != word {
+	if v := out[1].msg["view"].(map[string]any); v["winner"] != "Bob" || v["answer"] != word {
 		t.Fatal(v)
 	}
 	viewers = append(viewers, Viewer{7, ""}) // a page arrives, then its viewer takes a name: they get a view that lets them play
@@ -341,5 +337,58 @@ func TestBingoListens(t *testing.T) {
 	}
 	if !b.cards[1].Won || len(b.winners) != 1 || b.winners[0] != "Ann" {
 		t.Fatal(len(b.said), b.winners)
+	}
+}
+
+// What the picker says each app needs is what its lobby asks for
+func TestKindsSayTheirMinimum(t *testing.T) {
+	for _, k := range Kinds {
+		r, _ := testRoom()
+		act := k.New(r)
+		lobby := map[string]*Lobby{}
+		switch a := act.(type) {
+		case *tiles:
+			lobby[k.Name] = a.lobby
+		case *sketch:
+			lobby[k.Name] = a.lobby
+		case *spies:
+			lobby[k.Name] = a.lobby
+		case *werewolf:
+			lobby[k.Name] = a.lobby
+		}
+		if l := lobby[k.Name]; (l != nil && l.Min != k.Min) || (l == nil && k.Min != 1) {
+			t.Errorf("%s: the picker says %d", k.Name, k.Min)
+		}
+	}
+}
+
+// One will do: Tiles starts with one player, and Blanks goes on with one answer when only one is playing
+func TestAlone(t *testing.T) {
+	r, _ := testRoom(ann)
+	g := newTiles(r).(*tiles)
+	g.Message(r, ann, Msg{"kind": "join"})
+	g.Message(r, ann, Msg{"kind": "start"})
+	if g.phase != "play" || len(g.racks[1]) != 7 {
+		t.Fatal(g.phase)
+	}
+	g.Message(r, ann, Msg{"kind": "pass"})
+	g.Message(r, ann, Msg{"kind": "pass"})
+	if g.phase != "over" {
+		t.Fatal("two passes alone didn't end it:", g.phase)
+	}
+
+	b := newBlanks(r).(*blanks)
+	b.Message(r, ann, Msg{"kind": "answer", "text": "a llama"})
+	b.Tick(r, later(2*time.Minute))
+	if b.phase != "vote" || len(b.entries) != 1 {
+		t.Fatal(b.phase)
+	}
+	r2, _ := testRoom(ann, bob) // two playing: one answer waits for another
+	b2 := newBlanks(r2).(*blanks)
+	b2.Message(r2, ann, Msg{"kind": "answer", "text": "a llama"})
+	b2.Message(r2, bob, Msg{"kind": "join"})
+	b2.Tick(r2, later(2*time.Minute))
+	if b2.players.Len() != 2 || b2.phase != "write" {
+		t.Fatal("voted on one answer with two playing")
 	}
 }

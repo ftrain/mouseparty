@@ -1,12 +1,12 @@
-// What every app's script shares (apps/lib.go is the host's half): a box to draw
-// in, the lobby, scores, countdowns, text boxes that survive redraws, buttons,
+// What every app's script shares (apps/lib.go is the host's half): a box in its
+// window to draw in (ctx.layer, the window's inside), the lobby, scores, countdowns, text boxes that survive redraws, buttons,
 // little notes, and drawing (Graffiti and Sketch). Wireframe on purpose.
 //
-// An app script sets TubeYap.apps[name] = (ctx, view) => ({view, message, said,
+// An app script sets OpenHouseParty.apps[name] = (ctx, view) => ({view, message, said,
 // resize, stop}), any of them. L.mount does most of that: give it a render(view)
 // that returns elements, and it redraws on every new view.
 (() => {
-    const L = TubeYap.lib = {};
+    const L = OpenHouseParty.lib = {};
 
     const css = `
 .ty { position: absolute; background: #fff; color: #000; font: 14px/1.4 ui-monospace, Menlo, monospace;
@@ -53,7 +53,7 @@
     };
     const h = L.h;
 
-    // mount: a box in the app layer ('cover', or a corner: 'tl', 'tr', 'tc'), redrawn
+    // mount: a box in the app's window ('cover' fills it; or a corner: 'tl', 'tr', 'tc'), redrawn
     // by render(view, kit) on each view; kit.send talks to the host's half
     L.mount = (ctx, place, render) => {
         const box = h('div', { class: `ty ${place}` });

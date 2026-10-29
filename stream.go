@@ -55,7 +55,7 @@ func encodingArgs(o StreamOpts) []string {
 // textFile: text for drawtext goes through a file, so no character in it can break
 // the filter syntax (and expansion=none stops drawtext reading %{...} in it)
 func textFile(text string) string {
-	f, err := os.CreateTemp("", "tubeyap-*.txt")
+	f, err := os.CreateTemp("", "openhouseparty-*.txt")
 	if err != nil {
 		return ""
 	}
@@ -126,7 +126,7 @@ func documentCommand(title string, o StreamOpts) ([]string, []string) {
 	return cardCommand([]CardLine{
 		{"> reading together", green, 40, "h/2-120", true},
 		{title, "white", size, "h/2-40", false},
-		{"the pages are on the TubeYap page", "0x8e8e93", 28, "h/2+80", true},
+		{"the pages are on the Open House Party page", "0x8e8e93", 28, "h/2+80", true},
 	}, 0, o)
 }
 
@@ -163,7 +163,7 @@ func offsetSRT(path string, offset float64) (string, error) {
 		end := ((n[4]*3600+n[5]*60+n[6])*1000 + n[7]) + shift
 		return stamp(start) + " --> " + stamp(end)
 	})
-	f, err := os.CreateTemp("", "tubeyap-*.srt")
+	f, err := os.CreateTemp("", "openhouseparty-*.srt")
 	if err != nil {
 		return "", err
 	}
@@ -198,7 +198,7 @@ func soundInfo(path string) SoundInfo {
 
 // extractCover: the cover art, as a PNG file to loop under the sound, or ""
 func extractCover(path string, index int) string {
-	f, err := os.CreateTemp("", "tubeyap-*.png")
+	f, err := os.CreateTemp("", "openhouseparty-*.png")
 	if err != nil {
 		return ""
 	}
@@ -214,25 +214,22 @@ func extractCover(path string, index int) string {
 	return ""
 }
 
-// The sound drawn as it plays, across the whole frame and kept quiet: a slow
-// sonogram (the last few seconds of every note, scrolling) under soft bars of
-// what's sounding now. Both are constant-Q spectra, notes spaced like a piano's
-// keys, worked out small and scaled up, so they come out broad and soft, and
-// dimmed so the title over them stays the thing to read. In a muted green
-// (cscheme: red, green, blue for the left channel, then the right).
+// The sound drawn as it plays, gently: a constant-Q spectrum (notes spaced like
+// a piano's keys, deep bass and the top left out) worked out tiny, blurred, and
+// left to fade slowly (lagfun), so each note swells into a soft glow and dies
+// away over a couple of seconds. It stands on a horizon across the middle with
+// a dimmer, slower reflection under it, then is scaled up and blurred again. In
+// a muted green (cscheme: red, green, blue for the left channel, then the right).
 const (
 	spectrumColours = "0.06|0.5|0.3|0.06|0.42|0.4"
-	sonogram        = "showcqt=s=320x180:fps=30:bar_h=0:sono_h=180:axis=0:sono_v=14:sono_g=3:cscheme=" + spectrumColours
-	bars            = "showcqt=s=320x180:fps=30:bar_h=180:sono_h=0:axis=0:bar_v=12:attack=0.15:cscheme=" + spectrumColours
+	spectrum        = "showcqt=s=128x36:fps=30:bar_h=36:sono_h=0:axis=0:basefreq=80:endfreq=6000:bar_v=7:bar_g=1.5:attack=0.7:cscheme=" + spectrumColours
 )
 
 // spectrumGraph: the sound at [in] drawn at w x h into [out]
 func spectrumGraph(in, out string, w, h int) string {
-	soft := func(brightness float64) string {
-		return fmt.Sprintf("format=rgb24,scale=%d:%d:flags=bicubic,colorchannelmixer=rr=%[3]g:gg=%[3]g:bb=%[3]g", w, h, brightness)
-	}
-	return fmt.Sprintf("[%s]asplit[h1][h2];[h1]%s,%s[sono];[h2]%s,%s[bars];[sono][bars]blend=all_mode=lighten[%s]",
-		in, sonogram, soft(0.22), bars, soft(0.6), out)
+	return fmt.Sprintf("[%s]%s,format=rgb24,gblur=sigma=1.6,lagfun=decay=0.975,split[up][down];"+
+		"[down]vflip,lagfun=decay=0.985,colorchannelmixer=rr=0.45:gg=0.45:bb=0.45,gblur=sigma=2.5[reflection];"+
+		"[up][reflection]vstack,scale=%d:%d:flags=bicubic,gblur=sigma=10[%s]", in, spectrum, w, h, out)
 }
 
 // audioCard: the filter graph making the picture for a sound file, on black

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ftrain/tubeyap/apps"
+	"github.com/ftrain/openhouseparty/apps"
 	"github.com/gorilla/websocket"
 )
 
@@ -62,14 +62,15 @@ func (c *chatConn) write(done <-chan struct{}) {
 
 // Chat is the in-memory chat for one session: who is here, and the last few hundred lines
 type Chat struct {
-	hello   func(v apps.Viewer) map[string]any       // more for the greeting: subtitles, the movie clock, the guide, a PDF, an app
-	app     func(from apps.Viewer, m map[string]any) // a message for the app running (apphost.go)
-	joined  func(v apps.Viewer)                      // a socket opened, or its viewer took a name
-	left    func(v apps.Viewer)                      // a socket closed
-	mu      sync.Mutex
-	conns   map[*chatConn]bool
-	history []map[string]any
-	lastID  int
+	hello      func(v apps.Viewer) map[string]any       // more for the greeting: subtitles, the movie clock, the guide, a PDF, an app
+	app        func(from apps.Viewer, m map[string]any) // a message for an app open (apphost.go)
+	appControl func(from apps.Viewer, m map[string]any) // a page opening or closing an app
+	joined     func(v apps.Viewer)                      // a socket opened, or its viewer took a name
+	left       func(v apps.Viewer)                      // a socket closed
+	mu         sync.Mutex
+	conns      map[*chatConn]bool
+	history    []map[string]any
+	lastID     int
 }
 
 func (c *Chat) names() []string {
@@ -195,7 +196,7 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	var last time.Time
+	var last, lastControl time.Time
 	appWindow, appCount := time.Now(), 0
 	for {
 		kind, data, err := ws.ReadMessage()
@@ -239,6 +240,14 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 			if name != "" && text != "" && time.Since(last) > 300*time.Millisecond { // a little flood control
 				last = time.Now()
 				c.say(map[string]any{"type": "msg", "name": name, "text": text})
+			}
+		case "app_open", "app_close":
+			if time.Since(lastControl) > time.Second && c.appControl != nil { // one a second from a page
+				lastControl = time.Now()
+				c.mu.Lock()
+				name := conn.name
+				c.mu.Unlock()
+				c.appControl(apps.Viewer{ID: conn.id, Name: name}, m)
 			}
 		case "app":
 			if time.Since(appWindow) > time.Second {

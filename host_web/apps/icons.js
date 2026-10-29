@@ -1,5 +1,6 @@
 // Lucide icons (lucide-static 0.460.0, ISC: licenses/lucide/) for the app picker, as SVG.
-// Copied from the package: an apps.Kind with a new Icon needs it added here.
+// Copied from the package: an apps.Kind with a new Icon needs it added here. Loaded by
+// the viewer page (host.js) when the + is first pressed.
 const ICONS_LUCIDE = {
     "spray-can": "<path d=\"M3 3h.01\" /><path d=\"M7 5h.01\" /><path d=\"M11 7h.01\" /><path d=\"M3 7h.01\" /><path d=\"M7 9h.01\" /><path d=\"M3 11h.01\" /><rect width=\"4\" height=\"4\" x=\"15\" y=\"5\" /><path d=\"m19 9 2 2v10c0 .6-.4 1-1 1h-6c-.6 0-1-.4-1-1V11l2-2\" /><path d=\"m13 14 8-2\" /><path d=\"m13 19 8-2\" />",
     "door-open": "<path d=\"M13 4h3a2 2 0 0 1 2 2v14\" /><path d=\"M2 20h3\" /><path d=\"M13 20h9\" /><path d=\"M10 12v.01\" /><path d=\"M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z\" />",

@@ -62,7 +62,7 @@ type tiles struct {
 }
 
 func newTiles(*Room) Activity {
-	return &tiles{lobby: NewLobby(2, 4, 20*time.Second), phase: "lobby"}
+	return &tiles{lobby: NewLobby(1, 4, 20*time.Second), phase: "lobby"}
 }
 
 func (t *tiles) start(r *Room) {
@@ -334,7 +334,7 @@ func (t *tiles) Left(r *Room, v Viewer) {
 		if t.turns.Remove(v.ID) {
 			t.next()
 		}
-		if t.turns.Len() < 2 {
+		if t.turns.Len() == 0 {
 			t.end(0)
 		}
 	}
