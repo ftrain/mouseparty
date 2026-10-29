@@ -41,12 +41,31 @@ The window is two big buttons over a list.
 
 ### Apps
 
-The **Apps** menu puts something on everyone's page for ten minutes (`app_minutes`)
-while the movie carries on: **Graffiti**, where everyone draws on the video, and
-**Room**, a floor that fills the screen where everyone in the chat walks around
-as a dot and what they say shows over their head. Choose it again to stop it.
-Or give a movie its own app: the **+** on its row, just before its running time,
-picks one, which then runs for exactly as long as that movie plays.
+Games and toys on everyone's page while the movie carries on. Give a movie its
+own: the **+** on its row, just before its running time, opens a picker of
+icons, and that app runs for exactly as long as the movie plays. Or start one
+any time from the **Apps** menu, for ten minutes (`app_minutes`); choose it again
+to stop it. One at a time.
+
+| | | |
+|---|---|---|
+| **Graffiti** | over the video | everyone draws on the picture |
+| **Bingo** | over the video | a card of words from the movie's own subtitles, filled in as they're said (called out, with no subtitles) |
+| **Anagrams** | over the video | first to unscramble the word |
+| **Polls** | over the video | anyone asks, everyone votes |
+| **Room** | full screen | everyone walks around as a dot; chat shows over their heads |
+| **Word Grid** | full screen | three minutes to find words in a 4×4 letter grid; only words nobody else found score |
+| **Tiles** | full screen | the crossword tile game, two to four players, private racks |
+| **Sketch** | full screen | one draws a secret word, the rest guess |
+| **Blanks** | full screen | fill in the blank, then vote for the best |
+| **Spies** | full screen | two teams; spymasters give one-word clues to find their agents |
+| **Werewolf** | full screen | wolves hidden in the village; night kills, day votes |
+
+Games with turns or teams open with a lobby: join, and it starts once enough
+have. Words are checked against ENABLE. You join in by opening the link
+yourself; viewers can turn an app off for themselves (its button in the chat
+header, with the time left). They're wireframes; in the browser player's full
+screen they don't show.
 You join in by opening the link yourself. Viewers can turn an app off for
 themselves (its button in the chat header, with the time left). They're
 wireframes, there to try the idea; in the browser player's full screen they
@@ -230,8 +249,9 @@ web.go              the viewer site: page, WebRTC handshake and HLS proxies, the
 chat.go             the chat, one websocket per viewer
 session.go          what viewers' pages show beside the video: subtitles, guide, PDF page
 tunnel.go           the Cloudflare link
-apps.go             apps on the viewers' pages: the Activity interface, over the chat socket
-graffiti.go, room.go  the two apps (their scripts are host_web/apps/)
+apphost.go          the app on viewers' pages, over the chat socket
+apps/               the apps: the Activity interface and the library games share (lib.go,
+                    words.go), and one file per app; their scripts are host_web/apps/
 portmap.go          asks the router (NAT-PMP / UPnP) to forward ports
 subtitles.go        finds a movie's subtitles and turns text ones into timed lines
 media.go            what a file holds (from ffmpeg), PDF pages, titles from file names

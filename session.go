@@ -3,7 +3,11 @@ package main
 // What viewers' pages show beside the video, sent over the chat socket and
 // /status: subtitles, the movie's position, the guide and a PDF read together.
 
-import "time"
+import (
+	"time"
+
+	"github.com/ftrain/tubeyap/apps"
+)
 
 // SubTrack is a subtitle track handed to viewers; Cues are fetched separately
 type SubTrack struct {
@@ -173,8 +177,14 @@ func (h *Host) docJSON() map[string]any {
 }
 
 func (h *Host) hello() map[string]any {
-	return map[string]any{"subs": h.subsJSON(), "clock": h.clockJSON(), "schedule": h.scheduleJSON(), "doc": h.docJSON(),
-		"apps": h.apps.hello()}
+	return map[string]any{"subs": h.subsJSON(), "clock": h.clockJSON(), "schedule": h.scheduleJSON(), "doc": h.docJSON()}
+}
+
+// greeting: hello, and the app up now as this viewer sees it, for their socket
+func (h *Host) greeting(v apps.Viewer) map[string]any {
+	g := h.hello()
+	g["apps"] = h.apps.hello(v)
+	return g
 }
 
 func (h *Host) broadcast(msg any) {

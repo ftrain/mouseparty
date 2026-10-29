@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ftrain/tubeyap/apps"
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -43,6 +44,7 @@ type View struct {
 type AppChoice struct {
 	Name  string `json:"name"`
 	Title string `json:"title"`
+	Icon  string `json:"icon"` // a Lucide icon (frontend/icons.js)
 }
 
 type Row struct {
@@ -234,8 +236,8 @@ func (a *App) state() string {
 func (a *App) view() View {
 	state := a.state()
 	v := View{Play: "play", PlayOn: state == "ready", Link: "copy", Selected: a.selected, Rows: []Row{}}
-	for _, k := range appKinds {
-		v.Apps = append(v.Apps, AppChoice{k.Name, k.Title})
+	for _, k := range apps.Kinds {
+		v.Apps = append(v.Apps, AppChoice{k.Name, k.Title, k.Icon})
 	}
 	if a.playing {
 		v.Play, v.PlayOn = "stop", true
@@ -999,10 +1001,10 @@ func (a *App) menu() *menu.Menu {
 	m := menu.NewMenu()
 	m.Append(menu.AppMenu())
 	m.Append(menu.EditMenu())
-	apps := m.AddSubmenu("Apps")
+	sub := m.AddSubmenu("Apps")
 	a.appItems = map[string]*menu.MenuItem{}
-	for _, k := range appKinds {
-		a.appItems[k.Name] = apps.AddCheckbox(k.Title, false, nil, func(*menu.CallbackData) {
+	for _, k := range apps.Kinds {
+		a.appItems[k.Name] = sub.AddCheckbox(k.Title, false, nil, func(*menu.CallbackData) {
 			a.do(func() {
 				if a.appName == k.Name || a.appWanted == k.Name {
 					a.stopApp()
@@ -1072,7 +1074,7 @@ func (a *App) setRowApp(i int, name string) {
 	if i < 0 || i >= len(a.cfg.Queue) {
 		return
 	}
-	if _, ok := appKind(name); !ok {
+	if _, ok := apps.Lookup(name); !ok {
 		name = ""
 	}
 	it := a.cfg.Queue[i]

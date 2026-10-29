@@ -157,7 +157,7 @@ type Host struct {
 	clockSent time.Time
 	schedule  []ScheduleRow
 	doc       *document
-	apps      *apps
+	apps      *appHost
 
 	tunnelURL        string
 	tunnelRegistered time.Time
@@ -189,9 +189,10 @@ func (h *Host) start() error {
 	}
 	h.mu.Lock()
 	h.key = base64.RawURLEncoding.EncodeToString(key)
-	h.chat = &Chat{hello: h.hello, conns: map[*chatConn]bool{}}
-	h.apps = &apps{audience: &Audience{h.chat}}
-	h.chat.app, h.chat.left = h.apps.message, h.apps.left
+	h.chat = &Chat{conns: map[*chatConn]bool{}}
+	h.apps = &appHost{chat: h.chat, movie: h}
+	h.chat.hello = h.greeting
+	h.chat.app, h.chat.joined, h.chat.left = h.apps.message, h.apps.joined, h.apps.left
 	h.ports = map[string]int{"api": freePort(), "rtsp": freePort(), "hls": freePort(), "webrtc": freePort()}
 	h.tmp = tmp
 	h.stdins = map[*exec.Cmd]io.WriteCloser{}

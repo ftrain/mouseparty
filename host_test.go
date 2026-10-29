@@ -10,13 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ftrain/tubeyap/apps"
 	"github.com/gorilla/websocket"
 )
 
 // The chat speaks what host_web/host.js expects: a hello with the history and
 // who's here, then joins, messages and leavings
 func TestChatJoinSayLeave(t *testing.T) {
-	chat := &Chat{hello: func() map[string]any { return map[string]any{"subs": "s"} }, conns: map[*chatConn]bool{}}
+	chat := &Chat{hello: func(apps.Viewer) map[string]any { return map[string]any{"subs": "s"} }, conns: map[*chatConn]bool{}}
 	srv := httptest.NewServer(http.HandlerFunc(chat.handle))
 	defer srv.Close()
 	dial := func() *websocket.Conn {

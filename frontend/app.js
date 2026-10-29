@@ -50,7 +50,7 @@ function render(v) {
         row.children[0].textContent = r.now ? '▶' : '';
         row.children[1].textContent = r.title;
         const app = v.apps.find((a) => a.name === r.app);
-        row.children[2].textContent = app ? app.title : '+';
+        row.children[2].innerHTML = lucide(app ? app.icon : 'plus');
         row.children[2].classList.toggle('set', !!app);
         row.children[2].title = app ? `${app.title} while this plays` : 'An app while this plays';
         row.children[3].textContent = r.length;
@@ -67,7 +67,7 @@ function rowAt(x, y) {
 $('play').addEventListener('click', () => view?.playOn && App().PlayClicked());
 $('link').addEventListener('click', () => view?.linkPress && App().LinkClicked());
 
-// a row's +: which app comes with it (apps.go), from a little menu
+// a row's +: which app comes with it (apps/), from a grid of icons
 let appMenu = null;
 function closeAppMenu() { appMenu?.remove(); appMenu = null; }
 function openAppMenu(add, i) {
@@ -75,10 +75,12 @@ function openAppMenu(add, i) {
     appMenu = document.createElement('div');
     appMenu.className = 'app-menu';
     const current = view.rows[i].app;
-    const choices = [...view.apps, ...(current ? [{ name: '', title: 'No app' }] : [])];
+    const choices = [...view.apps, ...(current ? [{ name: '', title: 'No app', icon: 'x' }] : [])];
     for (const c of choices) {
         const item = document.createElement('div');
-        item.textContent = (c.name && c.name === current ? '✓ ' : '') + c.title;
+        item.className = 'app-choice' + (c.name && c.name === current ? ' chosen' : '');
+        item.innerHTML = lucide(c.icon) + '<span></span>';
+        item.lastChild.textContent = c.title;
         item.addEventListener('mousedown', (e) => {
             e.stopPropagation();
             App().SetRowApp(i, c.name);
@@ -89,7 +91,8 @@ function openAppMenu(add, i) {
     document.body.appendChild(appMenu);
     const r = add.getBoundingClientRect();
     appMenu.style.left = `${Math.min(r.left, window.innerWidth - appMenu.offsetWidth - 8)}px`;
-    appMenu.style.top = `${r.bottom + appMenu.offsetHeight > window.innerHeight ? r.top - appMenu.offsetHeight : r.bottom}px`;
+    const below = r.bottom + appMenu.offsetHeight <= window.innerHeight;
+    appMenu.style.top = `${Math.max(8, below ? r.bottom : r.top - appMenu.offsetHeight)}px`;
 }
 window.addEventListener('mousedown', closeAppMenu);
 

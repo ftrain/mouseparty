@@ -225,7 +225,9 @@ function connectChat() {
         } else if (m.type === 'apps') {
             setApp(m);
         } else if (m.type === 'app') {
-            if (appNow && appNow.inst.message) appNow.inst.message(m);
+            if (!appNow) return;
+            if (m.kind === 'view') { if (appNow.inst.view) appNow.inst.view(m.view); }
+            else if (appNow.inst.message) appNow.inst.message(m);
         } else if (m.type === 'doc') {
             setDoc(m.doc);
         } else if (m.type === 'subs') {
@@ -764,9 +766,11 @@ setInterval(() => { if (!ended) pollStatus(); }, STATUS_POLL_MS);
 // ---------- apps (apps.go) ----------
 // The host can put an app on everyone's page for a while: over the video
 // (graffiti) or filling the stage (a room). Each is a script, apps/<name>.js, that
-// sets TubeYap.apps[name] to a function of (ctx, state) returning whichever of
-// {message(m), said(name, text), resize(), stop()} it needs. ctx.send(m) goes to
-// the app on the host; its messages come back to message(m).
+// sets TubeYap.apps[name] to a function of (ctx, view) returning whichever of
+// {view(v), message(m), said(name, text), resize(), stop()} it needs, usually with
+// apps/lib.js's help. ctx.send(m) goes to the app on the host (apps/); this
+// viewer's view of it comes back to view(v) whenever it changes, and its events
+// to message(m).
 window.TubeYap = { apps: {} };
 const appLayer = document.getElementById('appLayer');
 const appBtn = document.getElementById('appBtn');
@@ -775,15 +779,22 @@ let appNow = null;         // {info, inst}
 let appGen = 0;            // a newer setApp wins over one still loading its script
 let appTimer = null;
 
-function loadAppScript(name) {
-    if (TubeYap.apps[name]) return Promise.resolve(TubeYap.apps[name]);
+function script(name) {
     return new Promise((resolve, reject) => {
         const s = document.createElement('script');
         s.src = `${BASE}/apps/${encodeURIComponent(name)}.js`;
-        s.onload = () => (TubeYap.apps[name] ? resolve(TubeYap.apps[name]) : reject(new Error(name)));
+        s.onload = resolve;
         s.onerror = reject;
         document.head.appendChild(s);
     });
+}
+
+// loadAppScript: lib.js (what they all share) once, then the app's own
+async function loadAppScript(name) {
+    if (!TubeYap.lib) await script('lib');
+    if (!TubeYap.apps[name]) await script(name);
+    if (!TubeYap.apps[name]) throw new Error(name);
+    return TubeYap.apps[name];
 }
 
 async function setApp(m) {
@@ -807,7 +818,7 @@ async function setApp(m) {
         me: () => ({ id: myId, name: myName }),
         videoBox,
     };
-    appNow = { info, inst: start(ctx, m.state) || {} };
+    appNow = { info, inst: start(ctx, m.view) || {} };
     const tick = () => {
         const s = Math.max(0, Math.round((ends - Date.now()) / 1000));
         appBtn.textContent = `${info.title.toUpperCase()} ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;

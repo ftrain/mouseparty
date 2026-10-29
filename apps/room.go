@@ -1,6 +1,4 @@
-package main
-
-import "math/rand/v2"
+package apps
 
 // Room: a little space everyone walks around in, as dots with their chat names.
 // Click somewhere and you walk there; what you say in the chat shows over your
@@ -17,10 +15,11 @@ type avatar struct {
 }
 
 type room struct {
+	Base
 	avatars map[int]*avatar
 }
 
-func (rm *room) State() any {
+func (rm *room) View(Viewer) any {
 	list := []*avatar{}
 	for _, a := range rm.avatars {
 		list = append(list, a)
@@ -28,12 +27,12 @@ func (rm *room) State() any {
 	return map[string]any{"avatars": list}
 }
 
-func (rm *room) Message(r *Audience, from Viewer, m map[string]any) {
-	if m["kind"] != "go" || from.Name == "" { // only people in the chat have a name to show
+func (rm *room) Message(r *Room, from Viewer, m Msg) {
+	if m.Kind() != "go" || from.Name == "" { // only people in the chat have a name to show
 		return
 	}
-	x, okx := number(m, "x", 0, 1)
-	y, oky := number(m, "y", 0, 1)
+	x, okx := m.Num("x", 0, 1)
+	y, oky := m.Num("y", 0, 1)
 	if !okx || !oky {
 		return
 	}
@@ -42,18 +41,18 @@ func (rm *room) Message(r *Audience, from Viewer, m map[string]any) {
 		a = &avatar{ID: from.ID}
 		rm.avatars[from.ID] = a
 	}
-	msg := map[string]any{"kind": "avatar"}
+	msg := Msg{"kind": "avatar"}
 	if a.Name == "" {
-		msg["from"] = [2]float64{0, 0.2 + 0.6*rand.Float64()}
+		msg["from"] = [2]float64{0, 0.2 + 0.6*r.Rand.Float64()}
 	}
 	a.Name, a.X, a.Y = from.Name, x, y
 	msg["avatar"] = *a
-	r.Send(msg)
+	r.All(msg)
 }
 
-func (rm *room) Left(r *Audience, who Viewer) {
+func (rm *room) Left(r *Room, who Viewer) {
 	if rm.avatars[who.ID] != nil {
 		delete(rm.avatars, who.ID)
-		r.Send(map[string]any{"kind": "gone", "id": who.ID})
+		r.All(Msg{"kind": "gone", "id": who.ID})
 	}
 }

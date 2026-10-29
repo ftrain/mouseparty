@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ftrain/tubeyap/apps"
 	"github.com/gorilla/websocket"
 )
 
@@ -61,9 +62,10 @@ func (c *chatConn) write(done <-chan struct{}) {
 
 // Chat is the in-memory chat for one session: who is here, and the last few hundred lines
 type Chat struct {
-	hello   func() map[string]any               // more for the greeting: subtitles, the movie clock, the guide, a PDF, an app
-	app     func(from Viewer, m map[string]any) // a message for the app running (apps.go)
-	left    func(who Viewer)                    // a socket closed
+	hello   func(v apps.Viewer) map[string]any       // more for the greeting: subtitles, the movie clock, the guide, a PDF, an app
+	app     func(from apps.Viewer, m map[string]any) // a message for the app running (apphost.go)
+	joined  func(v apps.Viewer)                      // a socket opened, or its viewer took a name
+	left    func(v apps.Viewer)                      // a socket closed
 	mu      sync.Mutex
 	conns   map[*chatConn]bool
 	history []map[string]any
@@ -96,6 +98,34 @@ func (c *Chat) sendAll(msg any) {
 	for _, conn := range conns {
 		conn.send(b)
 	}
+}
+
+// sendTo sends msg to one socket
+func (c *Chat) sendTo(id int, msg any) {
+	b, _ := json.Marshal(msg)
+	c.mu.Lock()
+	var to *chatConn
+	for conn := range c.conns {
+		if conn.id == id {
+			to = conn
+		}
+	}
+	c.mu.Unlock()
+	if to != nil {
+		to.send(b)
+	}
+}
+
+// viewers: every socket open now, and its name
+func (c *Chat) viewers() []apps.Viewer {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	vs := make([]apps.Viewer, 0, len(c.conns))
+	for conn := range c.conns {
+		vs = append(vs, apps.Viewer{ID: conn.id, Name: conn.name})
+	}
+	sort.Slice(vs, func(i, j int) bool { return vs[i].ID < vs[j].ID })
+	return vs
 }
 
 func (c *Chat) say(msg map[string]any) {
@@ -131,13 +161,16 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 	hello := map[string]any{"type": "hello", "history": append([]map[string]any{}, c.history...), "online": c.names(),
 		"you": conn.id}
 	c.mu.Unlock()
-	for k, v := range c.hello() {
+	for k, v := range c.hello(apps.Viewer{ID: conn.id}) {
 		hello[k] = v
 	}
 	b, _ := json.Marshal(hello)
 	conn.send(b)
 	done := make(chan struct{})
 	go conn.write(done)
+	if c.joined != nil {
+		c.joined(apps.Viewer{ID: conn.id})
+	}
 
 	ws.SetReadLimit(64 * 1024)
 	ws.SetReadDeadline(time.Now().Add(45 * time.Second))
@@ -154,7 +187,7 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 		c.mu.Unlock()
 		ws.Close()
 		if c.left != nil {
-			c.left(Viewer{conn.id, name})
+			c.left(apps.Viewer{ID: conn.id, Name: name})
 		}
 		if name != "" && !still {
 			c.say(map[string]any{"type": "system", "text": name + " left"})
@@ -187,6 +220,9 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 			old := conn.name
 			conn.name = name
 			c.mu.Unlock()
+			if old != name && c.joined != nil {
+				c.joined(apps.Viewer{ID: conn.id, Name: name})
+			}
 			if old != name {
 				text := name + " joined"
 				if old != "" {
@@ -212,7 +248,7 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 				c.mu.Lock()
 				name := conn.name
 				c.mu.Unlock()
-				c.app(Viewer{conn.id, name}, m)
+				c.app(apps.Viewer{ID: conn.id, Name: name}, m)
 			}
 		}
 	}

@@ -1,0 +1,21 @@
+// Bingo (apps/bingo.go): a card of words from the movie's subtitles that fills
+// itself in as they're said (or as the host calls them). Over the video.
+TubeYap.apps.bingo = (ctx, view) => {
+    const { h, mount } = TubeYap.lib;
+    const m = mount(ctx, 'tl', (v, kit) => [
+        h('h2', {}, 'Bingo'),
+        v.card ? h('div', { class: 'grid', style: 'grid-template-columns:repeat(5,64px);grid-auto-rows:40px;font-size:11px' },
+            v.card.map((w, i) => h('div', { class: 'cell', style: v.marked[i] ? 'background:#000;color:#fff' : '' }, w || 'FREE')))
+            : h('p', {}, L_wait(kit)),
+        v.won ? h('p', {}, h('b', {}, 'BINGO! ')) : null,
+        h('p', { class: 'muted' }, v.movie ? 'Words fill in as they\'re said.' : 'Words are called every few seconds.'),
+        v.recent && v.recent.length ? h('p', {}, 'Heard: ', v.recent.join(', ')) : null,
+        v.winners && v.winners.length ? h('p', {}, 'Bingo: ', v.winners.join(', ')) : null,
+    ]);
+    function L_wait(kit) { kit.send({ kind: 'card' }); return 'Dealing your card…'; }
+    m.draw(view);
+    return {
+        view: m.draw,
+        message(e) { if (e.kind === 'bingo') m.kit.note(`${e.name} has BINGO!`); },
+    };
+};

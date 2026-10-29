@@ -14,9 +14,10 @@ import (
 // on by latecomers, and gone when stopped
 func TestAppsOverChat(t *testing.T) {
 	h := &Host{}
-	h.chat = &Chat{hello: h.hello, conns: map[*chatConn]bool{}}
-	h.apps = &apps{audience: &Audience{h.chat}}
-	h.chat.app, h.chat.left = h.apps.message, h.apps.left
+	h.chat = &Chat{conns: map[*chatConn]bool{}}
+	h.apps = &appHost{chat: h.chat, movie: h}
+	h.chat.hello = h.greeting
+	h.chat.app, h.chat.joined, h.chat.left = h.apps.message, h.apps.joined, h.apps.left
 	srv := httptest.NewServer(http.HandlerFunc(h.chat.handle))
 	defer srv.Close()
 	dial := func() *websocket.Conn {
@@ -52,18 +53,18 @@ func TestAppsOverChat(t *testing.T) {
 		t.Fatal(m)
 	}
 
-	a.WriteJSON(map[string]any{"type": "app", "app": "graffiti", "kind": "line", "c": 9, "w": 1, "p": [][]float64{{0.1, 0.1}, {2, 0.5}}})
+	a.WriteJSON(map[string]any{"type": "app", "app": "graffiti", "kind": "line", "c": 5, "w": 1, "p": [][]float64{{0.1, 0.1}, {2, 0.5}}})
 	a.WriteJSON(map[string]any{"type": "app", "app": "graffiti", "kind": "line", "c": 1, "w": 1, "p": [][]float64{{0.1, 0.1}}}) // one point: no line
 	a.WriteJSON(map[string]any{"type": "app", "app": "room", "kind": "go", "x": 0.5, "y": 0.5})                                 // not the app running
 	m := next(a, "app")
 	l := m["line"].(map[string]any)
-	if l["c"] != float64(graffitiColors-1) || l["p"].([]any)[1].([]any)[0] != 1.0 { // clamped
+	if l["c"] != float64(5) || l["p"].([]any)[1].([]any)[0] != 1.0 { // clamped
 		t.Fatal(m)
 	}
 
 	b := dial() // a latecomer sees what's been drawn
 	hello := next(b, "hello")
-	if lines := hello["apps"].(map[string]any)["state"].(map[string]any)["lines"].([]any); len(lines) != 1 {
+	if lines := hello["apps"].(map[string]any)["view"].(map[string]any)["lines"].([]any); len(lines) != 1 {
 		t.Fatal(hello["apps"])
 	}
 

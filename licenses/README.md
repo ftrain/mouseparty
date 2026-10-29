@@ -37,6 +37,13 @@ same ffmpeg from them: the configuration it uses is in that script.
 | [hls.js](https://github.com/video-dev/hls.js) | 1.6.15 | Apache-2.0 | `hls.js/` |
 | [pdf.js](https://github.com/mozilla/pdf.js) | 6.3.289 | Apache-2.0 | `pdf.js/` |
 
+## In the app itself
+
+| | Version | Licence | |
+|---|---|---|---|
+| [Lucide](https://lucide.dev) icons, the few the app picker uses (`frontend/icons.js`) | lucide-static 0.460.0 | ISC | `lucide/` |
+| [ENABLE](https://github.com/dolph/dictionary) word list, for the word games (`apps/enable.txt.gz`) | dolph/dictionary@233d25a | Public domain | `enable/` |
+
 ## Go code compiled into the app
 
 Every module in the app's binary (from `go list -deps` with Wails's build tags),

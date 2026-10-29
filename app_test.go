@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/ftrain/tubeyap/apps"
 )
 
 // The whole app without its window: host on free ports (no router, no tunnel),
@@ -64,7 +66,7 @@ func TestPlayThroughTheList(t *testing.T) {
 		t.Fatalf("%+v", v.Rows)
 	}
 	app := func() (name any) {
-		a.wait(func() { name = a.host.apps.hello()["app"] })
+		a.wait(func() { name = a.host.apps.hello(apps.Viewer{})["app"] })
 		if name != nil {
 			name = name.(map[string]any)["name"]
 		}
