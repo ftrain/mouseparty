@@ -107,6 +107,12 @@ func TestSessionSendsViews(t *testing.T) {
 	if v := out[3].msg["view"].(map[string]any); v["winner"] != "Bob" || v["answer"] != word {
 		t.Fatal(v)
 	}
+	viewers = append(viewers, Viewer{7, ""}) // a page arrives, then its viewer takes a name: they get a view that lets them play
+	n := len(out)
+	s.Joined(Viewer{7, "Gus"})
+	if len(out) != n+3 || out[n+2].to != 7 || out[n+2].msg["kind"] != "view" {
+		t.Fatal(out[n:])
+	}
 }
 
 func TestWordGrid(t *testing.T) {

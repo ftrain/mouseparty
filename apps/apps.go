@@ -158,8 +158,14 @@ func (s *Session) Message(from Viewer, m map[string]any) {
 	s.call(func(r *Room) { s.act.Message(r, from, m) })
 }
 
-func (s *Session) Joined(v Viewer) { s.call(func(r *Room) { s.act.Joined(r, v) }) }
-func (s *Session) Left(v Viewer)   { s.call(func(r *Room) { s.act.Left(r, v) }) }
+// Joined: a page arrived or its viewer took a name; their view may differ now (they can play)
+func (s *Session) Joined(v Viewer) {
+	s.call(func(r *Room) {
+		s.act.Joined(r, v)
+		r.Changed()
+	})
+}
+func (s *Session) Left(v Viewer) { s.call(func(r *Room) { s.act.Left(r, v) }) }
 
 // Stop ends the app; the caller tells the pages
 func (s *Session) Stop() {

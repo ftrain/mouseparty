@@ -114,16 +114,23 @@
         : null;
 
     // lobby: who's in, join/leave/start, and the countdown to starting
-    L.lobby = (lb, kit, title, rules) => h('div', {},
-        h('h2', {}, title),
-        h('p', {}, rules),
-        h('h3', {}, `Players (${lb.players.length}${lb.max ? ' of ' + lb.max : ''}; ${lb.min} needed)`),
-        lb.players.length ? h('p', {}, lb.players.map((p) => p.name).join(', ')) : h('p', { class: 'muted' }, 'Nobody yet.'),
-        !lb.named ? h('p', { class: 'muted' }, 'Join the chat to play.')
-            : lb.in ? [L.button('Leave', () => kit.send({ kind: 'leave' })),
-                L.button('Start now', () => kit.send({ kind: 'start' }), { disabled: lb.players.length < lb.min })]
-                : L.button('Join', () => kit.send({ kind: 'join' })),
-        lb.left > 0 ? h('p', {}, 'Starting in ', L.timer(lb.left)) : null);
+    L.lobby = (lb, kit, title, rules) => {
+        const n = lb.players.length, short = Math.max(0, lb.min - n);
+        const big = 'font-size:20px;padding:10px 28px;margin:12px 0';
+        return h('div', { style: 'max-width:560px;margin:8vh auto 0;text-align:center' },
+            h('h2', { style: 'font-size:28px' }, title),
+            h('p', {}, rules),
+            !lb.named ? h('p', { style: 'font-size:18px;margin:20px 0' }, 'Type your name in the chat to play.')
+                : lb.in ? h('div', {},
+                    h('p', { style: 'font-size:18px' }, "You're in."),
+                    L.button('Start now', () => kit.send({ kind: 'start' }), { disabled: short > 0 }), ' ',
+                    L.button('Leave', () => kit.send({ kind: 'leave' })))
+                    : lb.max && n >= lb.max ? h('p', {}, 'The game is full; you can watch.')
+                        : h('button', { style: big, class: 'on', on: { click: () => kit.send({ kind: 'join' }) } }, `Join ${title}`),
+            h('h3', {}, n ? `Playing: ${lb.players.map((p) => p.name).join(', ')}` : 'Nobody has joined yet.'),
+            h('p', { class: 'muted' }, lb.left > 0 ? ['Starting in ', L.timer(lb.left), ' (or press Start now)']
+                : short ? `Waiting for ${short} more player${short === 1 ? '' : 's'}${lb.max ? ` (up to ${lb.max})` : ''}.` : ''));
+    };
 
     // ---------- drawing (Graffiti, Sketch) ----------
     // Lines are in the 16:9 picture's 0-1 coordinates (ctx.videoBox), so they
