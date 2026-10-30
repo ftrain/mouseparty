@@ -247,7 +247,7 @@ The release carries the app and the exact sources of its ffmpeg.
 ```
 main.go             the Wails app: window options, embedded files, --selftest (selftest.go)
 app.go              the list, playback, and what the two buttons do
-frontend/           the window: index.html, app.css, app.js
+frontend/           the window: index.html, app.css, app.js (built from web/window)
 stream.go           ffmpeg: a movie, song or card to MediaMTX as H.264 + Opus over RTSP
 host.go             hosting: runs MediaMTX and cloudflared, starts and stops a session
 web.go              the viewer site: page, WebRTC handshake and HLS proxies, the key check
@@ -256,15 +256,17 @@ session.go          what viewers' pages show beside the video: subtitles, guide,
 tunnel.go           the Cloudflare link
 apphost.go          the app on viewers' pages, over the chat socket
 apps/               the apps: the Activity interface and the library games share (lib.go,
-                    words.go), and one file per app; their scripts are host_web/apps/
+                    words.go), and one file per app; their scripts are web/viewer/apps/
 portmap.go          asks the router (NAT-PMP / UPnP) to forward ports
 subtitles.go        finds a movie's subtitles and turns text ones into timed lines
 media.go            what a file holds (from ffmpeg), PDF pages, titles from file names
 config.go, tools.go settings (~/Library/Application Support/Mouse Party); finding the bundled tools
 host_web/           the viewer page: viewer.html, host.js, host.css, hls.js, pdf.js
+web/                the pages' TypeScript, built into host_web/ and frontend/ (npm run build,
+                    scripts/build_web.sh; package.json, vite.config.ts); what's built is checked in
 media/              the stand-by card MediaMTX loops between movies
 packaging/          the app icon and the Info.plist Wails builds with
-scripts/            build_mac_app.sh, build_ffmpeg.sh, test.sh, make_standby_card.sh
+scripts/            build_mac_app.sh, build_web.sh, build_ffmpeg.sh, test.sh, make_standby_card.sh
 licenses/           everything Mouse Party is made of, and under what licences
 *_test.go           the tests
 ```

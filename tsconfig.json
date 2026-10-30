@@ -1,0 +1,22 @@
+// The pages' TypeScript (web/), checked by `npm run typecheck`, as Tiny Little Office checks its own; Vite builds it
+// (vite.config.ts). web/office is the library's own declarations of the editors and the kernel (scripts/vendor_office.sh).
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "moduleDetection": "force",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noFallthroughCasesInSwitch": true,
+        "skipLibCheck": true,
+        "isolatedModules": true,
+        "verbatimModuleSyntax": true,
+        "allowImportingTsExtensions": true,
+        "noEmit": true,
+        "types": ["node"]
+    },
+    "include": ["web", "vite.config.ts"]
+}

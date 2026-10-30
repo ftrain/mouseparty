@@ -1,0 +1,9 @@
+# Only the pages' TypeScript and its build's own files: the Go, the HTML and CSS, and what's built or vendored are as they are.
+/*
+!/web/
+!/vite.config.ts
+!/tsconfig.json
+!/package.json
+!/.prettierrc
+# Tiny Little Office's declarations, as its build writes them (scripts/vendor_office.sh).
+/web/office/

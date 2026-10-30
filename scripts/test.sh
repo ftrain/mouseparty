@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Vet and test everything, then Mouse Party's own self-test: it hosts on free ports
+# Check and build the pages (scripts/build_web.sh: tsc, Prettier, Vite), vet and
+# test everything, then Mouse Party's own self-test: it hosts on free ports
 # (never the router, never touching a session that's running), checks the viewer
 # page, the stand-by stream and the WebRTC handshake, and publishes a countdown.
 # The play-through test and the self-test need ffmpeg (with drawtext) and
@@ -8,6 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ -x build/ffmpeg/bin/ffmpeg ]; then export PATH="$PWD/build/ffmpeg/bin:$PATH"; fi
 
+scripts/build_web.sh                 # the pages, typed and built, before Go embeds them
 scripts/fetch_pandoc.sh >/dev/null   # pandoc.wasm, for reading documents (pandoc_test.go)
 
 go vet ./...

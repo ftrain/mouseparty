@@ -15,3 +15,6 @@ dist/
 
 # what `wails dev` generates; the window uses window.go and window.runtime directly
 frontend/wailsjs/
+
+# the pages' build tools (package.json); what they build is checked in
+node_modules/
