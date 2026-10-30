@@ -1246,11 +1246,16 @@ function windowHandles(w: Win) {
     const bar = w.el.querySelector<HTMLElement>('.win-bar')!;
     bar.addEventListener('pointerdown', (e) => startDrag(e, null));
     bar.addEventListener('dblclick', (e) => {
-        // the whole picture, and back
+        // the whole picture, and back to where it was before
         if (compact() || (e.target as Element).closest('.win-btn, .win-glass')) return;
         const full = w.place.x === 0 && w.place.y === 0 && w.place.w === 1 && w.place.h === 1;
-        w.place = full ? w.unfull || firstPlace(w.info.size === 'full' ? 'big' : w.info.size) : { x: 0, y: 0, w: 1, h: 1 };
-        if (!full) w.unfull = w.place === w.unfull ? null : { ...w.place };
+        if (full) {
+            w.place = w.unfull || firstPlace(w.info.size === 'full' ? 'big' : w.info.size);
+            w.unfull = null;
+        } else {
+            w.unfull = { ...w.place }; // kept before it's made full, so it can go back
+            w.place = { x: 0, y: 0, w: 1, h: 1 };
+        }
         arrangeApps();
     });
     for (const g of w.el.querySelectorAll<HTMLElement>('.win-grip')) g.addEventListener('pointerdown', (e) => startDrag(e, g.dataset.corner!));
