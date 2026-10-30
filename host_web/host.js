@@ -177,6 +177,7 @@ function endSession() {
     document.getElementById('onlineUsers').textContent = '';
     schedule = { rows: [], skew: 0 };
     closePdf();
+    closeDb();
     setApps([]);
     doc = null;
     document.getElementById('doc').hidden = true;
@@ -610,8 +611,8 @@ function renderGuide() {
     const started = schedule.rows[0].start != null;
     schedule.rows.forEach((r, i) => {
         const start = r.start != null ? r.start + schedule.skew : null;
-        const end = start != null && !r.pages ? start + r.duration : null;      // a PDF: as long as the reading takes
-        const onNow = start != null && start <= now && (r.pages ? i === 0 : now < end);
+        const end = start != null && !r.pages && !r.data ? start + r.duration : null;      // a PDF or a database: as long as the reading takes
+        const onNow = start != null && start <= now && (r.pages || r.data ? i === 0 : now < end);
         const row = document.createElement('div');
         row.className = 'guide-row' + (onNow ? ' now' : '');
         const time = Object.assign(document.createElement('div'), { className: 'time', textContent: start != null ? clockTime(start) : '—' });
@@ -626,7 +627,7 @@ function renderGuide() {
         if (end != null) tags.appendChild(document.createTextNode(onNow ? `ends ${clockTime(end)}` : `until ${clockTime(end)}`));
         what.appendChild(tags);
         row.append(time, what, Object.assign(document.createElement('div'), {
-            className: 'runtime', textContent: r.pages ? `${r.pages} pp` : runtime(r.duration) }));
+            className: 'runtime', textContent: r.data ? 'data' : r.pages ? `${r.pages} pp` : runtime(r.duration) }));
         if (onNow && end != null) {
             const bar = Object.assign(document.createElement('div'), { className: 'bar' });
             bar.appendChild(Object.assign(document.createElement('span'), { style: `width: ${Math.min(100, 100 * (now - start) / r.duration)}%` }));
@@ -644,7 +645,7 @@ function onNowFirst() {
     const r = schedule.rows[0];
     if (!r || r.start == null) return false;
     const now = Date.now() / 1000, start = r.start + schedule.skew;
-    return start <= now && (r.pages || now < start + r.duration);
+    return start <= now && (r.pages || r.data || now < start + r.duration);
 }
 
 function openGuide(open) {
@@ -680,7 +681,13 @@ async function setDoc(d) {
     docEl.hidden = !doc;
     app.classList.toggle('reading', !!doc);
     showSoundButton();
+    docEl.classList.toggle('data', doc?.kind === 'db');
+    if (doc?.kind !== 'db') closeDb();
     if (!doc) return closePdf();
+    if (doc.kind === 'db') {
+        closePdf();
+        return showDb(doc);
+    }
     document.getElementById('docPage').textContent = `${doc.page} / ${doc.pages}`;
     if (pdfToken === doc.token) {
         if (!was || was.page !== doc.page) drawPage();
@@ -751,6 +758,38 @@ async function drawPage() {
         }
     }
 }
+
+// ---------- a database, looked through together ----------
+// Its pages, made by the host (data.go; the file stays on the Mac), in a frame
+// over the video, on whatever page anyone went to last: where someone here goes
+// is sent to everyone ({type: 'doc_at'}).
+let dbFrame = null, dbToken = null;
+
+// tell the frame where everyone is, and whether there's a page before it
+const dbTell = () => dbFrame?.contentWindow?.postMessage({ type: 'go', at: doc?.at || '/', back: !!doc?.back }, location.origin);
+
+function showDb(d) {
+    if (dbToken === d.token) return dbTell();
+    closeDb();
+    dbToken = d.token;
+    dbFrame = document.createElement('iframe');
+    dbFrame.className = 'doc-data';
+    dbFrame.title = d.title;
+    dbFrame.src = `${BASE}/data/${encodeURIComponent(d.token)}/${(d.at || '/').slice(1)}`;
+    dbFrame.onload = dbTell;
+    docEl.append(dbFrame);
+}
+
+function closeDb() {
+    dbFrame?.remove();
+    dbFrame = dbToken = null;
+}
+
+window.addEventListener('message', (e) => {
+    if (!dbFrame || e.source !== dbFrame.contentWindow || e.origin !== location.origin) return;
+    if (e.data?.type === 'went' && typeof e.data.at === 'string') send({ type: 'doc_at', token: dbToken, at: e.data.at });
+    if (e.data?.type === 'back') send({ type: 'doc_at', token: dbToken, back: true });
+});
 
 function toggleFit() {
     fitWidth = !fitWidth;
@@ -840,13 +879,22 @@ function setApps(list) {
     for (const a of list) openApp(a);     // the ones already up start again, where they were, from the view just sent
 }
 
+// how solid each kind of window is for this viewer (the slider in its bar), 0.15 to 1: the movie shows through the rest
+const GLASS_KEY = 'openhousepartyGlass';
+const glassOf = (() => { try { return JSON.parse(localStorage.getItem(GLASS_KEY)) || {}; } catch (e) { return {}; } })();
+function setGlass(w, value) {
+    w.el.style.setProperty('--glass', value);
+    if (w.inst && w.inst.resize) w.inst.resize();   // what paints its own background (Sketch's paper) paints it again
+}
+
 async function openApp(info) {
     let w = wins.get(info.id);
     if (!w) {
         w = { info, place: firstPlace(info.size), hidden: false };
         w.el = document.createElement('div');
-        w.el.className = 'win' + (info.glass ? ' glass' : '');
+        w.el.className = 'win' + (info.glass ? ' glass' : '') + (['office', 'reel'].includes(info.script) ? ' office' : '');
         w.el.innerHTML = '<div class="win-bar"><span class="win-icon"></span><span class="win-title"></span>' +
+            '<input class="win-glass" type="range" min="15" max="100" title="See-through or solid (for you)" aria-label="How solid this window is">' +
             '<button class="win-btn win-min" title="Hide it (for you)">–</button>' +
             '<button class="win-btn win-close" title="Close it for everyone">✕</button></div>' +
             '<div class="win-body"></div>' +
@@ -856,6 +904,14 @@ async function openApp(info) {
         w.el.querySelector('.win-bar').title = info.by ? `${info.title}, opened by ${info.by}` : info.title;
         w.el.querySelector('.win-close').onclick = () => send({ type: 'app_close', id: info.id });
         w.el.querySelector('.win-min').onclick = () => { w.hidden = true; arrangeApps(); };
+        const glass = w.el.querySelector('.win-glass');
+        glass.value = Math.round(100 * (glassOf[info.name] ?? 0.6));
+        w.el.style.setProperty('--glass', glass.value / 100);
+        glass.oninput = () => {
+            setGlass(w, glass.value / 100);
+            glassOf[info.name] = glass.value / 100;
+            try { localStorage.setItem(GLASS_KEY, JSON.stringify(glassOf)); } catch (e) {}
+        };
         w.el.addEventListener('pointerdown', () => front(w), true);
         windowHandles(w);
         new ResizeObserver(() => { if (w.inst && w.inst.resize) w.inst.resize(); }).observe(w.body);
@@ -955,7 +1011,7 @@ function renderTabs() {
 function windowHandles(w) {
     const MIN_W = 180, MIN_H = 120;
     const startDrag = (e, corner) => {
-        if (compact() || e.button > 0 || e.target.closest('.win-btn')) return;
+        if (compact() || e.button > 0 || e.target.closest('.win-btn, .win-glass')) return;
         e.preventDefault();
         const stage = desk.getBoundingClientRect(), p0 = { ...w.place }, x0 = e.clientX, y0 = e.clientY;
         const minW = Math.min(1, MIN_W / stage.width), minH = Math.min(1, MIN_H / stage.height);
@@ -987,7 +1043,7 @@ function windowHandles(w) {
     };
     w.el.querySelector('.win-bar').addEventListener('pointerdown', (e) => startDrag(e, null));
     w.el.querySelector('.win-bar').addEventListener('dblclick', (e) => {   // the whole picture, and back
-        if (compact() || e.target.closest('.win-btn')) return;
+        if (compact() || e.target.closest('.win-btn, .win-glass')) return;
         const full = w.place.x === 0 && w.place.y === 0 && w.place.w === 1 && w.place.h === 1;
         w.place = full ? (w.unfull || firstPlace(w.info.size === 'full' ? 'big' : w.info.size)) : { x: 0, y: 0, w: 1, h: 1 };
         if (!full) w.unfull = w.place === w.unfull ? null : { ...w.place };

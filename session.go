@@ -24,16 +24,23 @@ type ScheduleRow struct {
 	Duration int64  `json:"duration"`
 	Start    *int64 `json:"start"`
 	Pages    *int   `json:"pages"`
+	Data     bool   `json:"data,omitempty"` // a database
 	CC       bool   `json:"cc"`
 }
 
 type document struct {
-	Token string `json:"token"`
-	Path  string `json:"-"`
-	Title string `json:"title"`
-	Pages int    `json:"pages"`
-	Page  int    `json:"page"`
+	Token string   `json:"token"`
+	Path  string   `json:"-"`
+	Title string   `json:"title"`
+	Kind  string   `json:"kind"` // "pdf" or "db"
+	Pages int      `json:"pages"`
+	Page  int      `json:"page"`
+	At    string   `json:"at"`   // a database: the page of it everyone is on ("" its first; data.go)
+	Back  bool     `json:"back"` // and there's one before it to go back to
+	trail []string // the pages before it
 }
+
+const trailMax = 100
 
 type clock struct {
 	token    string
@@ -132,16 +139,62 @@ func (h *Host) scheduleJSON() map[string]any {
 	return map[string]any{"type": "schedule", "rows": rows, "now": float64(time.Now().UnixMicro()) / 1e6}
 }
 
-// ---------- a PDF read together ----------
-// While a PDF is up the stream carries a card, and viewers' pages show the document
-// itself over it, fetched from /doc/<token> (that file only, for as long as it is
-// up), and turned to whatever page the host is on.
+// ---------- a PDF read together, or a database looked through ----------
+// While one is up the stream carries a card, and viewers' pages show it over the
+// video: a PDF fetched from /doc/<token> (that file only, for as long as it is up),
+// turned to whatever page the host is on; a database's pages, made here from the
+// file opened read-only (data.go: the file itself never goes), on whichever one
+// anyone went to last (SetAt).
 
-func (h *Host) SetDocument(token, path, title string, pages, page int) {
+func (h *Host) SetDocument(d document) {
+	var data *dataDB
+	if d.Kind == "db" {
+		if d.At == "" {
+			d.At = "/" // its first page
+		}
+		var err error
+		if data, err = openData(d.Path, d.Title); err != nil && h.Log != nil {
+			h.Log("Could not open " + d.Title + ": " + err.Error())
+		}
+	}
 	h.mu.Lock()
-	h.doc = &document{token, path, title, pages, page}
+	old := h.data
+	h.doc, h.data = &d, data
 	h.mu.Unlock()
+	if old != nil {
+		old.Close()
+	}
 	h.broadcast(h.docJSON())
+}
+
+// SetAt: a viewer went to another page of the database up (token: which one they
+// had); back, they asked for the one before it, which is the same for everyone
+func (h *Host) SetAt(token, at string, back bool) {
+	h.mu.Lock()
+	d := h.doc
+	changed := false
+	if d != nil && d.Kind == "db" && d.Token == token {
+		switch {
+		case back && len(d.trail) > 0:
+			d.At, d.trail, changed = d.trail[len(d.trail)-1], d.trail[:len(d.trail)-1], true
+		case !back && d.At != at:
+			d.trail = append(d.trail, d.At)
+			if len(d.trail) > trailMax {
+				d.trail = d.trail[1:]
+			}
+			d.At, changed = at, true
+		}
+		d.Back = len(d.trail) > 0
+		at = d.At
+	}
+	went := h.DocAt
+	h.mu.Unlock()
+	if changed {
+		h.broadcast(h.docJSON())
+		if went != nil {
+			went(at)
+		}
+	}
 }
 
 func (h *Host) SetPage(page int) {
@@ -159,8 +212,12 @@ func (h *Host) SetPage(page int) {
 func (h *Host) ClearDocument() {
 	h.mu.Lock()
 	had := h.doc != nil
-	h.doc = nil
+	old := h.data
+	h.doc, h.data = nil, nil
 	h.mu.Unlock()
+	if old != nil {
+		old.Close()
+	}
 	if had {
 		h.broadcast(h.docJSON())
 	}

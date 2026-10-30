@@ -38,6 +38,7 @@ mkdir -p "$OUT"
 cp "$SRC/packages/doc/dist/editors.js" "$SRC/packages/doc/dist/editors.css" "$SRC/packages/doc/dist/doc.js" "$OUT/"
 cp -R "$SRC/packages/doc/dist/editors" "$SRC/packages/doc/dist/fonts" "$OUT/"
 echo "$TLO_REPO/commit/$COMMIT" > "$OUT/SOURCE.txt"
+python3 scripts/patch_office.py   # what the pinned commit lacks (the Pinboard's cut, copy and paste)
 
 mkdir -p licenses/tinylittleoffice
 cp "$SRC/LICENSE" licenses/tinylittleoffice/LICENSE

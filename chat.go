@@ -17,10 +17,11 @@ import (
 )
 
 const (
-	history = 200 // chat lines kept for people who join late
-	nameMax = 30
-	textMax = 500
-	appRate = 60 // app messages a second from one socket; more are dropped
+	history  = 200 // chat lines kept for people who join late
+	nameMax  = 30
+	textMax  = 500
+	docAtMax = 4000 // a page of a database: a path in Datasette, a query in it
+	appRate  = 60   // app messages a second from one socket; more are dropped
 )
 
 // chatConn is one viewer's socket. Everything sent to it goes through out, in
@@ -65,6 +66,7 @@ type Chat struct {
 	hello      func(v apps.Viewer) map[string]any       // more for the greeting: subtitles, the movie clock, the guide, a PDF, an app
 	app        func(from apps.Viewer, m map[string]any) // a message for an app open (apphost.go)
 	appControl func(from apps.Viewer, m map[string]any) // a page opening or closing an app
+	docAt      func(token, at string, back bool)        // a page went to another page of the database up, or back
 	joined     func(v apps.Viewer)                      // a socket opened, or its viewer took a name
 	left       func(v apps.Viewer)                      // a socket closed
 	mu         sync.Mutex
@@ -196,7 +198,7 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	var last, lastControl time.Time
+	var last, lastControl, lastAt time.Time
 	appWindow, appCount := time.Now(), 0
 	for {
 		kind, data, err := ws.ReadMessage()
@@ -248,6 +250,14 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 				name := conn.name
 				c.mu.Unlock()
 				c.appControl(apps.Viewer{ID: conn.id, Name: name}, m)
+			}
+		case "doc_at":
+			token, _ := m["token"].(string)
+			at, _ := m["at"].(string)
+			back, _ := m["back"].(bool)
+			if time.Since(lastAt) > 250*time.Millisecond && c.docAt != nil && len(at) <= docAtMax && (back || strings.HasPrefix(at, "/")) {
+				lastAt = time.Now()
+				c.docAt(token, at, back)
 			}
 		case "app":
 			if time.Since(appWindow) > time.Second {

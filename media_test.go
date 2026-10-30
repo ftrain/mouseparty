@@ -119,10 +119,10 @@ func TestAudioInTheHostsLanguageElseTheDefault(t *testing.T) {
 
 func TestWhatEachKindOfFileBecomes(t *testing.T) {
 	var got []string
-	for _, f := range []string{"Brazil.mkv", "So What.MP3", "track.flac", "Notes.PDF", "odd.xyz"} {
+	for _, f := range []string{"Brazil.mkv", "So What.MP3", "track.flac", "Notes.PDF", "films.sqlite", "odd.xyz"} {
 		got = append(got, kindOf(f))
 	}
-	if want := []string{"video", "audio", "audio", "pdf", "video"}; !reflect.DeepEqual(got, want) {
+	if want := []string{"video", "audio", "audio", "pdf", "db", "video"}; !reflect.DeepEqual(got, want) {
 		t.Fatal(got)
 	}
 }
@@ -160,5 +160,41 @@ func TestCardTextIsShortenedToFit(t *testing.T) {
 	}
 	if _, size := fitText("Short", 1280, 72, 32, 48); size != 72 {
 		t.Fatal(size)
+	}
+}
+
+func TestOnlySQLiteDatabasesAreShared(t *testing.T) {
+	dir := t.TempDir()
+	db, thumbs := filepath.Join(dir, "films.db"), filepath.Join(dir, "Thumbs.db")
+	os.WriteFile(db, append([]byte("SQLite format 3\x00"), make([]byte, 4080)...), 0o644)
+	os.WriteFile(thumbs, []byte("\xd0\xcf\x11\xe0 not SQLite at all"), 0o644)
+	if size, note := sqliteSize(db); size != 4096 || note != "" {
+		t.Fatal(size, note)
+	}
+	if _, note := sqliteSize(thumbs); note != "not a SQLite database" {
+		t.Fatal(note)
+	}
+}
+
+func TestADatabaseUpGoesWhereAnyoneWent(t *testing.T) {
+	var went []string
+	h := &Host{DocAt: func(at string) { went = append(went, at) }}
+	h.SetDocument(document{Token: "t1", Title: "Films", Kind: "db"})
+	h.SetAt("t0", "/old", false) // a page still on the database before
+	h.SetAt("t1", "/t/films", false)
+	h.SetAt("t1", "/t/films", false)
+	h.SetAt("t1", "/sql", false)
+	h.SetAt("t1", "", true) // anyone's Back: the page before, for everyone
+	if h.doc.At != "/t/films" || !h.doc.Back || !reflect.DeepEqual(went, []string{"/t/films", "/sql", "/t/films"}) {
+		t.Fatal(h.doc.At, went)
+	}
+	h.SetAt("t1", "", true)
+	h.SetAt("t1", "", true) // nothing before the first
+	if h.doc.At != "/" || h.doc.Back || len(went) != 4 {
+		t.Fatal(h.doc.At, went)
+	}
+	h.SetDocument(document{Token: "t2", Title: "Notes", Kind: "pdf", Pages: 3, Page: 1})
+	if h.SetAt("t2", "/Notes", false); h.doc.At != "" {
+		t.Fatal("a PDF has no pages in Datasette")
 	}
 }

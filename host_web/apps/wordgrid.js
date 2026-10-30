@@ -30,32 +30,32 @@ OpenHouseParty.apps.wordgrid = (ctx, view) => {
         if (!input && v.named) {
             input = L.input(kit, 'word', 'Type a word, Enter', (w) => kit.send({ kind: 'word', word: w }), { size: 18 });
             input.addEventListener('input', () => m.redraw());
-            input.style.fontSize = '20px';
+            input.style.fontSize = '1.3em';
             input.style.textTransform = 'uppercase';
         }
         const w = v.phase === 'play' ? typed() : '';
         const lit = w ? path(v.grid, w) : null;
-        if (input) input.style.borderColor = w && !lit ? '#d33' : '#000';
-        const grid = h('div', { class: 'grid', style: 'grid-template-columns:repeat(4,64px);grid-auto-rows:64px;font-size:28px' },
+        if (input) input.style.borderColor = w && !lit ? '#ff4d5e' : '';
+        const grid = h('div', { class: 'grid', style: 'grid-template-columns:repeat(4,2.3em);grid-auto-rows:2.3em;font-size:min(2em, 6.5cqh, 8cqw);font-weight:800' },
             v.grid.map((l, i) => {
                 const k = lit ? lit.indexOf(i) : -1;
                 return h('div', {
-                    class: 'cell',
-                    style: (k >= 0 ? 'background:#000;color:#fff;' : '') + (input && v.phase === 'play' ? 'cursor:pointer;position:relative' : 'position:relative'),
+                    class: k >= 0 ? 'cell lit' : 'cell',
+                    style: input && v.phase === 'play' ? 'cursor:pointer;position:relative' : 'position:relative',
                     on: { click: () => { if (!input || v.phase !== 'play') return; input.value += l; input.focus(); m.redraw(); } },
-                }, l === 'qu' ? 'Qu' : l.toUpperCase(), k >= 0 ? h('sub', { style: 'position:absolute;right:4px;bottom:2px;font-size:10px' }, k + 1) : null);
+                }, l === 'qu' ? 'Qu' : l.toUpperCase(), k >= 0 ? h('sub', { style: 'position:absolute;right:0.2em;bottom:0.1em;font-size:0.35em' }, k + 1) : null);
             }));
         if (v.phase === 'results') {
             return [h('h2', {}, 'Word Grid — results (next grid in ', L.timer(v.left), ')'),
                 h('div', { class: 'cols' }, grid, h('div', {}, v.results.map((r) => h('p', {}, h('b', {}, `${r.name} ${r.score}: `),
-                    r.words.map((x) => h('span', { style: x.unique ? '' : 'text-decoration:line-through;color:#999' }, x.word + ' '))))),
+                    r.words.map((x) => h('span', { style: x.unique ? '' : 'text-decoration:line-through;opacity:.45' }, x.word + ' '))))),
                 L.board(v.board, 'Total'))];
         }
         return [h('h2', {}, 'Word Grid — ', L.timer(v.left)),
-            h('p', { class: 'muted' }, 'Spell words of three or more letters by chaining neighbouring dice (sideways, up, down or diagonally; each die once). Type or click the letters, then Enter. Only words nobody else finds score; longer ones score more.'),
+            h('p', { class: 'muted', style: 'font-size:0.85em' }, 'Spell words of three or more letters by chaining neighbouring dice (sideways, up, down or diagonally; each die once). Type or click the letters, then Enter. Only words nobody else finds score; longer ones score more.'),
             h('div', { class: 'cols' }, grid, h('div', {},
                 input ? h('div', {}, input, ' ', L.button('Clear', () => { input.value = ''; input.focus(); m.redraw(); })) : h('p', { class: 'muted' }, 'Join the chat to play.'),
-                w && !lit ? h('p', { style: 'color:#d33' }, 'Not in the grid') : null,
+                w && !lit ? h('p', { style: 'color:#ff4d5e' }, 'Not in the grid') : null,
                 h('h3', {}, `Yours (${v.mine.length})`), h('p', {}, v.mine.map((x) => x.toUpperCase()).join(' ')),
                 h('h3', {}, 'Everyone'), h('p', {}, v.counts.length ? v.counts.map((c) => `${c.name} ${c.found}`).join(' · ') : 'Nobody has found one yet.'))),
         ];
@@ -66,6 +66,7 @@ OpenHouseParty.apps.wordgrid = (ctx, view) => {
         message(e) {
             if (e.kind !== 'said') return;
             m.kit.note(e.why ? `${e.word.toUpperCase()}: ${e.why}` : `✓ ${e.word.toUpperCase()}`);
+            if (!e.why) L.confetti(ctx, 12 + 6 * e.word.length);
             m.redraw();
         },
     };

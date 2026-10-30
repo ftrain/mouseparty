@@ -1,6 +1,8 @@
 // What every app's script shares (apps/lib.go is the host's half): a box in its
 // window to draw in (ctx.layer, the window's inside), the lobby, scores, countdowns, text boxes that survive redraws, buttons,
-// little notes, and drawing (Graffiti and Sketch). Wireframe on purpose.
+// little notes, confetti, and drawing (Graffiti and Sketch). Glass over the movie: light
+// text on the window's tint (--glass, each viewer's slider), everything in em of
+// a type size that follows the window's (cqmin), so a game grows with its window.
 //
 // An app script sets OpenHouseParty.apps[name] = (ctx, view) => ({view, message, said,
 // resize, stop}), any of them. L.mount does most of that: give it a render(view)
@@ -9,28 +11,49 @@
     const L = OpenHouseParty.lib = {};
 
     const css = `
-.ty { position: absolute; background: #fff; color: #000; font: 14px/1.4 ui-monospace, Menlo, monospace;
-      border: 1px solid #000; padding: 10px; box-sizing: border-box; overflow: auto; }
-.ty.cover { inset: 0; border: 0; padding: 16px; }
-.ty.tl { left: 8px; top: 8px; max-width: min(360px, 60%); max-height: calc(100% - 60px); }
-.ty.tr { right: 8px; top: 8px; max-width: min(360px, 60%); max-height: calc(100% - 60px); }
-.ty.tc { left: 50%; top: 8px; transform: translateX(-50%); max-width: 90%; text-align: center; }
-.ty h2 { font-size: 16px; margin: 0 0 8px; }
-.ty h3 { font-size: 14px; margin: 10px 0 4px; }
-.ty p { margin: 4px 0; }
-.ty button { font: inherit; background: #fff; color: #000; border: 1px solid #000; padding: 2px 8px; margin: 2px; cursor: pointer; }
-.ty button:disabled { color: #999; border-color: #ccc; cursor: default; }
-.ty button.on { background: #000; color: #fff; }
-.ty input { font: inherit; border: 1px solid #000; padding: 2px 6px; margin: 2px; }
+.ty { --pink: #ff5fa2; --violet: #a78bfa; --cyan: #3ee0ff; --yellow: #ffd23f; --lime: #7cf27a;
+      position: absolute; color: #fff; box-sizing: border-box; overflow: auto; padding: 0.8em;
+      font: 600 clamp(12px, 2.4cqmin, 28px)/1.35 ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, sans-serif;
+      text-shadow: 0 1px 3px rgb(0 0 0 / 0.55); }
+.ty.cover { inset: 0; padding: 1em 1.2em; }
+.ty.tl, .ty.tr, .ty.tc { background: rgb(18 14 32 / calc(0.3 + var(--glass, 0.6) * 0.55)); border: 1px solid rgb(255 255 255 / 0.16);
+      border-radius: 0.8em; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.ty.tl { left: 0.6em; top: 0.6em; max-width: min(24em, 60%); max-height: calc(100% - 4em); }
+.ty.tr { right: 0.6em; top: 0.6em; max-width: min(24em, 60%); max-height: calc(100% - 4em); }
+.ty.tc { left: 50%; top: 0.6em; transform: translateX(-50%); max-width: 90%; text-align: center; }
+.ty h2 { font-size: 1.6em; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 0.35em; text-shadow: none;
+         background: linear-gradient(90deg, var(--pink), var(--yellow)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ty h3 { font-size: 0.78em; margin: 0.9em 0 0.3em; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.08em; }
+.ty p { margin: 0.3em 0; }
+.ty b { color: var(--yellow); }
+.ty button { font: inherit; color: #fff; background: rgb(255 255 255 / 0.12); border: 1px solid rgb(255 255 255 / 0.28);
+             border-radius: 999px; padding: 0.3em 0.95em; margin: 0.15em; cursor: pointer; text-shadow: inherit;
+             transition: transform 0.1s, background 0.15s, box-shadow 0.15s; }
+.ty button:hover:not(:disabled) { background: rgb(255 255 255 / 0.24); transform: translateY(-1px); }
+.ty button:active:not(:disabled) { transform: scale(0.95); }
+.ty button.on { background: linear-gradient(135deg, var(--pink), var(--violet)); border-color: transparent; box-shadow: 0 0 0.9em rgb(255 95 162 / 0.55); }
+.ty button:disabled { opacity: 0.4; cursor: default; }
+.ty input { font: inherit; color: #fff; background: rgb(0 0 0 / 0.35); border: 1px solid rgb(255 255 255 / 0.3); border-radius: 0.55em;
+            padding: 0.3em 0.6em; margin: 0.15em; outline: none; max-width: 100%; box-sizing: border-box; }
+.ty input:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgb(62 224 255 / 0.35); }
+.ty input::placeholder { color: rgb(255 255 255 / 0.5); }
 .ty table { border-collapse: collapse; }
-.ty td { padding: 1px 8px 1px 0; }
-.ty .muted { color: #777; }
-.ty .note { position: sticky; top: 0; background: #000; color: #fff; padding: 2px 8px; margin: -4px 0 6px; }
-.ty .cols { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
-.ty .grid { display: grid; gap: 4px; }
-.ty .cell { border: 1px solid #000; display: flex; align-items: center; justify-content: center; text-align: center;
-            overflow: hidden; }
-.ty-timer { font-variant-numeric: tabular-nums; }`;
+.ty td { padding: 0.1em 0.8em 0.1em 0; }
+.ty tr:first-child td { color: var(--yellow); }
+.ty .muted { color: rgb(255 255 255 / 0.62); font-weight: 500; }
+.ty .note { position: sticky; top: 0; z-index: 5; display: table; margin: 0 auto 0.5em; padding: 0.3em 1em; border-radius: 999px;
+            background: linear-gradient(90deg, var(--pink), var(--violet)); color: #fff; animation: ty-pop 0.35s cubic-bezier(.3, 1.6, .5, 1); }
+.ty .cols { display: flex; gap: 1.5em; flex-wrap: wrap; align-items: flex-start; }
+.ty .grid { display: grid; gap: 0.3em; }
+.ty .cell { background: rgb(255 255 255 / 0.1); border: 1px solid rgb(255 255 255 / 0.22); border-radius: 0.45em; display: flex;
+            align-items: center; justify-content: center; text-align: center; overflow: hidden; transition: background 0.2s, transform 0.15s; }
+.ty .cell.lit { background: linear-gradient(135deg, var(--pink), var(--violet)); border-color: transparent; transform: scale(1.04);
+                box-shadow: 0 0 0.8em rgb(255 95 162 / 0.45); }
+.ty-timer { font-variant-numeric: tabular-nums; color: var(--cyan); }
+@keyframes ty-pop { from { transform: scale(0.6); opacity: 0; } }
+.ty-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 50; }
+.ty-confetti i { position: absolute; top: -4%; width: 0.6em; height: 0.9em; border-radius: 2px; animation: ty-fall var(--t) cubic-bezier(.2, .6, .4, 1) forwards; }
+@keyframes ty-fall { to { transform: translate(var(--dx), 115cqh) rotate(var(--r)); opacity: 0.2; } }`;
     const style = document.createElement('style');
     style.textContent = css;
     document.head.appendChild(style);
@@ -89,6 +112,18 @@
         }
     }, 500);
 
+    // confetti: a burst over the app's window, for a win (n pieces; a few for a small one)
+    L.confetti = (ctx, n = 80) => {
+        const box = h('div', { class: 'ty ty-confetti' });
+        const colors = ['#ff5fa2', '#ffd23f', '#7cf27a', '#3ee0ff', '#a78bfa', '#fff'];
+        for (let i = 0; i < n; i++) {
+            box.append(h('i', { style: `left:${Math.random() * 100}%;background:${colors[i % colors.length]};--t:${1.2 + Math.random() * 1.4}s;` +
+                `--dx:${(Math.random() - 0.5) * 30}cqw;--r:${Math.random() * 1080 - 540}deg;animation-delay:${Math.random() * 0.3}s` }));
+        }
+        ctx.layer.append(box);
+        setTimeout(() => box.remove(), 3200);
+    };
+
     L.button = (text, onclick, opts = {}) => h('button', { on: { click: onclick }, disabled: !!opts.disabled, class: opts.on ? 'on' : '' }, text);
 
     // input: a text box (kept across redraws) that sends on Enter and empties itself
@@ -116,13 +151,13 @@
     // lobby: who's in, join/leave/start, and the countdown to starting
     L.lobby = (lb, kit, title, rules) => {
         const n = lb.players.length, short = Math.max(0, lb.min - n);
-        const big = 'font-size:20px;padding:10px 28px;margin:12px 0';
-        return h('div', { style: 'max-width:560px;margin:8vh auto 0;text-align:center' },
-            h('h2', { style: 'font-size:28px' }, title),
+        const big = 'font-size:1.35em;padding:0.5em 1.6em;margin:0.6em 0';
+        return h('div', { style: 'max-width:32em;margin:6cqh auto 0;text-align:center' },
+            h('h2', { style: 'font-size:2.4em' }, title),
             h('p', {}, rules),
-            !lb.named ? h('p', { style: 'font-size:18px;margin:20px 0' }, 'Type your name in the chat to play.')
+            !lb.named ? h('p', { style: 'font-size:1.2em;margin:1em 0' }, 'Type your name in the chat to play.')
                 : lb.in ? h('div', {},
-                    h('p', { style: 'font-size:18px' }, "You're in."),
+                    h('p', { style: 'font-size:1.2em' }, "You're in."),
                     L.button('Start now', () => kit.send({ kind: 'start' }), { disabled: short > 0 }), ' ',
                     L.button('Leave', () => kit.send({ kind: 'leave' })))
                     : lb.max && n >= lb.max ? h('p', {}, 'The game is full; you can watch.')
@@ -139,10 +174,12 @@
     const WIDTHS = [3, 8, 20];   // in a 720-line picture; scaled with it
     L.sketch = (ctx, lines, opts = {}) => {
         const canvas = h('canvas');
-        const bar = h('div', { class: 'ty tl', style: 'display:flex;gap:2px;padding:4px;flex-wrap:wrap' });
+        const bar = h('div', { class: 'ty tl', style: 'display:flex;gap:0.15em;padding:0.3em;flex-wrap:wrap;align-items:center' });
         let color = opts.color ?? Math.floor(Math.random() * 4), width = 1;
-        L.COLORS.forEach((c, i) => bar.append(h('button', { style: `background:${c};width:22px;height:22px;padding:0`, on: { click: () => { color = i; } } })));
-        ['thin', 'mid', 'fat'].forEach((w, i) => bar.append(L.button(w, () => { width = i; })));
+        const pick = (group, el) => { for (const b of bar.querySelectorAll(`[data-g="${group}"]`)) b.classList.toggle('on', b === el); };
+        L.COLORS.forEach((c, i) => bar.append(h('button', { 'data-g': 'c', class: i === color ? 'on' : '', style: `background:${c};width:1.6em;height:1.6em;padding:0`,
+            on: { click: (e) => { color = i; pick('c', e.currentTarget); } } })));
+        ['thin', 'mid', 'fat'].forEach((w, i) => bar.append(h('button', { 'data-g': 'w', class: i === width ? 'on' : '', on: { click: (e) => { width = i; pick('w', e.currentTarget); } } }, w)));
         if (opts.clear) bar.append(L.button('clear', opts.clear));
         ctx.layer.append(canvas, bar);
         const g = canvas.getContext('2d');
@@ -163,7 +200,11 @@
             g.setTransform(dpr, 0, 0, dpr, 0, 0);
             box = ctx.videoBox();
             g.clearRect(0, 0, canvas.width, canvas.height);
-            if (opts.paper) { g.fillStyle = '#fff'; g.fillRect(box.x, box.y, box.w, box.h); g.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1); }
+            if (opts.paper) {   // as solid as the window: never so faint the drawing is lost
+                const glass = Number(getComputedStyle(ctx.layer).getPropertyValue('--glass')) || 0.6;
+                g.fillStyle = `rgba(255,255,255,${Math.max(0.35, glass)})`;
+                g.fillRect(box.x, box.y, box.w, box.h);
+            }
             all.forEach(draw);
         };
 

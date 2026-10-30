@@ -136,8 +136,9 @@ type Host struct {
 	MapPorts       bool // false: LAN (and tunnel) only, the router is left alone
 	CleanLeftovers bool // false: a check running beside a real session leaves it alone
 	Standby        []byte
-	AppsDir        string // where apps keep what outlasts the session (apps.Keeper); "" nowhere
-	PicturesDir    string // where the pictures they name are kept (pictures.go); "" in memory only
+	AppsDir        string          // where apps keep what outlasts the session (apps.Keeper); "" nowhere
+	PicturesDir    string          // where the pictures they name are kept (pictures.go); "" in memory only
+	DocAt          func(at string) // viewers went to another page of the database up (SetAt)
 
 	mu        sync.Mutex
 	key       string
@@ -161,6 +162,7 @@ type Host struct {
 	clockSent time.Time
 	schedule  []ScheduleRow
 	doc       *document
+	data      *dataDB // the database up, open read-only (data.go)
 	apps      *appHost
 	pics      *pictures
 	showing   *nowShowing
@@ -205,6 +207,7 @@ func (h *Host) start() error {
 	h.chat.hello = h.greeting
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
+	h.chat.docAt = h.SetAt
 	h.ports = map[string]int{"api": freePort(), "rtsp": freePort(), "hls": freePort(), "webrtc": freePort()}
 	h.tmp = tmp
 	h.stdins = map[*exec.Cmd]io.WriteCloser{}
@@ -294,6 +297,10 @@ func (h *Host) Stop() {
 	}
 	h.mu.Lock()
 	h.key, h.urls, h.doc = "", map[string]string{}, nil
+	if h.data != nil {
+		h.data.Close()
+		h.data = nil
+	}
 	h.mu.Unlock()
 }
 

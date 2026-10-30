@@ -20,19 +20,24 @@ type Config struct {
 	Position        int     `json:"position"` // queue row now playing, or next to play
 }
 
-// Item is one row: a movie, a song or a PDF.
+// Item is one row: a movie, a song, a PDF or a database.
 type Item struct {
 	Path      string        `json:"path"`
-	Kind      string        `json:"kind,omitempty"` // video, audio (played over a still of its cover) or pdf (read together)
+	Kind      string        `json:"kind,omitempty"` // video, audio (played over a still of its cover), pdf (read together) or db (SQLite, looked through together)
 	Duration  float64       `json:"duration,omitempty"`
 	Note      string        `json:"note,omitempty"`
 	Pages     int           `json:"pages,omitempty"`
 	Page      int           `json:"page,omitempty"`
+	Size      int64         `json:"size,omitempty"`      // a database's bytes
+	At        string        `json:"at,omitempty"`        // the database's page viewers were last on (a path in Datasette)
 	Subtitles *[]Track      `json:"subtitles,omitempty"` // what was found; nil until looked for
 	Subs      *SubsSettings `json:"subs,omitempty"`      // what to do with them
 	Audio     *[]AudioTrack `json:"audio,omitempty"`     // its sound tracks; nil until looked at
 	Missing   bool          `json:"-"`                   // its file isn't there now (App.watchFiles)
 }
+
+// isDoc: a PDF or a database, which viewers' pages show themselves (the stream carries a card)
+func (it *Item) isDoc() bool { return it.kind() == "pdf" || it.kind() == "db" }
 
 func (it *Item) kind() string {
 	if it.Kind == "" {

@@ -65,7 +65,10 @@ with its licence file in `go/<module path>/`. All are MIT, BSD or Apache-2.0.
 | github.com/jackpal/gateway | BSD-3-Clause |
 | github.com/jackpal/go-nat-pmp | Apache-2.0 |
 | github.com/pdfcpu/pdfcpu | Apache-2.0 |
-| golang.org/x/text, x/crypto, x/image, x/net, x/sync | BSD-3-Clause |
+| modernc.org/sqlite, SQLite in Go (a database up: `data.go`), with SQLite itself (public domain, `LICENSE-SQLITE`) | BSD-3-Clause |
+| modernc.org/libc, modernc.org/mathutil, modernc.org/memory, github.com/remyoudompheng/bigfft, github.com/google/uuid | BSD-3-Clause |
+| github.com/dustin/go-humanize, mattn/go-isatty, ncruces/go-strftime | MIT |
+| golang.org/x/text, x/crypto, x/image, x/net, x/sync, x/sys | BSD-3-Clause |
 | github.com/clipperhouse/uax29/v2, gabriel-vasile/mimetype, leaanthony/go-ansi-parser, leaanthony/slicer, leaanthony/u, mattn/go-runewidth, rivo/uniseg, samber/lo, go.yaml.in/yaml/v3 | MIT |
 | github.com/hhrutter/tiff, pkg/browser, pkg/errors | BSD |
 | github.com/tkrajina/go-reflector, xdg-go/stringprep | Apache-2.0 |

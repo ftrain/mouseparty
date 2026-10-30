@@ -1,15 +1,15 @@
 // Spies (apps/spies.go): spymasters give one-word clues; their team finds their agents.
 OpenHouseParty.apps.spies = (ctx, view) => {
     const L = OpenHouseParty.lib, h = L.h;
-    const COLOR = { red: '#d33', blue: '#36c', neutral: '#ccc', assassin: '#000' };
+    const COLOR = { red: '#ff4d5e', blue: '#3ea6ff', neutral: '#d9cfb8', assassin: '#111' };
     const m = L.mount(ctx, 'cover', (v, kit) => {
         if (v.phase === 'lobby') return L.lobby(v.lobby, kit, 'Spies', 'Two teams. Each spymaster knows which words are their agents and gives one-word clues with a number; their team picks the words. Avoid the assassin.');
         const myGo = v.team === v.turn && v.phase === 'guess' && !v.master;
-        const cards = h('div', { class: 'grid', style: 'grid-template-columns:repeat(5,110px);grid-auto-rows:52px' },
+        const cards = h('div', { class: 'grid', style: 'grid-template-columns:repeat(5,minmax(0,8em));grid-auto-rows:3.6em;font-size:0.9em' },
             v.cards.map((c, i) => h('div', {
                 class: 'cell',
-                style: c.revealed ? `background:${COLOR[c.color]};color:${c.color === 'neutral' ? '#000' : '#fff'};text-decoration:line-through`
-                    : c.color ? `border:3px solid ${COLOR[c.color]};${myGo ? 'cursor:pointer' : ''}` : (myGo ? 'cursor:pointer' : ''),
+                style: c.revealed ? `background:${COLOR[c.color]};color:${c.color === 'neutral' ? '#222' : '#fff'};text-shadow:none;opacity:.85`
+                    : (c.color ? `border:0.2em solid ${COLOR[c.color]};` : '') + (myGo ? 'cursor:pointer' : ''),
                 on: { click: () => { if (myGo && !c.revealed) kit.send({ kind: 'pick', i }); } },
             }, c.word.toUpperCase())));
         let status;
@@ -29,6 +29,12 @@ OpenHouseParty.apps.spies = (ctx, view) => {
             h('div', { class: 'cols' }, ['red', 'blue'].map((t) => h('div', {},
                 h('h3', { style: `color:${COLOR[t]}` }, `${t.toUpperCase()} · ${v.remaining[t]} to find`), h('p', {}, v.teams[t].join(', ')))))];
     });
+    let phase = view.phase;
     m.draw(view);
-    return { view: m.draw, message(e) { if (e.kind === 'nope') m.kit.note(e.why); } };
+    return {
+        view(v) {
+            if (v.phase === 'over' && phase !== 'over') L.confetti(ctx, v.winner === v.team ? 140 : 40);
+            phase = v.phase;
+            m.draw(v);
+        }, message(e) { if (e.kind === 'nope') m.kit.note(e.why); } };
 };

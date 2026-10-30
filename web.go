@@ -87,6 +87,7 @@ func (h *Host) startWeb() error {
 	mux.HandleFunc("GET /{key}/office/{path...}", func(w http.ResponseWriter, r *http.Request) { // Tiny Little Office's editors
 		officeFile(w, r, web)
 	})
+	mux.HandleFunc("GET /{key}/data/{token}/{path...}", h.dataPage) // a database up, its pages made here
 	mux.HandleFunc("POST /{key}/img", h.postPicture)
 	mux.HandleFunc("GET /{key}/img/{id}", h.getPicture)
 	mux.HandleFunc("POST /{key}/grab", h.grab)
@@ -250,7 +251,7 @@ func (h *Host) docFile(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	d := h.doc
 	h.mu.Unlock()
-	if d == nil || r.PathValue("token") != d.Token {
+	if d == nil || d.Kind != "pdf" || r.PathValue("token") != d.Token { // a database stays on the Mac
 		http.NotFound(w, r)
 		return
 	}

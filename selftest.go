@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -53,10 +54,18 @@ func selftest() int {
 	check("only apps' scripts", func() (string, error) { return statusIs(base+"apps/nope.js", 404) })
 	check("the documents' editors come as JavaScript", func() (string, error) { return typeIs(base+"office/editors.js", "text/javascript") })
 	check("documents are drawn by office.js", func() (string, error) { return typeIs(base+"apps/office.js", "text/javascript") })
+	check("SQLite opens read-only", func() (string, error) {
+		d, err := openData(filepath.Join(os.TempDir(), "openhouseparty-selftest-none.db"), "none")
+		if err == nil {
+			d.Close()
+			return "", fmt.Errorf("it made a database that wasn't there")
+		}
+		return "a missing file stays missing", nil
+	})
 	if pdf, err := os.CreateTemp("", "openhouseparty-*.pdf"); err == nil {
 		pdf.WriteString("%PDF-1.4\n%%EOF\n")
 		pdf.Close()
-		h.SetDocument("t1", pdf.Name(), "Self-test", 1, 1)
+		h.SetDocument(document{Token: "t1", Path: pdf.Name(), Title: "Self-test", Kind: "pdf", Pages: 1, Page: 1})
 		check("the PDF up now is served", func() (string, error) { return typeIs(base+"doc/t1", "application/pdf") })
 		check("no other is", func() (string, error) { return statusIs(base+"doc/t0", 404) })
 		h.ClearDocument()

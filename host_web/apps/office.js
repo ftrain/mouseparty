@@ -45,6 +45,7 @@
                 },
             },
         });
+        editors.setTheme('dark');   // their own dark colours, whatever the device's: the page around them is dark
         office.grabbed = grabbed;
         return { editors, kernel };
     })();
@@ -53,12 +54,22 @@
     office.css = (h) => {
         if (document.getElementById('office-css')) return;
         document.head.append(h('style', { id: 'office-css' }, `
-.office { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--to-paper, #fff); }
+.office { position: absolute; inset: 0; display: flex; flex-direction: column; }
+/* glass like every window: the page and the paper as solid as the slider says, menus and bars nearly solid */
+.win.office { --to-bg: rgb(19 19 22 / var(--glass)); --to-paper: rgb(30 30 34 / var(--glass)); --to-paper-shade: rgb(45 45 50 / var(--glass));
+              --to-surface: rgb(36 36 40 / calc(0.55 + var(--glass) * 0.45)); --to-surface-2: rgb(44 44 49 / calc(0.55 + var(--glass) * 0.45));
+              --to-input-bg: rgb(26 26 30 / calc(0.5 + var(--glass) * 0.5)); }
+.win.office .win-body { color: var(--to-ink); }
 .office-bar { display: flex; gap: 6px; align-items: center; padding: 4px 8px; font: 12px/1.2 ui-monospace, Menlo, monospace;
               background: #111; color: #ccc; flex: none; }
 .office-bar button { font: inherit; color: #fff; background: #333; border: 1px solid #555; border-radius: 3px; padding: 3px 8px; cursor: pointer; }
-.office-page { position: relative; flex: 1; min-height: 0; overflow: auto; }
-.office-page > .to-editor { min-height: 100%; }
+/* the editor fits the window exactly: anything taller let a focused thing scroll the page, and the bar went up out of
+   sight with nothing to scroll it back (a board takes the wheel); a Document, which runs on, scrolls under its bar */
+.office-page { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.office-page > .to-editor { flex: 1 1 0; min-height: 0; }
+.office-page.scrolls { overflow: auto; display: block; }
+.office-page.scrolls > .to-editor { min-height: 100%; }
+.office-page.scrolls to-bar { position: sticky; top: 0; z-index: 5; }
 .office-page to-bar { flex-wrap: wrap; overflow: visible; height: auto; }   /* a window is narrower than the page the bar measures */`));
     };
 
@@ -142,6 +153,7 @@
         });
         const mount = async () => {
             page.textContent = '';
+            page.classList.toggle('scrolls', app === 'write');
             const commands = TAKES_PICTURES.has(app) ? [grabCommand()] : [];
             mounted = await lib.editors.mount(app, lib.kernel.write(doc), page, () => {}, { onOps: changed, fill: true, commands, context: {} });
         };

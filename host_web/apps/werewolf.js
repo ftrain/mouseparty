@@ -19,8 +19,15 @@ OpenHouseParty.apps.werewolf = (ctx, view) => {
             h('div', {}, v.news.map((n) => h('p', {}, n))),
             act,
             h('h3', {}, 'The village'),
-            h('p', {}, v.players.map((p) => h('span', { style: p.alive ? '' : 'text-decoration:line-through;color:#999' }, p.name, p.role ? ` (${p.role})` : '', '  ')))];
+            h('p', {}, v.players.map((p) => h('span', { style: p.alive ? '' : 'text-decoration:line-through;opacity:.45' }, p.name, p.role ? ` (${p.role})` : '', '  ')))];
     });
+    let phase = view.phase;
     m.draw(view);
-    return { view: m.draw };
+    return {
+        view(v) {
+            if (v.phase === 'over' && phase !== 'over') L.confetti(ctx, 100);
+            phase = v.phase;
+            m.draw(v);
+        },
+    };
 };

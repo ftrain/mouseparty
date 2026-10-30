@@ -253,6 +253,8 @@ func (a *App) view() View {
 		length := ""
 		if it.kind() == "pdf" {
 			length = fmt.Sprintf("%d pages", it.Pages)
+		} else if it.kind() == "db" {
+			length = formatBytes(it.Size)
 		} else if it.Duration > 0 {
 			length = formatTime(it.Duration)
 		}
@@ -264,6 +266,9 @@ func (a *App) view() View {
 }
 
 func (a *App) slider(state string) Slider {
+	if state == "doc" && a.current.kind() == "db" { // a database: no slider; viewers look through it
+		return Slider{Max: 1}
+	}
 	if state == "doc" { // a PDF: the slider is its pages
 		d := a.current
 		return Slider{On: d.Pages > 1, Min: 1, Max: float64(max(2, d.Pages)), Value: float64(d.Page),
@@ -383,11 +388,21 @@ func (a *App) addPaths(paths []string, row int) {
 		case err == nil && playable(p): // dropped by itself, in a format with no usual name: ffmpeg says it plays
 			files = append(files, p)
 		default:
-			a.log("Not a video, sound or PDF file, skipped: " + filepath.Base(p))
+			a.log("Not a video, sound, PDF or database file, skipped: " + filepath.Base(p))
 		}
 	}
 	var items []*Item
 	for _, p := range files {
+		if kindOf(p) == "db" {
+			size, note := sqliteSize(p)
+			if note == "not a SQLite database" { // Thumbs.db and the like
+				a.log("Not a SQLite database, skipped: " + filepath.Base(p))
+				continue
+			}
+			items = append(items, &Item{Path: p, Kind: "db", Size: size, Note: note})
+			a.log(fmt.Sprintf("Queued %s (%s)", filepath.Base(p), formatBytes(size)))
+			continue
+		}
 		if kindOf(p) == "pdf" {
 			it := &Item{Path: p, Kind: "pdf", Pages: pdfPages(p), Page: 1}
 			if it.Pages == 0 {
@@ -558,16 +573,17 @@ func (a *App) startCountdown(seconds int) {
 	}
 }
 
-// startCurrent streams a.current, starting skip minutes in (a PDF: its card, and the PDF to viewers)
+// startCurrent streams a.current, starting skip minutes in (a PDF or a database: its card, and the file to viewers)
 func (a *App) startCurrent(skip float64) {
 	a.moviePos = &moviePos{skip * 60, time.Now().Add(startGap * time.Second)} // until ffmpeg reports in
 	a.stopRequest, a.jumpTo, a.docDone = false, -1, false
 	it := a.current
 	var err error
-	if it.kind() == "pdf" {
+	if it.isDoc() {
 		a.phase = "doc"
-		a.host.SetDocument(strconv.FormatInt(time.Now().UnixMilli(), 10), it.Path, displayTitle(it.Path), it.Pages, max(1, it.Page))
-		args, temps := documentCommand(displayTitle(it.Path), a.opts())
+		a.host.SetDocument(document{Token: strconv.FormatInt(time.Now().UnixMilli(), 10), Path: it.Path, Title: displayTitle(it.Path),
+			Kind: it.kind(), Pages: it.Pages, Page: max(1, it.Page), At: it.At})
+		args, temps := documentCommand(it.kind(), displayTitle(it.Path), a.opts())
 		err = a.player.Start(args, temps, 0, "")
 	} else {
 		a.phase = "movie"
@@ -683,7 +699,10 @@ func (a *App) turnPage(step int) {
 		return
 	}
 	d := a.current
-	if d.Page+step > d.Pages {
+	if d.kind() == "db" && step < 0 {
+		return
+	}
+	if d.kind() == "db" || d.Page+step > d.Pages { // past a PDF's last page, or on from a database
 		a.log("Finished " + filepath.Base(d.Path) + ".")
 		a.docDone = true
 		a.player.Stop()
@@ -693,13 +712,21 @@ func (a *App) turnPage(step int) {
 }
 
 func (a *App) showPage(page int) {
-	if a.state() != "doc" {
+	if a.state() != "doc" || a.current.kind() != "pdf" {
 		return
 	}
 	d := a.current
 	d.Page = max(1, min(d.Pages, page))
 	a.host.SetPage(d.Page)
 	a.save() // a PDF opens again where it was left
+}
+
+// docAt: viewers went to another page of the database up; it opens there next time
+func (a *App) docAt(at string) {
+	if a.state() == "doc" && a.current.kind() == "db" && a.current.At != at {
+		a.current.At = at
+		a.save()
+	}
 }
 
 // ---------- subtitles ----------
@@ -746,7 +773,7 @@ func applyFound(it *Item, found []Track) {
 }
 
 func (a *App) tracks(it *Item) []Track {
-	if it.kind() == "pdf" {
+	if it.isDoc() {
 		return nil
 	}
 	if it.Subtitles == nil {
@@ -759,7 +786,7 @@ func (a *App) tracks(it *Item) []Track {
 func (a *App) scanSubtitles() {
 	var todo []*Item
 	for _, it := range a.cfg.Queue {
-		if it.Subtitles == nil && it.kind() != "pdf" {
+		if it.Subtitles == nil && !it.isDoc() {
 			todo = append(todo, it)
 		}
 	}
@@ -772,7 +799,7 @@ func (a *App) scanSubtitles() {
 }
 
 func (a *App) attachSubtitles(i int, path string) {
-	if i < 0 || i >= len(a.cfg.Queue) || a.cfg.Queue[i].kind() == "pdf" {
+	if i < 0 || i >= len(a.cfg.Queue) || a.cfg.Queue[i].isDoc() {
 		a.log("Drop " + filepath.Base(path) + " onto a movie (or select one first) to give it those subtitles.")
 		return
 	}
@@ -852,7 +879,7 @@ func (a *App) offerSubtitles(it *Item) {
 			a.host.SetShowing("", "")
 		}
 	}
-	if it.kind() == "pdf" || subsSettings(it).Mode != "viewers" {
+	if it.isDoc() || subsSettings(it).Mode != "viewers" {
 		return
 	}
 	offset := subsSettings(it).Offset
@@ -966,6 +993,7 @@ func (a *App) hostStart() {
 	h := NewHost(a.log, mediamtx, cloudflared, a.standby)
 	h.MapPorts = a.cfg.OpenRouterPorts
 	h.AppsDir, h.PicturesDir = appsDir(), picturesDir()
+	h.DocAt = func(at string) { a.do(func() { a.docAt(at) }) }
 	if a.hostSetup != nil {
 		a.hostSetup(h)
 	}
@@ -1063,6 +1091,7 @@ func (a *App) schedule() []ScheduleRow {
 			pages := it.Pages
 			r.Pages = &pages
 		}
+		r.Data = it.kind() == "db"
 		if it.Subs != nil && it.Subs.Mode == "viewers" && it.Subtitles != nil {
 			for _, t := range *it.Subtitles {
 				r.CC = r.CC || t.Text
@@ -1070,7 +1099,7 @@ func (a *App) schedule() []ScheduleRow {
 		}
 		rows = append(rows, r)
 		if start != nil {
-			if it.kind() == "pdf" { // a PDF takes as long as the reading does: what follows it has no time yet
+			if it.isDoc() { // a PDF or a database takes as long as the reading does: what follows it has no time yet
 				start = nil
 			} else {
 				s := *start + it.Duration + gap

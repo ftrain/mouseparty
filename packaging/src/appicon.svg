@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Open House Party's icon: a house at night whose window is a screen with a
+       film on, and confetti over the roof. scripts/make_icon.sh renders it to
+       packaging/appicon.png (the macOS grid: an 824 rounded square, centred) -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#1c1146"/>
+      <stop offset="0.6" stop-color="#4a1670"/>
+      <stop offset="1" stop-color="#a8237e"/>
+    </linearGradient>
+    <linearGradient id="house" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe066"/>
+      <stop offset="1" stop-color="#ff9a3c"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff7ab6"/>
+      <stop offset="1" stop-color="#e2337f"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3ee0ff"/>
+      <stop offset="1" stop-color="#7b5cff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.62" r="0.5">
+      <stop offset="0" stop-color="#ffb84d" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffb84d" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="18"/></filter>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#14082e" flood-opacity="0.55"/>
+    </filter>
+    <clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#tile)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#sky)"/>
+    <!-- stars -->
+    <g fill="#fff">
+      <circle cx="210" cy="230" r="5" opacity="0.8"/><circle cx="820" cy="210" r="6" opacity="0.9"/>
+      <circle cx="770" cy="330" r="3.5" opacity="0.6"/><circle cx="250" cy="380" r="3.5" opacity="0.6"/>
+      <circle cx="160" cy="520" r="4" opacity="0.5"/><circle cx="870" cy="500" r="4" opacity="0.5"/>
+    </g>
+    <!-- warm light on the ground -->
+    <ellipse cx="512" cy="840" rx="380" ry="120" fill="url(#glow)"/>
+    <rect x="100" y="820" width="824" height="104" fill="#2a0f4a" opacity="0.55"/>
+  </g>
+
+  <!-- the house -->
+  <g filter="url(#shadow)">
+    <rect x="270" y="470" width="484" height="370" rx="34" fill="url(#house)"/>
+    <path d="M512 226 L812 486 Q826 499 808 506 L216 506 Q198 499 212 486 Z" fill="url(#roof)" stroke="url(#roof)" stroke-width="28" stroke-linejoin="round"/>
+    <rect x="652" y="300" width="58" height="120" rx="10" fill="#e2337f"/>
+  </g>
+  <!-- the window: a screen with a film on -->
+  <rect x="330" y="545" width="364" height="230" rx="26" fill="#3ee0ff" opacity="0.6" filter="url(#soft)"/>
+  <rect x="330" y="545" width="364" height="230" rx="26" fill="url(#screen)"/>
+  <rect x="330" y="545" width="364" height="230" rx="26" fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="6"/>
+  <path d="M478 600 L588 660 L478 720 Z" fill="#fff" stroke="#fff" stroke-width="22" stroke-linejoin="round"/>
+
+  <!-- confetti -->
+  <g>
+    <rect x="300" y="250" width="34" height="18" rx="5" fill="#3ee0ff" transform="rotate(-28 317 259)"/>
+    <rect x="380" y="170" width="30" height="16" rx="5" fill="#ffd23f" transform="rotate(22 395 178)"/>
+    <rect x="600" y="180" width="32" height="17" rx="5" fill="#7cf27a" transform="rotate(-18 616 188)"/>
+    <rect x="735" y="250" width="30" height="16" rx="5" fill="#ffd23f" transform="rotate(35 750 258)"/>
+    <rect x="220" y="330" width="28" height="15" rx="5" fill="#ff7ab6" transform="rotate(40 234 337)"/>
+    <circle cx="500" cy="160" r="11" fill="#ff7ab6"/>
+    <circle cx="790" cy="400" r="10" fill="#3ee0ff"/>
+    <circle cx="245" cy="440" r="9" fill="#7cf27a"/>
+  </g>
+</svg>

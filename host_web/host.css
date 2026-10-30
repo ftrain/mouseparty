@@ -45,43 +45,66 @@ button { font-family: var(--font); }
 /* The apps' windows (host.js), over the video: each moved by its bar and sized
    by its four corners, by each viewer for themselves. Around them, the player. */
 .desk { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+/* Tinted glass over the movie: --glass (the slider in the bar, each viewer's own, 0.15-1) is how solid
+   it is; what's inside sizes itself to the window (container units, host_web/apps/lib.js) */
 .win {
-    position: absolute; display: flex; flex-direction: column; pointer-events: auto;
-    background: #fff; border: 1px solid var(--green); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+    --glass: 0.6;
+    --pink: #ff5fa2; --violet: #a78bfa; --cyan: #3ee0ff; --yellow: #ffd23f; --lime: #7cf27a;
+    position: absolute; display: flex; flex-direction: column; pointer-events: auto; border-radius: 14px;
+    background: rgb(18 14 32 / var(--glass));
+    -webkit-backdrop-filter: blur(calc(var(--glass) * 14px)) saturate(1.3); backdrop-filter: blur(calc(var(--glass) * 14px)) saturate(1.3);
+    border: 1px solid rgb(255 255 255 / 0.18); box-shadow: 0 10px 40px rgb(0 0 0 / calc(var(--glass) * 0.6));
+    font-family: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, sans-serif;
 }
 .win[hidden] { display: none; }
 .win-bar {
-    flex: none; display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 3px 0 8px;
-    background: #000; color: var(--green); font-size: 12px; cursor: move; user-select: none; touch-action: none;
+    position: relative; flex: none; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 4px 0 10px;
+    background: rgb(0 0 0 / calc(0.2 + var(--glass) * 0.35)); color: #fff; font-size: 13px; font-weight: 700;
+    border-radius: 13px 13px 0 0; cursor: move; user-select: none; touch-action: none;
 }
-.win-icon svg { display: block; width: 14px; height: 14px; }
+.win-bar::after {   /* a ribbon of party colours under the bar */
+    content: ''; position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; border-radius: 2px; opacity: 0.8;
+    background: linear-gradient(90deg, var(--pink), var(--yellow), var(--lime), var(--cyan), var(--violet));
+}
+.win-icon { color: var(--yellow); }
+.win-icon svg { display: block; width: 15px; height: 15px; }
 .win-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.win-glass { width: 64px; height: 16px; margin: 0 4px; accent-color: var(--pink); cursor: pointer; opacity: 0.55; transition: opacity 0.15s; }
+.win-glass:hover, .win-glass:focus-visible { opacity: 1; }
 .win-btn {
-    width: 22px; height: 22px; padding: 0; border: none; border-radius: 3px; cursor: pointer;
-    background: none; color: var(--dim); font-size: 13px;
+    width: 24px; height: 24px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+    background: none; color: rgb(255 255 255 / 0.6); font-size: 13px; font-family: inherit;
 }
-.win-btn:hover { color: var(--green); background: rgba(0, 255, 0, 0.12); }
-.win-body { position: relative; flex: 1; min-height: 0; overflow: hidden; color: #000; }
+.win-btn:hover { color: #fff; background: rgb(255 255 255 / 0.15); }
+.win-close:hover { background: var(--pink); }
+.win-body { position: relative; flex: 1; min-height: 0; overflow: hidden; color: #fff; container-type: size; border-radius: 0 0 13px 13px; }
 .win-body canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; touch-action: none; }
 .win-grip {
-    position: absolute; z-index: 2; width: 12px; height: 12px; touch-action: none;
-    background: var(--green); border: 2px solid #000; border-radius: 2px;
+    position: absolute; z-index: 2; width: 14px; height: 14px; touch-action: none; border-radius: 50%;
+    background: var(--pink); border: 2px solid #fff; box-shadow: 0 0 6px rgb(255 95 162 / 0.7);
+    opacity: 0; transition: opacity 0.15s, transform 0.15s;
 }
-.win-grip.nw { left: -6px; top: -6px; cursor: nwse-resize; }
-.win-grip.ne { right: -6px; top: -6px; cursor: nesw-resize; }
-.win-grip.sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
-.win-grip.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.win:hover .win-grip, .win.moving .win-grip { opacity: 1; }
+.win-grip:hover { transform: scale(1.3); }
+.win-grip.nw { left: -7px; top: -7px; cursor: nwse-resize; }
+.win-grip.ne { right: -7px; top: -7px; cursor: nesw-resize; }
+.win-grip.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+.win-grip.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
 .win.moving .win-body { pointer-events: none; }   /* a drag over an app's canvas stays a drag */
-/* see-through (Graffiti): the picture shows through, under a dashed edge */
-.win.glass { background: none; border: 1px dashed rgba(0, 255, 0, 0.5); box-shadow: none; }
-.win.glass .win-bar { background: rgba(0, 0, 0, 0.6); }
-/* on a phone: one at a time, filling its place; nothing to move or size */
+/* see-through (Graffiti): only the picture under it, inside a dashed edge; nothing to make solid */
+.win.glass { background: none; -webkit-backdrop-filter: none; backdrop-filter: none; border: 1px dashed rgb(255 255 255 / 0.4); box-shadow: none; }
+.win.glass .win-bar { background: rgb(0 0 0 / 0.45); }
+.win.glass .win-glass { display: none; }
+@media (hover: none) { .win-grip { opacity: 1; } .win-glass { opacity: 1; } }
 .app:not([data-mode="side"]) .win-grip { display: none; }
 .app:not([data-mode="side"]) .win-bar { cursor: default; }
-.win.filled { inset: 0; border: none; box-shadow: none; }
+.win.filled { inset: 0; border: none; box-shadow: none; border-radius: 0; }
+.win.filled .win-bar, .win.filled .win-body { border-radius: 0; }
 .win.filled .win-min { display: none; }                 /* a tab: Chat or another tab puts it away */
 .app[data-mode="overlay"] .desk > .win { top: 44px !important; }   /* under the tabs */
 .doc-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; }
+.doc.data .doc-scroll, .doc.data .doc-bar { display: none; }      /* a database: Datasette's frame instead */
+.doc-data { flex: 1; min-height: 0; border: 0; background: #fff; }
 .doc-scroll canvas { display: block; margin: auto; background: #fff; box-shadow: 0 0 24px rgba(0, 0, 0, 0.6); }
 .doc.fit-width .doc-scroll canvas { margin: 0 auto; }
 .doc-bar {

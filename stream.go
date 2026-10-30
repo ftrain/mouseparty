@@ -119,14 +119,18 @@ func countdownCommand(seconds int, title string, o StreamOpts) ([]string, []stri
 	}, seconds, o)
 }
 
-// documentCommand: while a PDF is up, viewers' pages show the document itself over
+// documentCommand: while a PDF or a database is up, viewers' pages show it over
 // the video; the stream carries this card (and silence) until the app moves on
-func documentCommand(title string, o StreamOpts) ([]string, []string) {
+func documentCommand(kind, title string, o StreamOpts) ([]string, []string) {
 	title, size := fitText(title, canvasW, 64, 32, 48)
+	doing, where := "> reading together", "the pages are on the Open House Party page"
+	if kind == "db" {
+		doing, where = "> looking through the data together", "the tables are on the Open House Party page"
+	}
 	return cardCommand([]CardLine{
-		{"> reading together", green, 40, "h/2-120", true},
+		{doing, green, 40, "h/2-120", true},
 		{title, "white", size, "h/2-40", false},
-		{"the pages are on the Open House Party page", "0x8e8e93", 28, "h/2+80", true},
+		{where, "0x8e8e93", 28, "h/2+80", true},
 	}, 0, o)
 }
 

@@ -9,7 +9,7 @@ OpenHouseParty.apps.poll = (ctx, view) => {
             out.push(h('p', {}, h('b', {}, p.question), h('span', { class: 'muted' }, ` — ${p.by}`)));
             p.options.forEach((o, i) => out.push(h('div', { style: 'margin:3px 0' },
                 L.button(o, () => kit.send({ kind: 'vote', i }), { disabled: !p.open, on: p.choice === i }),
-                h('span', { style: `display:inline-block;height:10px;background:#000;margin-left:6px;width:${Math.round(100 * p.counts[i] / total)}px` }),
+                h('span', { style: `display:inline-block;vertical-align:middle;height:0.7em;border-radius:1em;margin-left:0.4em;transition:width .4s;background:linear-gradient(90deg,var(--cyan),var(--pink));width:${(8 * p.counts[i] / total).toFixed(2)}em` }),
                 ` ${p.counts[i]}`)));
             out.push(p.open ? h('p', {}, 'Closes in ', L.timer(p.left), ' ', p.mine ? L.button('Close it', () => kit.send({ kind: 'close' })) : null)
                 : h('p', { class: 'muted' }, 'Closed.'));

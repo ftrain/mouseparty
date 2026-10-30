@@ -34,39 +34,53 @@ OpenHouseParty.apps.room = (ctx, state) => {
     function render() {
         const { x: bx, y: by, w: bw, h: bh } = box;
         g.clearRect(0, 0, canvas.width, canvas.height);
-        g.strokeStyle = '#ccc';
+        g.strokeStyle = 'rgba(255,255,255,0.12)';
         g.lineWidth = 1;
         for (let i = 1; i < 16; i++) line(bx + bw * i / 16, by, bx + bw * i / 16, by + bh);
         for (let i = 1; i < 9; i++) line(bx, by + bh * i / 9, bx + bw, by + bh * i / 9);
-        g.strokeStyle = '#000';
+        g.strokeStyle = 'rgba(255,255,255,0.35)';
         g.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
-        const r = bh * 0.025, now = Date.now(), me = ctx.me();
-        g.font = `${Math.max(11, bh * 0.025)}px monospace`;
+        const r = bh * 0.03, now = Date.now(), me = ctx.me();
+        g.font = `700 ${Math.max(11, bh * 0.03)}px ui-rounded, system-ui, sans-serif`;
         g.textAlign = 'center';
         for (const [id, p] of people) {
             const px = bx + p.x * bw, py = by + p.y * bh;
             g.beginPath();
             g.arc(px, py, r, 0, Math.PI * 2);
-            g.fillStyle = id === me.id ? '#000' : '#fff';
+            g.fillStyle = hue(p.name);
+            g.shadowColor = hue(p.name);
+            g.shadowBlur = r;
             g.fill();
+            g.shadowBlur = 0;
+            g.lineWidth = id === me.id ? 3 : 1;
+            g.strokeStyle = '#fff';
             g.stroke();
-            g.fillStyle = '#000';
-            g.fillText(p.name, px, py + r * 2.2);
+            g.lineWidth = 1;
+            g.fillStyle = '#fff';
+            g.fillText(p.name, px, py + r * 2.4);
             if (p.said && p.saidUntil > now) {
                 const text = p.said.length > 60 ? p.said.slice(0, 59) + '…' : p.said;
                 const tw = g.measureText(text).width + 12, th = r * 1.6;
                 const left = Math.max(bx, Math.min(px - tw / 2, bx + bw - tw)), top = Math.max(by, py - r * 2 - th);
                 g.fillStyle = '#fff';
-                g.fillRect(left, top, tw, th);
-                g.strokeRect(left, top, tw, th);
-                g.fillStyle = '#000';
+                g.beginPath();
+                g.roundRect(left, top, tw, th, th / 2);
+                g.fill();
+                g.fillStyle = '#1a1030';
                 g.fillText(text, left + tw / 2, top + th * 0.7);
             }
         }
         if (!people.has(me.id)) {
-            g.fillStyle = '#888';
+            g.fillStyle = 'rgba(255,255,255,0.7)';
             g.fillText(me.name ? 'Click to walk in' : 'Join the chat to walk in', bx + bw / 2, by + bh - r);
         }
+    }
+
+    // hue: each name its own colour, the same on every page
+    function hue(name) {
+        let n = 0;
+        for (const ch of name || '') n = (n * 31 + ch.charCodeAt(0)) % 360;
+        return `hsl(${n}, 90%, 62%)`;
     }
 
     function line(x1, y1, x2, y2) {

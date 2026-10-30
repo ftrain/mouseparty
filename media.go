@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -30,6 +32,7 @@ var (
 		".dtshd", ".thd", ".mlp", ".ape", ".wv", ".tta", ".tak", ".mka", ".mpc", ".ra", ".amr", ".awb", ".au", ".snd",
 		".voc", ".ofr", ".dsf", ".dff", ".shn", ".gsm", ".qcp", ".8svx", ".sln", ".xa", ".rf64", ".bwf")
 	docExts = exts(".pdf")
+	dbExts  = exts(".db", ".sqlite", ".sqlite3", ".db3")
 )
 
 // playable: ffmpeg finds sound, or a moving picture at least a second long (not a still image), in it
@@ -50,14 +53,17 @@ func ext(path string) string { return strings.ToLower(filepath.Ext(path)) }
 
 func shareable(path string) bool {
 	e := ext(path)
-	return videoExts[e] || audioExts[e] || docExts[e]
+	return videoExts[e] || audioExts[e] || docExts[e] || dbExts[e]
 }
 
-// kindOf: "video", "audio" (played over a still of its cover) or "pdf" (read together)
+// kindOf: "video", "audio" (played over a still of its cover), "pdf" (read together)
+// or "db" (a SQLite database, looked through together)
 func kindOf(path string) string {
 	switch e := ext(path); {
 	case docExts[e]:
 		return "pdf"
+	case dbExts[e]:
+		return "db"
 	case audioExts[e]:
 		return "audio"
 	}
@@ -202,6 +208,40 @@ func pdfPages(path string) int {
 		return 0
 	}
 	return n
+}
+
+// dbMaxBytes: every viewer's browser downloads the whole database and holds it in memory
+const dbMaxBytes = 512 << 20
+
+// sqliteSize: a SQLite database's size in bytes, or why it can't be shared
+func sqliteSize(path string) (int64, string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, "can't open it"
+	}
+	defer f.Close()
+	head := make([]byte, 16)
+	if _, err := io.ReadFull(f, head); err != nil || string(head) != "SQLite format 3\x00" {
+		return 0, "not a SQLite database"
+	}
+	st, err := f.Stat()
+	if err != nil {
+		return 0, "can't open it"
+	}
+	if st.Size() > dbMaxBytes {
+		return st.Size(), "too big to share"
+	}
+	return st.Size(), ""
+}
+
+func formatBytes(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	}
+	return fmt.Sprintf("%d KB", max(1, n>>10))
 }
 
 // Release-name noise after the title: "time.trumpet.s01e01.dvdrip.xvid-haggis"

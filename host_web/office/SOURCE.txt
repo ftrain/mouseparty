@@ -1,1 +1,2 @@
 https://github.com/aboard-io/tinylittleoffice/commit/924fbca4e5bab89c5d9281cfbf7049f924a0495b
+Patched by scripts/patch_office.py (the Pinboard's cut, copy and paste).
