@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build Tiny Little Office's editors (github.com/aboard-io/tinylittleoffice, MIT)
 # from a pinned commit into host_web/office/: the documents on the viewer page
-# (apps/office.go, host_web/apps/office.js) are drawn by them. Needs Node 24 or
+# (apps/office.go, web/viewer/apps/office.ts) are drawn by them, and typed by the
+# library's own declarations, which go into web/office/. Needs Node 24 or
 # later and git. The output is checked in, so this runs only to move the pin:
 #
 #   scripts/vendor_office.sh               the pinned commit
@@ -34,10 +35,17 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 # the editors, their stylesheet, what they fetch when asked for, the fonts, and
 # the kernel (doc.js: what carries one person's changes over another's, which the
-# editors hold but don't export); not the types or the command line
+# editors hold but don't export); not the command line
 cp "$SRC/packages/doc/dist/editors.js" "$SRC/packages/doc/dist/editors.css" "$SRC/packages/doc/dist/doc.js" "$OUT/"
 cp -R "$SRC/packages/doc/dist/editors" "$SRC/packages/doc/dist/fonts" "$OUT/"
 echo "$TLO_REPO/commit/$COMMIT" > "$OUT/SOURCE.txt"
+
+# the types of editors.js and doc.js (types/editors.d.ts and types/kernel.d.ts, and
+# what they name), for web/viewer/apps/office.ts; never served, so not in host_web
+TYPES=web/office
+rm -rf "$TYPES" && mkdir -p "$(dirname "$TYPES")"
+cp -R "$SRC/packages/doc/dist/types" "$TYPES"
+echo "$TLO_REPO/commit/$COMMIT" > "$TYPES/SOURCE.txt"
 
 mkdir -p licenses/tinylittleoffice
 cp "$SRC/LICENSE" licenses/tinylittleoffice/LICENSE

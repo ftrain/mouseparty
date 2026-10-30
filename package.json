@@ -1,0 +1,24 @@
+{
+    "name": "mouseparty-web",
+    "private": true,
+    "type": "module",
+    "description": "Mouse Party's two pages in TypeScript: the viewer page (web/viewer, built into host_web/) and the Mac app's window (web/window, built into frontend/).",
+    "license": "MIT",
+    "engines": {
+        "node": ">=24"
+    },
+    "scripts": {
+        "build": "vite build --mode viewer && vite build --mode window",
+        "typecheck": "tsc --noEmit",
+        "lint": "tsc --noEmit && prettier --check .",
+        "format": "prettier --write ."
+    },
+    "devDependencies": {
+        "@types/node": "26.6.4",
+        "lit": "3.3.3",
+        "lucide": "1.57.0",
+        "prettier": "3.9.10",
+        "typescript": "7.0.2",
+        "vite": "8.3.4"
+    }
+}

@@ -1,0 +1,113 @@
+// Spies (apps/spies.go): spymasters give one-word clues; their team finds their agents.
+import type { Start } from '../types.ts';
+import * as L from './lib.ts';
+
+const h = L.h;
+
+type Team = 'red' | 'blue';
+type Color = Team | 'neutral' | 'assassin';
+// apps/spies.go View: past the lobby, the board (a card's colour only once it's found, but for the spymasters)
+interface View {
+    phase: 'lobby' | 'clue' | 'guess' | 'over';
+    lobby: L.Lobby;
+    cards: { word: string; color: Color | ''; revealed: boolean }[];
+    team: Team | ''; // '': watching
+    master: boolean;
+    turn: Team;
+    clue: string;
+    number: number;
+    guesses: number;
+    left: number;
+    teams: Record<Team, string[]>;
+    winner: Team | '';
+    why: string;
+    remaining: Record<Team, number>;
+}
+type Event = { kind: 'nope'; why: string };
+type Out = L.LobbyMsg | { kind: 'pick'; i: number } | { kind: 'clue'; word: string; n: number } | { kind: 'pass' };
+
+const spies: Start<View, Event, Out> = (ctx, view) => {
+    const COLOR: Record<Color, string> = { red: '#ff4d5e', blue: '#3ea6ff', neutral: '#d9cfb8', assassin: '#111' };
+    const m = L.mount<View, Out>(ctx, 'cover', (v, kit) => {
+        if (v.phase === 'lobby')
+            return L.lobby(
+                v.lobby,
+                kit,
+                'Spies',
+                'Two teams. Each spymaster knows which words are their agents and gives one-word clues with a number; their team picks the words. Avoid the assassin.',
+            );
+        const myGo = v.team === v.turn && v.phase === 'guess' && !v.master;
+        const cards = h(
+            'div',
+            { class: 'grid', style: 'grid-template-columns:repeat(5,minmax(0,8em));grid-auto-rows:3.6em;font-size:0.9em' },
+            v.cards.map((c, i) =>
+                h(
+                    'div',
+                    {
+                        class: 'cell',
+                        style: c.revealed
+                            ? `background:${COLOR[c.color as Color]};color:${c.color === 'neutral' ? '#222' : '#fff'};text-shadow:none;opacity:.85`
+                            : (c.color ? `border:0.2em solid ${COLOR[c.color]};` : '') + (myGo ? 'cursor:pointer' : ''),
+                        on: {
+                            click: () => {
+                                if (myGo && !c.revealed) kit.send({ kind: 'pick', i });
+                            },
+                        },
+                    },
+                    c.word.toUpperCase(),
+                ),
+            ),
+        );
+        let status;
+        if (v.phase === 'over') status = h('p', {}, h('b', {}, `${v.winner.toUpperCase()} WINS. `), v.why);
+        else if (v.phase === 'clue') {
+            status =
+                v.master && v.team === v.turn
+                    ? h(
+                          'p',
+                          {},
+                          'Your clue: ',
+                          L.field(kit, 'clue', 'one word', { size: 14 }),
+                          L.field(kit, 'n', 'how many', { size: 6, max: 1 }),
+                          L.button('Give', () => kit.send({ kind: 'clue', word: kit.keep('clue').value, n: Number(kit.keep('n').value) || 0 })),
+                          ' ',
+                          L.timer(v.left),
+                      )
+                    : h('p', {}, `${v.turn.toUpperCase()}'s spymaster is thinking… `, L.timer(v.left));
+        } else {
+            status = h(
+                'p',
+                {},
+                `${v.turn.toUpperCase()}: `,
+                h('b', {}, `${v.clue.toUpperCase()} ${v.number}`),
+                ` · ${v.guesses} guesses left · `,
+                L.timer(v.left),
+                ' ',
+                myGo ? L.button('End turn', () => kit.send({ kind: 'pass' })) : null,
+            );
+        }
+        return [
+            h('h2', {}, 'Spies', v.team ? ` — you're ${v.team.toUpperCase()}${v.master ? ', spymaster' : ''}` : ' — watching'),
+            status,
+            cards,
+            h(
+                'div',
+                { class: 'cols' },
+                (['red', 'blue'] as const).map((t) => h('div', {}, h('h3', { style: `color:${COLOR[t]}` }, `${t.toUpperCase()} · ${v.remaining[t]} to find`), h('p', {}, v.teams[t].join(', ')))),
+            ),
+        ];
+    });
+    let phase = view.phase;
+    m.draw(view);
+    return {
+        view(v) {
+            if (v.phase === 'over' && phase !== 'over') L.confetti(ctx, v.winner === v.team ? 140 : 40);
+            phase = v.phase;
+            m.draw(v);
+        },
+        message(e) {
+            if (e.kind === 'nope') m.kit.note(e.why);
+        },
+    };
+};
+export default spies;

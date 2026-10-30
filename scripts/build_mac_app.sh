@@ -61,6 +61,7 @@ for bin in "${TOOLS[@]}"; do
 done
 [ -f media/standby_opus.mp4 ] || scripts/make_standby_card.sh
 scripts/fetch_pandoc.sh   # pandoc as WebAssembly, run in-process (wasm.go): documents brought in
+scripts/build_web.sh      # the pages, from their TypeScript, into host_web/ and frontend/ (Node 24)
 
 go run "$WAILS" build -platform darwin/arm64 -skipbindings -trimpath -clean
 rm -rf "$DIST/$APP_NAME.app"
