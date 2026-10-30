@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 TLO_REPO=https://github.com/aboard-io/tinylittleoffice
-TLO_REF=${TLO_REF:-924fbca4e5bab89c5d9281cfbf7049f924a0495b}   # the pinboard branch, from v2
+TLO_REF=${TLO_REF:-d42992307a8b6fe7c0597450fc212a85c314ff7e}   # its office branch: v2 and the Pinboard
 
 if [ -n "${TLO_SRC:-}" ]; then
     SRC=$TLO_SRC
@@ -38,7 +38,6 @@ mkdir -p "$OUT"
 cp "$SRC/packages/doc/dist/editors.js" "$SRC/packages/doc/dist/editors.css" "$SRC/packages/doc/dist/doc.js" "$OUT/"
 cp -R "$SRC/packages/doc/dist/editors" "$SRC/packages/doc/dist/fonts" "$OUT/"
 echo "$TLO_REPO/commit/$COMMIT" > "$OUT/SOURCE.txt"
-python3 scripts/patch_office.py   # what the pinned commit lacks (the Pinboard's cut, copy and paste)
 
 mkdir -p licenses/tinylittleoffice
 cp "$SRC/LICENSE" licenses/tinylittleoffice/LICENSE

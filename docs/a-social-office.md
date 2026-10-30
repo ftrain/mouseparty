@@ -65,7 +65,7 @@ person's Mac and a link.
   and two pages' documents parted. A new document is seeded with its app's
   blank before anyone touches it, so a pinboard's first two notes land in one
   table. `apps/office.go`, `host_web/apps/office.js`.
-- **The Pinboard**, new in Tiny Little Office (its `pinboard` branch): notes,
+- **The Pinboard**, new in Tiny Little Office (its `office` branch, v2 and the Pinboard): notes,
   text, pictures, frames, pen strokes and arrows on an open canvas, a table
   with a row per thing and a stable id each, so arrows keep their ends when
   people add and take things away at once; a move is a write of two cells, so
