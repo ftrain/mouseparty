@@ -132,3 +132,39 @@ func TestDroppedDocumentsAndZip(t *testing.T) {
 		t.Fatalf("%+v", v.Rows)
 	}
 }
+
+// Dropped on the Dock icon, one at a time: gathered, and added in the order they came
+func TestDockDrop(t *testing.T) {
+	if findTool("mediamtx") == "" {
+		t.Skip("needs mediamtx (adding starts hosting)")
+	}
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	var files []string
+	for _, n := range []string{"b.rtf", "a.md", "c.csv"} {
+		f := filepath.Join(dir, n)
+		os.WriteFile(f, []byte("x"), 0o644)
+		files = append(files, f)
+	}
+	a := NewApp(standby)
+	a.hostSetup = func(h *Host) {
+		h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
+	}
+	go a.run()
+	defer a.shutdown(nil)
+	for _, f := range files {
+		a.openFile(f)
+	}
+	var got []string
+	for end := time.Now().Add(5 * time.Second); time.Now().Before(end) && len(got) < 3; time.Sleep(50 * time.Millisecond) {
+		got = nil
+		a.wait(func() {
+			for _, it := range a.cfg.Queue {
+				got = append(got, filepath.Base(it.Path))
+			}
+		})
+	}
+	if strings.Join(got, " ") != "b.rtf a.md c.csv" {
+		t.Fatal(got)
+	}
+}

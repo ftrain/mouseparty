@@ -69,6 +69,7 @@ func main() {
 		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "io.github.ftrain.mouseparty",
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) { runtime.WindowUnminimise(ctx); runtime.Show(ctx) }},
 		Mac: &mac.Options{
+			OnFileOpen: app.openFile, // dropped on the Dock icon (packaging/darwin/Info.plist says anything can be)
 			About: &mac.AboutInfo{Title: "Mouse Party", Message: "Have friends over: movies, chat and games, hosted from this Mac.\n\n" +
 				"MIT licence. It includes ffmpeg (GPL), MediaMTX, cloudflared and more, each under its own " +
 				"licence: see Contents/Resources/Licenses inside the app, and github.com/ftrain/mouseparty."},

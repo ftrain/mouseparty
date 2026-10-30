@@ -23,6 +23,24 @@
         <string>true</string>
         <key>NSHumanReadableCopyright</key>
         <string>{{.Info.Copyright}}</string>
+        <!-- Anything can be dropped on the Dock icon (main.go OnFileOpen): it's sorted as a drop on the
+             list is (app.go addPaths). Alternate: Mouse Party is never the app a file opens in by default -->
+        <key>CFBundleDocumentTypes</key>
+        <array>
+          <dict>
+            <key>CFBundleTypeName</key>
+            <string>Anything for the party</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+              <string>public.data</string>
+              <string>public.folder</string>
+            </array>
+          </dict>
+        </array>
         {{if .Info.FileAssociations}}
         <key>CFBundleDocumentTypes</key>
         <array>

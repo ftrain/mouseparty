@@ -105,6 +105,10 @@ type App struct {
 
 	cueMu    sync.Mutex
 	cueCache map[cueKey][]Cue
+
+	openMu   sync.Mutex // files dropped on the Dock icon, gathered (openFile)
+	opening  []string
+	openSoon *time.Timer
 }
 
 func NewApp(standby []byte) *App {
@@ -198,6 +202,23 @@ func (a *App) Seek(seconds float64)         { a.do(func() { a.seek(seconds) }) }
 func (a *App) ShowPage(page int)            { a.do(func() { a.showPage(page) }) }
 func (a *App) TurnPage(step int)            { a.do(func() { a.turnPage(step) }) }
 func (a *App) AddPaths(p []string, row int) { go a.addPaths(p, row) }
+
+// openFile: a file or folder dropped on the Dock icon (main.go's OnFileOpen), one call each; those that come
+// together are added together, in the order they came, as a drop on the list is
+func (a *App) openFile(path string) {
+	a.openMu.Lock()
+	defer a.openMu.Unlock()
+	a.opening = append(a.opening, path)
+	if a.openSoon == nil {
+		a.openSoon = time.AfterFunc(300*time.Millisecond, func() {
+			a.openMu.Lock()
+			paths := a.opening
+			a.opening, a.openSoon = nil, nil
+			a.openMu.Unlock()
+			a.addPaths(paths, -1)
+		})
+	}
+}
 
 // ---------- what the app is doing ----------
 // One state, worked out from the facts, decides what can be pressed:
