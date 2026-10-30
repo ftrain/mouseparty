@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ftrain/openhouseparty/apps"
+	"github.com/ftrain/mouseparty/apps"
 )
 
 const (
@@ -85,7 +85,7 @@ func (h *Host) readDocument(ctx context.Context, name string, b []byte, app stri
 	if !h.pandoc.ok() {
 		return "", errors.New("documents can't be read in this build")
 	}
-	dir, err := os.MkdirTemp("", "openhouseparty-read-*")
+	dir, err := os.MkdirTemp("", "mouseparty-read-*")
 	if err != nil {
 		return "", err
 	}

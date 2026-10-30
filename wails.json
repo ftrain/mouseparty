@@ -1,13 +1,13 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "OpenHouseParty",
-  "outputfilename": "OpenHouseParty",
+  "name": "MouseParty",
+  "outputfilename": "MouseParty",
   "frontend:dir": "frontend",
   "frontend:install": "",
   "frontend:build": "",
   "build:dir": "packaging",
   "info": {
-    "productName": "Open House Party",
+    "productName": "Mouse Party",
     "productVersion": "1.0.0",
     "comments": "Have friends over: movies, chat and games, hosted from this Mac."
   }

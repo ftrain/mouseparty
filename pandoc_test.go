@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ftrain/openhouseparty/apps"
+	"github.com/ftrain/mouseparty/apps"
 )
 
 func TestTLOOf(t *testing.T) {

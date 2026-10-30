@@ -1,6 +1,6 @@
 // Anagrams (apps/anagram.go): unscramble the word first. Over the video.
-OpenHouseParty.apps.anagram = (ctx, view) => {
-    const L = OpenHouseParty.lib, h = L.h;
+MouseParty.apps.anagram = (ctx, view) => {
+    const L = MouseParty.lib, h = L.h;
     const m = L.mount(ctx, 'cover', (v, kit) => [
         h('div', { style: 'display:flex;gap:0.25em;flex-wrap:wrap;margin:0.2em 0 0.5em' }, [...v.letters.toUpperCase()].map((l, i) =>
             h('span', { class: 'cell', style: `width:1.6em;height:1.6em;font-size:2.2em;font-weight:800;animation:ty-pop .4s ${i * 0.04}s backwards` }, l))),

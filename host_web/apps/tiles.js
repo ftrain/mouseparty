@@ -1,7 +1,7 @@
 // Tiles (apps/tiles.go): the crossword tile game. Click a tile in your rack, then
 // a square; click a placed tile to take it back; Play when the word is down.
-OpenHouseParty.apps.tiles = (ctx, view) => {
-    const L = OpenHouseParty.lib, h = L.h;
+MouseParty.apps.tiles = (ctx, view) => {
+    const L = MouseParty.lib, h = L.h;
     let pick = null;       // the rack index picked up
     let placed = [];       // [{r, c, l, k}] laid this turn, k its rack index
     let swapping = null;   // rack indexes chosen to swap, while choosing

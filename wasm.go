@@ -5,7 +5,7 @@ package main
 // folder it's given and nothing else of the Mac (no network, no other files).
 // Compiling a module to the Mac's own code takes seconds, so it's done the
 // first time a tool is wanted and kept until hosting stops; the compiled code
-// is also written to ~/Library/Caches/Open House Party/wasm (the program alone,
+// is also written to ~/Library/Caches/Mouse Party/wasm (the program alone,
 // named by its hash: nothing of what it reads), so the next session starts it
 // in under a second.
 
@@ -33,7 +33,7 @@ var wasmCacheDir = func() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(d, "Open House Party", "wasm")
+	return filepath.Join(d, "Mouse Party", "wasm")
 }
 
 // findWasm: a tool's module, in the app (Contents/Resources/wasm) or, building

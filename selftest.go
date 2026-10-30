@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// selftest is `OpenHouseParty --selftest`: host from this Mac (router untouched), check the
+// selftest is `MouseParty --selftest`: host from this Mac (router untouched), check the
 // page, the stand-by stream and the WebRTC handshake answer, publish a short
 // countdown, and stop. 0 if it all worked. For checking a build, here or in CI.
 func selftest() int {
@@ -55,14 +55,14 @@ func selftest() int {
 	check("the documents' editors come as JavaScript", func() (string, error) { return typeIs(base+"office/editors.js", "text/javascript") })
 	check("documents are drawn by office.js", func() (string, error) { return typeIs(base+"apps/office.js", "text/javascript") })
 	check("SQLite opens read-only", func() (string, error) {
-		d, err := openData(filepath.Join(os.TempDir(), "openhouseparty-selftest-none.db"), "none")
+		d, err := openData(filepath.Join(os.TempDir(), "mouseparty-selftest-none.db"), "none")
 		if err == nil {
 			d.Close()
 			return "", fmt.Errorf("it made a database that wasn't there")
 		}
 		return "a missing file stays missing", nil
 	})
-	if pdf, err := os.CreateTemp("", "openhouseparty-*.pdf"); err == nil {
+	if pdf, err := os.CreateTemp("", "mouseparty-*.pdf"); err == nil {
 		pdf.WriteString("%PDF-1.4\n%%EOF\n")
 		pdf.Close()
 		h.SetDocument(document{Token: "t1", Path: pdf.Name(), Title: "Self-test", Kind: "pdf", Pages: 1, Page: 1})

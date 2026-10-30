@@ -1,4 +1,4 @@
-module github.com/ftrain/openhouseparty
+module github.com/ftrain/mouseparty
 
 go 1.27.1
 

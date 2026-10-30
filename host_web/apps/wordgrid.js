@@ -1,7 +1,7 @@
 // Word Grid (apps/wordgrid.go): find words in the letter grid; unique ones score.
 // Type a word (or click letters) and its path lights up; Enter sends it.
-OpenHouseParty.apps.wordgrid = (ctx, view) => {
-    const L = OpenHouseParty.lib, h = L.h;
+MouseParty.apps.wordgrid = (ctx, view) => {
+    const L = MouseParty.lib, h = L.h;
 
     // path: the dice spelling w, each a neighbour of the last and used once
     // (as apps/wordgrid.go's onGrid); null if there's none

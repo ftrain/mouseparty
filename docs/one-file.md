@@ -2,7 +2,7 @@
 
 *A thought experiment, October 2026. Nothing here is built yet.*
 
-Today what the app keeps is spread across `~/Library/Application Support/Open House Party/`:
+Today what the app keeps is spread across `~/Library/Application Support/Mouse Party/`:
 
 | Kept now | Where | What it is |
 |---|---|---|
@@ -108,7 +108,7 @@ without typing. The file stays sealed for anywhere else it goes. Off by default.
 |---|---|---|
 | Memory while running | Everything open | Unavoidable; gone when the app quits |
 | Pandoc's folder for a document brought in (`os.MkdirTemp`) | The uploaded file and its pictures, for about a second | Give wazero an in-memory folder instead (its FS config takes any `fs.FS`), so nothing touches disk |
-| `~/Library/Caches/Open House Party/wasm` | Compiled pandoc and Python code | Nothing of the user's (checked: no titles, names or paths in it) |
+| `~/Library/Caches/Mouse Party/wasm` | Compiled pandoc and Python code | Nothing of the user's (checked: no titles, names or paths in it) |
 | macOS swap | Whatever was paged out | Encrypted by macOS on every Mac with a T2 chip or Apple Silicon |
 | The list's paths, inside the file | Film titles, folder names | Sealed with everything else |
 

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ftrain/openhouseparty/apps"
+	"github.com/ftrain/mouseparty/apps"
 )
 
 const appsMax = 8 // open at once: more is clutter, and every one ticks and sends

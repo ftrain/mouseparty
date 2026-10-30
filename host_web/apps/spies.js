@@ -1,6 +1,6 @@
 // Spies (apps/spies.go): spymasters give one-word clues; their team finds their agents.
-OpenHouseParty.apps.spies = (ctx, view) => {
-    const L = OpenHouseParty.lib, h = L.h;
+MouseParty.apps.spies = (ctx, view) => {
+    const L = MouseParty.lib, h = L.h;
     const COLOR = { red: '#ff4d5e', blue: '#3ea6ff', neutral: '#d9cfb8', assassin: '#111' };
     const m = L.mount(ctx, 'cover', (v, kit) => {
         if (v.phase === 'lobby') return L.lobby(v.lobby, kit, 'Spies', 'Two teams. Each spymaster knows which words are their agents and gives one-word clues with a number; their team picks the words. Avoid the assassin.');

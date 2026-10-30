@@ -1,10 +1,10 @@
-// Open House Party viewer for a session hosted from someone's Mac (host.go).
+// Mouse Party viewer for a session hosted from someone's Mac (host.go).
 // Video: WebRTC straight from the host (WHEP), or HLS from the host if WebRTC
 // can't get through. Chat: a WebSocket to the host. BASE is /<session key>.
 // Nothing here talks to any other server, except a STUN server when the host
 // shares through Cloudflare (it lists it in /status): that lets WebRTC punch
 // through both ends' routers.
-const BASE = window.OPENHOUSEPARTY_BASE;
+const BASE = window.MOUSEPARTY_BASE;
 // Sessions are meant to leave nothing behind: what the page remembers (your
 // name, subtitle language, whether chat is hidden) lasts only as long as the tab
 const store = window.sessionStorage;
@@ -181,14 +181,14 @@ function endSession() {
     setApps([]);
     doc = null;
     document.getElementById('doc').hidden = true;
-    document.title = 'Open House Party';
+    document.title = 'Mouse Party';
     document.getElementById('guide').hidden = true;
     document.getElementById('viewerCount').textContent = '';
     try { store.clear(); } catch (e) {}
     setStatus('Session ended', false);
     const note = Object.assign(document.createElement('div'), { className: 'ended' });
-    const link = Object.assign(document.createElement('a'), { href: 'https://github.com/ftrain/openhouseparty', target: '_blank',
-        rel: 'noopener', textContent: 'github.com/ftrain/openhouseparty' });
+    const link = Object.assign(document.createElement('a'), { href: 'https://github.com/ftrain/mouseparty', target: '_blank',
+        rel: 'noopener', textContent: 'github.com/ftrain/mouseparty' });
     note.append(Object.assign(document.createElement('p'), { textContent: 'Your host quit the program.' }),
         Object.assign(document.createElement('p'), { textContent: 'Want to run your own? Check out ' }));
     note.lastChild.append(link);
@@ -200,7 +200,7 @@ function endSession() {
 // ---------- chat ----------
 let ws = null;
 let myName = null;
-try { myName = store.getItem('openhousepartyName'); } catch (e) {}
+try { myName = store.getItem('mousepartyName'); } catch (e) {}
 let retry = 1000;
 const box = document.getElementById('chatMessagesOverlay');
 
@@ -261,7 +261,7 @@ function join(name) {
     name = name.trim().slice(0, 30);
     if (!name) return;
     myName = name;
-    try { store.setItem('openhousepartyName', name); } catch (e) {}
+    try { store.setItem('mousepartyName', name); } catch (e) {}
     send({ type: 'join', name });
     showChatInput();
 }
@@ -347,7 +347,7 @@ document.getElementById('nameBtn').addEventListener('click', () => {
 // Remembered per device. While hidden, the chat tab on the video's right edge
 // counts the messages that arrive (not your own, not joins and leaves).
 let chatHidden = false;
-try { chatHidden = store.getItem('openhousepartyChatHidden') === '1'; } catch (e) {}
+try { chatHidden = store.getItem('mousepartyChatHidden') === '1'; } catch (e) {}
 let unread = 0;
 const chatTab = document.getElementById('chatTab');
 const unreadEl = document.getElementById('unread');
@@ -367,7 +367,7 @@ function setChatHidden(hidden) {
         box.scrollTop = box.scrollHeight;
     }
     showUnread();
-    try { store.setItem('openhousepartyChatHidden', hidden ? '1' : '0'); } catch (e) {}
+    try { store.setItem('mousepartyChatHidden', hidden ? '1' : '0'); } catch (e) {}
 }
 document.getElementById('hideChat').addEventListener('click', () => setChatHidden(true));
 setChatHidden(chatHidden);
@@ -467,7 +467,7 @@ let chosen = null;         // the track id showing, or null
 let cueList = [];          // [[start, end, text]] in movie seconds
 let nudge = 0;             // seconds: positive shows them later
 let wanted = null;         // remembered across movies: a language (or label), or 'off'; null until they pick
-try { wanted = store.getItem('openhousepartySubs'); } catch (e) {}
+try { wanted = store.getItem('mousepartySubs'); } catch (e) {}
 
 function setSubs(s) {
     if (!s) return;
@@ -497,7 +497,7 @@ async function choose(id, remember = true) {
     const t = subs.tracks.find((t) => t.id === id);
     if (remember) {
         wanted = t ? (t.lang || t.label) : 'off';
-        try { store.setItem('openhousepartySubs', wanted); } catch (e) {}
+        try { store.setItem('mousepartySubs', wanted); } catch (e) {}
     }
     ccBtn.classList.toggle('on', !!id);
     buildMenu();
@@ -583,7 +583,7 @@ function setSchedule(m) {
     schedule = { rows: m.rows, skew: Date.now() / 1000 - m.now };   // add skew to a host time to get ours
     // the tab is named after what's on (the first row has a start time once the host presses Play)
     const on = m.rows[0];
-    document.title = on && on.start != null ? on.title : 'Open House Party';
+    document.title = on && on.start != null ? on.title : 'Mouse Party';
     if (!guide.hidden) renderGuide();
 }
 
@@ -821,13 +821,13 @@ setInterval(() => { if (!ended) pollStatus(); }, STATUS_POLL_MS);
 // side, the app chosen fills the screen. A see-through app (Graffiti) stays on
 // the picture itself, lined up with it, in every layout.
 //
-// Each app is a script, apps/<name>.js, that sets OpenHouseParty.apps[name] to a
+// Each app is a script, apps/<name>.js, that sets MouseParty.apps[name] to a
 // function of (ctx, view) returning whichever of {view(v), message(m),
 // said(name, text), resize(), stop()} it needs, usually with apps/lib.js's help.
 // ctx.layer is the window's inside; ctx.send(m) goes to the app on the host;
 // this viewer's view comes back to view(v) whenever it changes, events to message(m).
 // A document of any kind is drawn by one script, apps/office.js (info.script).
-window.OpenHouseParty = { apps: {} };
+window.MouseParty = { apps: {} };
 const desk = document.getElementById('desk');
 const dock = document.getElementById('dock');
 const tabsEl = document.getElementById('appTabs');
@@ -852,10 +852,10 @@ function script(name) {
 
 // loadAppScript: lib.js (what they all share) once, then the app's own
 async function loadAppScript(name) {
-    if (!OpenHouseParty.lib) await script('lib');
-    if (!OpenHouseParty.apps[name]) await script(name);
-    if (!OpenHouseParty.apps[name]) throw new Error(name);
-    return OpenHouseParty.apps[name];
+    if (!MouseParty.lib) await script('lib');
+    if (!MouseParty.apps[name]) await script(name);
+    if (!MouseParty.apps[name]) throw new Error(name);
+    return MouseParty.apps[name];
 }
 
 let iconsLoading = null;   // one load, however many windows ask at once
@@ -880,7 +880,7 @@ function setApps(list) {
 }
 
 // how solid each kind of window is for this viewer (the slider in its bar), 0.15 to 1: the movie shows through the rest
-const GLASS_KEY = 'openhousepartyGlass';
+const GLASS_KEY = 'mousepartyGlass';
 const glassOf = (() => { try { return JSON.parse(localStorage.getItem(GLASS_KEY)) || {}; } catch (e) { return {}; } })();
 function setGlass(w, value) {
     w.el.style.setProperty('--glass', value);

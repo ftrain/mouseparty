@@ -55,7 +55,7 @@ func encodingArgs(o StreamOpts) []string {
 // textFile: text for drawtext goes through a file, so no character in it can break
 // the filter syntax (and expansion=none stops drawtext reading %{...} in it)
 func textFile(text string) string {
-	f, err := os.CreateTemp("", "openhouseparty-*.txt")
+	f, err := os.CreateTemp("", "mouseparty-*.txt")
 	if err != nil {
 		return ""
 	}
@@ -123,9 +123,9 @@ func countdownCommand(seconds int, title string, o StreamOpts) ([]string, []stri
 // the video; the stream carries this card (and silence) until the app moves on
 func documentCommand(kind, title string, o StreamOpts) ([]string, []string) {
 	title, size := fitText(title, canvasW, 64, 32, 48)
-	doing, where := "> reading together", "the pages are on the Open House Party page"
+	doing, where := "> reading together", "the pages are on the Mouse Party page"
 	if kind == "db" {
-		doing, where = "> looking through the data together", "the tables are on the Open House Party page"
+		doing, where = "> looking through the data together", "the tables are on the Mouse Party page"
 	}
 	return cardCommand([]CardLine{
 		{doing, green, 40, "h/2-120", true},
@@ -167,7 +167,7 @@ func offsetSRT(path string, offset float64) (string, error) {
 		end := ((n[4]*3600+n[5]*60+n[6])*1000 + n[7]) + shift
 		return stamp(start) + " --> " + stamp(end)
 	})
-	f, err := os.CreateTemp("", "openhouseparty-*.srt")
+	f, err := os.CreateTemp("", "mouseparty-*.srt")
 	if err != nil {
 		return "", err
 	}
@@ -202,7 +202,7 @@ func soundInfo(path string) SoundInfo {
 
 // extractCover: the cover art, as a PNG file to loop under the sound, or ""
 func extractCover(path string, index int) string {
-	f, err := os.CreateTemp("", "openhouseparty-*.png")
+	f, err := os.CreateTemp("", "mouseparty-*.png")
 	if err != nil {
 		return ""
 	}

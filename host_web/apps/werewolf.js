@@ -1,6 +1,6 @@
 // Werewolf (apps/werewolf.go): the host narrates; wolves eat at night, the village votes by day.
-OpenHouseParty.apps.werewolf = (ctx, view) => {
-    const L = OpenHouseParty.lib, h = L.h;
+MouseParty.apps.werewolf = (ctx, view) => {
+    const L = MouseParty.lib, h = L.h;
     const ROLE = { wolf: 'a WEREWOLF. At night, choose someone to eat with the other wolves.', seer: 'the SEER. At night, choose someone to learn what they are.', villager: 'a VILLAGER. Find the wolves and vote them out by day.' };
     const m = L.mount(ctx, 'cover', (v, kit) => {
         if (v.phase === 'lobby') return L.lobby(v.lobby, kit, 'Werewolf', 'Four or more. Wolves hide among the village; each night they eat someone, each day everyone argues in the chat and votes someone out.');

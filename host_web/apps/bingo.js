@@ -1,7 +1,7 @@
 // Bingo (apps/bingo.go): a card of words from the movie's subtitles that fills
 // itself in as they're said (or as the host calls them). Over the video.
-OpenHouseParty.apps.bingo = (ctx, view) => {
-    const { h, mount } = OpenHouseParty.lib;
+MouseParty.apps.bingo = (ctx, view) => {
+    const { h, mount } = MouseParty.lib;
     const m = mount(ctx, 'cover', (v, kit) => [
         h('h2', {}, 'Bingo'),
         v.card ? h('div', { class: 'grid', style: 'grid-template-columns:repeat(5,minmax(0,5.5em));grid-auto-rows:3.4em;font-size:0.85em' },
@@ -19,7 +19,7 @@ OpenHouseParty.apps.bingo = (ctx, view) => {
         message(e) {
             if (e.kind !== 'bingo') return;
             m.kit.note(`${e.name} has BINGO!`);
-            OpenHouseParty.lib.confetti(ctx, e.name === ctx.me().name ? 140 : 50);
+            MouseParty.lib.confetti(ctx, e.name === ctx.me().name ? 140 : 50);
         },
     };
 };

@@ -2,7 +2,7 @@
 
 *An exploration, October 2026, on the `office` branch.*
 
-Open House Party started as a way to watch a movie with friends from your own
+Mouse Party started as a way to watch a movie with friends from your own
 Mac. Then it grew games, a wall to draw on, polls: things to do together while
 the picture plays. Tiny Little Office is an office suite whose documents are
 small, plain text, and (in its v2) shared: every editor tells each change as
@@ -16,7 +16,7 @@ the people are the users, and every window on the desk is open for everyone.
 A seminar watching *Vertigo* together does three things at once: it watches,
 it talks, and it writes. Today those happen in three places: the projector, the
 room (or a chat), and everyone's own laptop, where the notes are private and
-the frames are bad phone photos of the screen. In Open House Party they can
+the frames are bad phone photos of the screen. In Mouse Party they can
 happen in one place, with one clock:
 
 - **A shot log** in a Sheet: timecode, shot size, camera move, what it means.

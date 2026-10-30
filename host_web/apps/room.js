@@ -1,7 +1,7 @@
 // Room (room.go): everyone walks around a floor as a dot with their chat name.
 // Click to walk there; what you say in the chat shows over your head. The host
 // only says where each one is headed; this page does the walking.
-OpenHouseParty.apps.room = (ctx, state) => {
+MouseParty.apps.room = (ctx, state) => {
     const SPEED = 0.25;          // floor widths a second
     const SAY_MS = 6000;         // a line stays over someone's head this long
     const people = new Map();    // id -> {name, x, y, tx, ty, said, saidUntil}

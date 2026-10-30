@@ -1,6 +1,6 @@
 // Polls (apps/poll.go): ask a question, everyone votes. Over the video.
-OpenHouseParty.apps.poll = (ctx, view) => {
-    const L = OpenHouseParty.lib, h = L.h;
+MouseParty.apps.poll = (ctx, view) => {
+    const L = MouseParty.lib, h = L.h;
     const m = L.mount(ctx, 'cover', (v, kit) => {
         const out = [h('h2', {}, 'Poll')];
         const p = v.poll;

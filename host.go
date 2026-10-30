@@ -1,6 +1,6 @@
 package main
 
-// Host a Open House Party session from this Mac: no server anywhere but here.
+// Host a Mouse Party session from this Mac: no server anywhere but here.
 //
 // Viewers get a page from this Mac (WebRTC video, with HLS from here as the
 // fallback, and chat). Every URL carries a random session key and nothing answers
@@ -35,7 +35,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ftrain/openhouseparty/apps"
+	"github.com/ftrain/mouseparty/apps"
 )
 
 const (
@@ -194,7 +194,7 @@ func (h *Host) start() error {
 	}
 	key := make([]byte, 16)
 	rand.Read(key)
-	tmp, err := os.MkdirTemp("", "openhouseparty-host-")
+	tmp, err := os.MkdirTemp("", "mouseparty-host-")
 	if err != nil {
 		return err
 	}
@@ -312,7 +312,7 @@ func (h *Host) Stop() {
 
 // killLeftovers: a session that crashed or was force-quit leaves MediaMTX (and
 // cloudflared) running, holding the ports. Ours are recognisable: MediaMTX runs a
-// openhouseparty-host-* config, cloudflared tunnels to our port. Only orphans go (parent
+// mouseparty-host-* config, cloudflared tunnels to our port. Only orphans go (parent
 // 1: their app is gone); a live session's belong to its app, which may be another
 // copy of this one, or a self-test running beside it.
 func (h *Host) killLeftovers() {
@@ -327,7 +327,7 @@ func (h *Host) killLeftovers() {
 			continue
 		}
 		cmd := strings.Join(f[2:], " ")
-		if (strings.Contains(cmd, "mediamtx") && strings.Contains(cmd, "/openhouseparty-host-") && strings.HasSuffix(cmd, "mediamtx.yml")) ||
+		if (strings.Contains(cmd, "mediamtx") && strings.Contains(cmd, "/mouseparty-host-") && strings.HasSuffix(cmd, "mediamtx.yml")) ||
 			(strings.Contains(cmd, "cloudflared") && strings.HasSuffix(cmd, tunnel)) {
 			h.Log("Stopping a leftover from an earlier session: " + filepath.Base(f[2]))
 			var pid int
@@ -341,7 +341,7 @@ func (h *Host) killLeftovers() {
 	if err != nil {
 		return
 	}
-	dirs, _ := filepath.Glob(filepath.Join(os.TempDir(), "openhouseparty-host-*"))
+	dirs, _ := filepath.Glob(filepath.Join(os.TempDir(), "mouseparty-host-*"))
 	for _, d := range dirs {
 		if !strings.Contains(string(out), d) {
 			os.RemoveAll(d)
@@ -390,7 +390,7 @@ func (h *Host) viewers() int {
 // spawn runs a tool under the watchdog, in the session's folder (anything a tool
 // writes beside itself, like MediaMTX's certificates, goes with the session)
 func (h *Host) spawn(name, bin string, args ...string) (*exec.Cmd, error) {
-	cmd := exec.Command("/bin/sh", append([]string{"-c", watchdog, "openhouseparty-watch", bin}, args...)...)
+	cmd := exec.Command("/bin/sh", append([]string{"-c", watchdog, "mouseparty-watch", bin}, args...)...)
 	cmd.Dir = h.tmp
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdin, err := cmd.StdinPipe()

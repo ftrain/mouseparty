@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// OPENHOUSEPARTY_PREVIEW=<dir with cover.png> SONG=<a song> FF=<ffmpeg> go test -run TestPreviewAudioCard:
+// MOUSEPARTY_PREVIEW=<dir with cover.png> SONG=<a song> FF=<ffmpeg> go test -run TestPreviewAudioCard:
 // <dir>/clip.mp4, ten seconds of what viewers see while it plays
 func TestPreviewAudioCard(t *testing.T) {
-	dir := os.Getenv("OPENHOUSEPARTY_PREVIEW")
+	dir := os.Getenv("MOUSEPARTY_PREVIEW")
 	if dir == "" {
 		t.Skip()
 	}

@@ -17,7 +17,7 @@
 // Pictures are the host's (img/): put in, dropped, pasted, or grabbed from the
 // movie with the camera, at the moment everyone is watching.
 (() => {
-    const office = OpenHouseParty.office = OpenHouseParty.office || {};
+    const office = MouseParty.office = MouseParty.office || {};
 
     // the library, once for the page: the editors, their stylesheet, the kernel
     office.load = (base) => office.loading = office.loading || (async () => {
@@ -93,8 +93,8 @@
     const FILE_UP = [['path', { d: 'M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z' }],
         ['path', { d: 'M14 2v5a1 1 0 0 0 1 1h5' }], ['path', { d: 'M12 12v6' }], ['path', { d: 'm15 15-3-3-3 3' }]];
 
-    OpenHouseParty.apps.office = (ctx, view) => {
-        const h = OpenHouseParty.lib.h;
+    MouseParty.apps.office = (ctx, view) => {
+        const h = MouseParty.lib.h;
         const box = h('div', { class: 'office' });
         const page = h('div', { class: 'office-page' });
         box.append(page);
@@ -264,8 +264,8 @@
             if (view.seq === 0 && !view.text) {
                 // a new document starts as a copy someone asked for on this page (the reel's "Make it slides"), or
                 // as its app's own blank (a pinboard's empty table, which everyone's first things must share)
-                const seed = OpenHouseParty.seed && OpenHouseParty.seed.name === app ? OpenHouseParty.seed.text : null;
-                if (seed !== null) OpenHouseParty.seed = null;
+                const seed = MouseParty.seed && MouseParty.seed.name === app ? MouseParty.seed.text : null;
+                if (seed !== null) MouseParty.seed = null;
                 const text = seed !== null ? seed : await lib.editors.appOf(app)?.blank?.();
                 if (text) {
                     seeding = true;

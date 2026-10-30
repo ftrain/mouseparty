@@ -1,6 +1,6 @@
 // Blanks (apps/blanks.go): fill in the blank, then vote for the best.
-OpenHouseParty.apps.blanks = (ctx, view) => {
-    const L = OpenHouseParty.lib, h = L.h;
+MouseParty.apps.blanks = (ctx, view) => {
+    const L = MouseParty.lib, h = L.h;
     const m = L.mount(ctx, 'cover', (v, kit) => {
         const out = [h('h2', {}, 'Blanks'), h('p', { style: 'font-size:1.45em;line-height:1.3' }, v.prompt)];
         if (v.phase === 'write') {

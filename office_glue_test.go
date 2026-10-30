@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ftrain/openhouseparty/apps"
+	"github.com/ftrain/mouseparty/apps"
 	"github.com/gorilla/websocket"
 )
 

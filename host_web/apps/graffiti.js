@@ -1,8 +1,8 @@
 // Graffiti (apps/graffiti.go): everyone draws on the video. What you draw shows
 // at once, and again when the host sends it back to all. A minute after the
 // first line, the page turns: it goes into the Graffiti Reel, and fades here.
-OpenHouseParty.apps.graffiti = (ctx, view) => {
-    const s = OpenHouseParty.lib.sketch(ctx, view.lines);
+MouseParty.apps.graffiti = (ctx, view) => {
+    const s = MouseParty.lib.sketch(ctx, view.lines);
     s.canvas.style.transition = 'opacity 1.2s';
     let fading = null, fresh = [];   // lines on the next page, while the last one fades
     return {

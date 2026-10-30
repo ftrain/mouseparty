@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ftrain/openhouseparty/apps"
+	"github.com/ftrain/mouseparty/apps"
 )
 
 var assets = map[string]bool{"host.js": true, "host.css": true, "hls.min.js": true, "pdf.min.mjs": true, "pdf.worker.min.mjs": true}

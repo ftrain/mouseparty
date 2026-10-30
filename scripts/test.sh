@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vet and test everything, then Open House Party's own self-test: it hosts on free ports
+# Vet and test everything, then Mouse Party's own self-test: it hosts on free ports
 # (never the router, never touching a session that's running), checks the viewer
 # page, the stand-by stream and the WebRTC handshake, and publishes a countdown.
 # The play-through test and the self-test need ffmpeg (with drawtext) and

@@ -62,7 +62,7 @@ func (Base) Tick(*Room, time.Time) {}
 func (Base) Joined(*Room, Viewer)  {}
 func (Base) Left(*Room, Viewer)    {}
 
-// Kind is an app Open House Party offers
+// Kind is an app Mouse Party offers
 type Kind struct {
 	Name  string // its script is host_web/apps/<Name>.js
 	Title string

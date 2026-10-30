@@ -1,4 +1,4 @@
-# Releasing Open House Party so anyone can run it
+# Releasing Mouse Party so anyone can run it
 
 Goal: a download that installs and opens without warnings, on macOS, Linux and
 Windows, built by GitHub Actions from a version tag (as `.github/workflows/mac-app.yml`
@@ -12,13 +12,13 @@ Prices below are approximate; check them before paying.
 
 ## Before any public release
 
-- [x] **Public downloads:** github.com/ftrain/openhouseparty is public (begun afresh;
+- [x] **Public downloads:** github.com/ftrain/mouseparty is public (begun afresh;
       the history before it stays in the private, archived ftrain/minecast).
 - [x] **Licences shipped with the app:** `licenses/` (every bundled program,
       library and Go module, with its licence text) goes into each build as
       `Contents/Resources/Licenses`, the About box points there, and each release
       carries the exact sources of its GPL ffmpeg.
-- [x] **A licence for Open House Party itself:** MIT.
+- [x] **A licence for Mouse Party itself:** MIT.
 
 ## 1. macOS: signed and notarized
 
@@ -32,7 +32,7 @@ You, once:
 
 Me:
 - [ ] Release workflow: import the certificate into a temporary keychain on the
-      runner; sign every binary inside (Open House Party, MediaMTX, cloudflared, ffmpeg) with
+      runner; sign every binary inside (Mouse Party, MediaMTX, cloudflared, ffmpeg) with
       the hardened runtime and a timestamp, then the app; notarize with
       `notarytool` using the API key; staple the ticket. `scripts/build_mac_app.sh`
       already has `SIGN_IDENTITY`/`NOTARY_PROFILE`; adapt it to the API key on CI.

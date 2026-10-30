@@ -1,15 +1,15 @@
-# What Open House Party is made of, and under what licences
+# What Mouse Party is made of, and under what licences
 
-Open House Party's own code is under the MIT licence (`../LICENSE`). The app also ships,
+Mouse Party's own code is under the MIT licence (`../LICENSE`). The app also ships,
 or is built from, the work below. Each folder here holds that work's licence as
 its authors publish it, and the built app carries this whole folder in
-`Open House Party.app/Contents/Resources/Licenses`.
+`Mouse Party.app/Contents/Resources/Licenses`.
 
 ## Programs bundled in the app
 
 | | Version | Licence | Source |
 |---|---|---|---|
-| **ffmpeg**, Open House Party's own build (`scripts/build_ffmpeg.sh`) | 9.0.2 | **GPL-2.0-or-later** as built (it includes x264); FFmpeg itself is LGPL-2.1-or-later | see below |
+| **ffmpeg**, Mouse Party's own build (`scripts/build_ffmpeg.sh`) | 9.0.2 | **GPL-2.0-or-later** as built (it includes x264); FFmpeg itself is LGPL-2.1-or-later | see below |
 | [MediaMTX](https://github.com/bluenviron/mediamtx) | 1.21.3 | MIT | `mediamtx/` |
 | [cloudflared](https://github.com/cloudflare/cloudflared) | 2026.10.3 | Apache-2.0 | `cloudflared/` |
 | [pandoc](https://pandoc.org), its own WebAssembly release build (`pandoc.wasm`, `scripts/fetch_pandoc.sh`), run inside the app by wazero: documents brought in (`pandoc.go`) | 3.13 | **GPL-2.0-or-later** (with the parts its `COPYRIGHT` lists under their own) | `pandoc/`; source below |
@@ -27,7 +27,7 @@ checked against its SHA-256 by `scripts/build_ffmpeg.sh`:
 | [HarfBuzz](https://harfbuzz.github.io) | 15.0.0 | Old MIT | `harfbuzz/` |
 | [libass](https://github.com/libass/libass) | 0.17.5 | ISC | `libass/` |
 
-**ffmpeg's source.** Every GitHub release of Open House Party has these exact source
+**ffmpeg's source.** Every GitHub release of Mouse Party has these exact source
 archives attached beside the app, and `scripts/build_ffmpeg.sh` rebuilds the
 same ffmpeg from them: the configuration it uses is in that script.
 

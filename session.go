@@ -6,7 +6,7 @@ package main
 import (
 	"time"
 
-	"github.com/ftrain/openhouseparty/apps"
+	"github.com/ftrain/mouseparty/apps"
 )
 
 // SubTrack is a subtitle track handed to viewers; Cues are fetched separately

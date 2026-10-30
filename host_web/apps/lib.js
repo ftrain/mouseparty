@@ -4,11 +4,11 @@
 // text on the window's tint (--glass, each viewer's slider), everything in em of
 // a type size that follows the window's (cqmin), so a game grows with its window.
 //
-// An app script sets OpenHouseParty.apps[name] = (ctx, view) => ({view, message, said,
+// An app script sets MouseParty.apps[name] = (ctx, view) => ({view, message, said,
 // resize, stop}), any of them. L.mount does most of that: give it a render(view)
 // that returns elements, and it redraws on every new view.
 (() => {
-    const L = OpenHouseParty.lib = {};
+    const L = MouseParty.lib = {};
 
     const css = `
 .ty { --pink: #ff5fa2; --violet: #a78bfa; --cyan: #3ee0ff; --yellow: #ffd23f; --lime: #7cf27a;

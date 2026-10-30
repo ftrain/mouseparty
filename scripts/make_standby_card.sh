@@ -17,7 +17,7 @@ mkdir -p media
 ffmpeg -v error -y \
     -f lavfi -i "color=c=black:s=1280x720:r=30:d=4" \
     -f lavfi -i "anullsrc=r=48000:cl=stereo" -t 4 \
-    -vf "drawtext=fontfile=$FONT:text='OPEN HOUSE PARTY':fontcolor=$GREEN:fontsize=96:x=(w-tw)/2:y=h/2-110,
+    -vf "drawtext=fontfile=$FONT:text='MOUSE PARTY':fontcolor=$GREEN:fontsize=96:x=(w-tw)/2:y=h/2-110,
          drawtext=fontfile=$FONT:text='> stand by ':fontcolor=$GREEN:fontsize=40:x=(w-265)/2:y=h/2+20,
          drawtext=fontfile=$FONT:text='> stand by_':fontcolor=$GREEN:fontsize=40:x=(w-265)/2:y=h/2+20:enable='lt(mod(t\,1)\,0.5)'" \
     -c:v libx264 -preset slow -pix_fmt yuv420p -profile:v main -level 3.1 -bf 0 -r 30 -g 30 -keyint_min 30 -sc_threshold 0 \

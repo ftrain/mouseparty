@@ -1,6 +1,6 @@
 // Sketch (apps/sketch.go): one draws a word, the others guess it.
-OpenHouseParty.apps.sketch = (ctx, view) => {
-    const L = OpenHouseParty.lib, h = L.h;
+MouseParty.apps.sketch = (ctx, view) => {
+    const L = MouseParty.lib, h = L.h;
     let v = view;
     const pad = L.sketch(ctx, view.lines || [], { paper: true, canDraw: () => v.drawing && v.phase === 'draw', clear: () => ctx.send({ kind: 'clear' }), color: 5 });
     const lobby = L.mount(ctx, 'cover', (v, kit) => v.phase === 'lobby'

@@ -78,10 +78,10 @@ func (n *Number) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// dataDir: everything the app keeps, ~/Library/Application Support/Open House Party
+// dataDir: everything the app keeps, ~/Library/Application Support/Mouse Party
 func dataDir() string {
 	dir, _ := os.UserConfigDir()
-	return filepath.Join(dir, "Open House Party")
+	return filepath.Join(dir, "Mouse Party")
 }
 
 func configPath() string { return filepath.Join(dataDir(), "settings.json") }

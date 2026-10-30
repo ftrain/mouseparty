@@ -1,4 +1,4 @@
-// Open House Party: watch movies with friends, hosted from this Mac, gone when you quit.
+// Mouse Party: watch movies with friends, hosted from this Mac, gone when you quit.
 //
 // A Wails app: two big buttons (Play/Stop, and Copy link) over a list of movies,
 // music and PDFs (app.go, frontend/). It plays them one after another with ffmpeg
@@ -6,11 +6,11 @@
 // (host_web/: WebRTC video, HLS fallback, chat) behind a link with a random key.
 // No server anywhere else. Quit, and the session, the chat and the link are gone.
 //
-//	OpenHouseParty               the app
-//	OpenHouseParty --selftest    host on free ports, check it all works, and stop
+//	MouseParty               the app
+//	MouseParty --selftest    host on free ports, check it all works, and stop
 //
 // The queue and settings, and what apps keep (the graffiti wall, the last poll),
-// live in ~/Library/Application Support/Open House Party; nothing else about a
+// live in ~/Library/Application Support/Mouse Party; nothing else about a
 // session does.
 package main
 
@@ -52,7 +52,7 @@ func main() {
 		os.Exit(0)
 	}()
 	err := wails.Run(&options.App{
-		Title:            "Open House Party",
+		Title:            "Mouse Party",
 		Width:            520,
 		Height:           620,
 		MinWidth:         380,
@@ -66,12 +66,12 @@ func main() {
 		Bind:             []any{app},
 		Menu:             app.menu(),
 		// one copy: a second would find the ports taken and host nothing; it shows this one instead
-		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "io.github.ftrain.openhouseparty",
+		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "io.github.ftrain.mouseparty",
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) { runtime.WindowUnminimise(ctx); runtime.Show(ctx) }},
 		Mac: &mac.Options{
-			About: &mac.AboutInfo{Title: "Open House Party", Message: "Have friends over: movies, chat and games, hosted from this Mac.\n\n" +
+			About: &mac.AboutInfo{Title: "Mouse Party", Message: "Have friends over: movies, chat and games, hosted from this Mac.\n\n" +
 				"MIT licence. It includes ffmpeg (GPL), MediaMTX, cloudflared and more, each under its own " +
-				"licence: see Contents/Resources/Licenses inside the app, and github.com/ftrain/openhouseparty."},
+				"licence: see Contents/Resources/Licenses inside the app, and github.com/ftrain/mouseparty."},
 		},
 	})
 	if err != nil {

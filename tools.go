@@ -14,7 +14,7 @@ import (
 var extraToolDirs = []string{"/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"}
 
 // bundledBin is where the built app keeps ffmpeg, MediaMTX and cloudflared:
-// Open House Party.app/Contents/Resources/bin (scripts/build_mac_app.sh puts them there).
+// Mouse Party.app/Contents/Resources/bin (scripts/build_mac_app.sh puts them there).
 func bundledBin() string {
 	exe, err := os.Executable()
 	if err != nil {

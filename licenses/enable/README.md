@@ -1,6 +1,6 @@
 # ENABLE
 
-ENABLE ("Enhanced North American Benchmark Lexicon"), the word list Open House Party's
+ENABLE ("Enhanced North American Benchmark Lexicon"), the word list Mouse Party's
 word games check plays against (`apps/enable.txt.gz`, gzipped). Its authors put
 it in the public domain: there is no licence to include.
 

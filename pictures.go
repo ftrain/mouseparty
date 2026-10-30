@@ -28,7 +28,7 @@ import (
 
 	_ "golang.org/x/image/webp"
 
-	"github.com/ftrain/openhouseparty/apps"
+	"github.com/ftrain/mouseparty/apps"
 )
 
 const (
