@@ -14,10 +14,17 @@
 // The Session calls an Activity one call at a time, so it needs no locks. The
 // pieces most games need (a lobby, players and scores, turns, votes, timers,
 // the word list) are in lib.go and words.go.
+//
+// An app that keeps something past the session (the wall's graffiti, the last
+// poll) is also a Keeper: the Session saves it to <dir>/<name>.json a moment
+// after viewers change it, and when it stops, and loads it when it starts.
 package apps
 
 import (
+	"encoding/json"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -37,6 +44,16 @@ type Activity interface {
 	Joined(r *Room, v Viewer)            // a page arrived, or its viewer took a name
 	Left(r *Room, v Viewer)              // a page closed
 }
+
+// Keeper is an Activity that keeps something from one session to the next.
+// Nothing tied to a Viewer's ID: those are new every session.
+type Keeper interface {
+	Save() any           // what to keep, for encoding/json
+	Load(b []byte) error // what Save kept, last time
+}
+
+// keepEvery: how often, at most, a Keeper is written while viewers change it
+const keepEvery = 2 * time.Second
 
 // Base is an Activity's do-nothing Tick, Joined and Left, for embedding
 type Base struct{}
@@ -122,23 +139,32 @@ func (r *Room) Viewers() []Viewer { return r.viewers() }
 
 // Session runs one app for a session's viewers, from Start to Stop
 type Session struct {
-	Kind Kind
-	ID   int // this one, of the apps open: on every message to and from it
-	By   string
-	mu   sync.Mutex
-	act  Activity
-	room *Room
-	stop chan struct{}
+	Kind  Kind
+	ID    int // this one, of the apps open: on every message to and from it
+	By    string
+	mu    sync.Mutex
+	act   Activity
+	room  *Room
+	stop  chan struct{}
+	keep  string    // a Keeper's file; "" keeps nothing
+	dirty bool      // changed since it was last written
+	kept  time.Time // when it was
 }
 
 // Start runs kind, numbered id, until Stop; by is who opened it. send delivers
 // a message to one page (to > 0) or all (0); viewers lists the pages open. The
-// caller hands each page the app (Info).
-func Start(kind Kind, id int, by string, send func(to int, msg map[string]any), viewers func() []Viewer, movie Movie) *Session {
+// caller hands each page the app (Info). A Keeper is kept in dir ("" for nowhere).
+func Start(kind Kind, id int, by string, send func(to int, msg map[string]any), viewers func() []Viewer, movie Movie, dir string) *Session {
 	r := &Room{Movie: movie, Rand: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())), id: id, send: send, viewers: viewers}
 	s := &Session{Kind: kind, ID: id, By: by, room: r, stop: make(chan struct{})}
 	s.mu.Lock()
 	s.act = kind.New(r)
+	if k, ok := s.act.(Keeper); ok && dir != "" {
+		s.keep = filepath.Join(dir, kind.Name+".json")
+		if b, err := os.ReadFile(s.keep); err == nil {
+			k.Load(b) // a file that won't read: start fresh, and write over it
+		}
+	}
 	s.mu.Unlock()
 	go s.tick()
 	return s
@@ -155,7 +181,10 @@ func (s *Session) Info(v Viewer) map[string]any {
 
 // Message hands a viewer's message to the app
 func (s *Session) Message(from Viewer, m map[string]any) {
-	s.call(func(r *Room) { s.act.Message(r, from, m) })
+	s.call(func(r *Room) {
+		s.act.Message(r, from, m)
+		s.dirty = true // events (strokes) change it without Changed
+	})
 }
 
 // Joined: a page arrived or its viewer took a name; their view may differ now (they can play)
@@ -175,6 +204,24 @@ func (s *Session) Stop() {
 	case <-s.stop:
 	default:
 		close(s.stop)
+		s.save()
+	}
+}
+
+// save writes a Keeper, if it changed (with s.mu held)
+func (s *Session) save() {
+	k, ok := s.act.(Keeper)
+	if !ok || s.keep == "" || !s.dirty {
+		return
+	}
+	s.dirty, s.kept = false, time.Now()
+	b, err := json.Marshal(k.Save())
+	if err != nil || os.MkdirAll(filepath.Dir(s.keep), 0o700) != nil {
+		return
+	}
+	tmp := s.keep + ".tmp" // all of it or none: quitting mid-write leaves the last one
+	if os.WriteFile(tmp, b, 0o600) == nil {
+		os.Rename(tmp, s.keep)
 	}
 }
 
@@ -202,10 +249,13 @@ func (s *Session) call(fn func(r *Room)) {
 	}
 	fn(s.room)
 	if s.room.changed {
-		s.room.changed = false
+		s.room.changed, s.dirty = false, true
 		for _, v := range s.room.viewers() {
 			s.room.send(v.ID, map[string]any{"type": "app", "id": s.ID, "kind": "view", "view": s.act.View(v)})
 		}
+	}
+	if s.dirty && time.Since(s.kept) >= keepEvery {
+		s.save()
 	}
 }
 

@@ -134,6 +134,7 @@ type Host struct {
 	MapPorts       bool // false: LAN (and tunnel) only, the router is left alone
 	CleanLeftovers bool // false: a check running beside a real session leaves it alone
 	Standby        []byte
+	AppsDir        string // where apps keep what outlasts the session (apps.Keeper); "" nowhere
 
 	mu        sync.Mutex
 	key       string
@@ -190,7 +191,7 @@ func (h *Host) start() error {
 	h.mu.Lock()
 	h.key = base64.RawURLEncoding.EncodeToString(key)
 	h.chat = &Chat{conns: map[*chatConn]bool{}}
-	h.apps = newAppHost(h.chat, h)
+	h.apps = newAppHost(h.chat, h, h.AppsDir)
 	h.chat.hello = h.greeting
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left

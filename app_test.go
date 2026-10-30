@@ -17,7 +17,7 @@ func TestPlayThroughTheList(t *testing.T) {
 	if findTool("mediamtx") == "" || findTool("ffmpeg") == "" {
 		t.Skip("needs mediamtx and ffmpeg")
 	}
-	t.Setenv("HOME", t.TempDir()) // never the real ~/.openhouseparty.json
+	t.Setenv("HOME", t.TempDir()) // never the real settings (dataDir)
 	dir := t.TempDir()
 	var clips []string
 	for i, tone := range []int{440, 660, 880} {

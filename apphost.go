@@ -21,13 +21,14 @@ const appsMax = 8 // open at once: more is clutter, and every one ticks and send
 type appHost struct {
 	chat   *Chat
 	movie  apps.Movie
+	dir    string // where Keepers are kept; "" nowhere
 	mu     sync.Mutex
 	open   map[int]*apps.Session
 	lastID int
 }
 
-func newAppHost(chat *Chat, movie apps.Movie) *appHost {
-	return &appHost{chat: chat, movie: movie, open: map[int]*apps.Session{}}
+func newAppHost(chat *Chat, movie apps.Movie, dir string) *appHost {
+	return &appHost{chat: chat, movie: movie, dir: dir, open: map[int]*apps.Session{}}
 }
 
 func (a *appHost) send(to int, msg map[string]any) {
@@ -72,7 +73,7 @@ func (a *appHost) Open(name string, by apps.Viewer) *apps.Session {
 	a.lastID++
 	id := a.lastID
 	a.mu.Unlock()
-	s := apps.Start(kind, id, by.Name, a.send, a.chat.viewers, a.movie)
+	s := apps.Start(kind, id, by.Name, a.send, a.chat.viewers, a.movie, a.dir)
 	a.mu.Lock()
 	a.open[id] = s
 	a.mu.Unlock()

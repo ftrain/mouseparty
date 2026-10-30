@@ -2,6 +2,7 @@ package apps
 
 import (
 	"math/rand/v2"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -90,7 +91,7 @@ func TestSessionSendsViews(t *testing.T) {
 	viewers := []Viewer{ann, bob}
 	kind, _ := Lookup("anagram")
 	s := Start(kind, 3, "Ann", func(to int, m map[string]any) { out = append(out, sent{to, m}) },
-		func() []Viewer { return viewers }, nil)
+		func() []Viewer { return viewers }, nil, "")
 	defer s.Stop()
 	if info := s.Info(ann); len(out) != 0 || info["id"] != 3 || info["name"] != "anagram" || info["by"] != "Ann" || info["view"] == nil {
 		t.Fatal(info, out)
@@ -390,5 +391,42 @@ func TestAlone(t *testing.T) {
 	b2.Tick(r2, later(2*time.Minute))
 	if b2.players.Len() != 2 || b2.phase != "write" {
 		t.Fatal("voted on one answer with two playing")
+	}
+}
+
+func TestKeepersOutlastTheSession(t *testing.T) {
+	dir := t.TempDir()
+	viewers := func() []Viewer { return []Viewer{ann, bob} }
+	send := func(int, map[string]any) {}
+	start := func(name string) *Session {
+		kind, _ := Lookup(name)
+		return Start(kind, 1, "Ann", send, viewers, nil, dir)
+	}
+
+	g := start("graffiti")
+	g.Message(ann, map[string]any{"app": "graffiti", "kind": "line", "c": 1.0, "w": 0.0, "p": []any{[]any{0.1, 0.2}, []any{0.3, 0.4}}})
+	g.Stop()
+	g = start("graffiti")
+	if lines := g.act.(*graffiti).lines; len(lines) != 1 || lines[0].Color != 1 || lines[0].Points[1] != [2]float64{0.3, 0.4} {
+		t.Fatal("the wall wasn't kept:", lines)
+	}
+	g.Stop()
+
+	p := start("poll")
+	p.Message(ann, map[string]any{"app": "poll", "kind": "ask", "question": "Pizza?", "options": []any{"yes", "no"}})
+	p.Message(bob, map[string]any{"app": "poll", "kind": "vote", "i": 1.0})
+	p.Stop() // still open: it comes back closed, with its votes
+	p = start("poll")
+	defer p.Stop()
+	v := p.act.View(Viewer{9, "Cy"}).(map[string]any)
+	got := v["poll"].(map[string]any)
+	if got["question"] != "Pizza?" || got["open"] != false || got["by"] != "Ann" || got["counts"].([]int)[1] != 1 || v["canAsk"] != true {
+		t.Fatal("the poll wasn't kept:", v)
+	}
+
+	b := start("bingo") // not a Keeper: nothing written
+	b.Stop()
+	if files, _ := os.ReadDir(dir); len(files) != 2 {
+		t.Fatal(files)
 	}
 }

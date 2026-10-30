@@ -9,7 +9,9 @@
 //	OpenHouseParty               the app
 //	OpenHouseParty --selftest    host on free ports, check it all works, and stop
 //
-// The queue and settings live in ~/.openhouseparty.json; nothing about a session does.
+// The queue and settings, and what apps keep (the graffiti wall, the last poll),
+// live in ~/Library/Application Support/Open House Party; nothing else about a
+// session does.
 package main
 
 import (

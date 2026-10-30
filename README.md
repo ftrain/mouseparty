@@ -77,8 +77,8 @@ have. Words are checked against ENABLE. You join in by opening the link
 yourself. They're wireframes, there to try the idea; in the browser player's
 full screen they don't show.
 
-That's all of it. The few settings are in `~/.openhouseparty.json` (below), and the log
-goes to stderr: run `/Applications/Open House Party.app/Contents/MacOS/OpenHouseParty` from
+That's all of it. The few settings are in `~/Library/Application Support/Open House Party/settings.json` (below), and the log
+goes to stderr: run `"/Applications/Open House Party.app/Contents/MacOS/OpenHouseParty"` from
 Terminal to read it.
 
 ### What it plays
@@ -96,7 +96,7 @@ Terminal to read it.
 The app looks for subtitles when a movie is added: text and picture tracks inside
 the file, and files beside it named after it (`Movie.srt`, `Movie.en.srt`,
 `Movie.French.forced.srt`). Drop an `.srt`, `.vtt` or `.ass` onto a movie to add
-one. Each movie's `subs` setting in `~/.openhouseparty.json` is one of:
+one. Each movie's `subs` setting in `~/Library/Application Support/Open House Party/settings.json` is one of:
 
 - `viewers` (the default when there are text subtitles): every text track
   becomes a language in a **CC** menu on the viewer page. Each viewer turns them
@@ -110,7 +110,7 @@ one. Each movie's `subs` setting in `~/.openhouseparty.json` is one of:
 
 ### Settings
 
-`~/.openhouseparty.json` holds the list and these, none of them in the window:
+`~/Library/Application Support/Open House Party/settings.json` holds the list and these, none of them in the window:
 
 | Setting | Default | |
 |---|---|---|
@@ -160,7 +160,7 @@ minutes; a crashed session's folder is cleared on the next start; and the link
 is taken off the clipboard on quit. What the app can't erase: Cloudflare's own
 logs, and the dead link in viewers' histories.
 
-On your Mac, `~/.openhouseparty.json` keeps the list and settings, and nothing about a
+On your Mac, `~/Library/Application Support/Open House Party/settings.json` keeps the list and settings, and nothing about a
 session.
 
 ## The viewer page
@@ -201,7 +201,7 @@ BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # -> dist/Open House Party.app and di
   ffmpeg works for trying things, but it has no `drawtext`, so the cards fail
   with it. There's no ffprobe: the app reads files with ffmpeg alone.
 - **Running from source:** `go run github.com/wailsapp/wails/v2/cmd/wails@v2.17.0 dev -skipbindings`.
-  It starts hosting whatever is in your `~/.openhouseparty.json` list.
+  It starts hosting whatever is in your `~/Library/Application Support/Open House Party/settings.json` list.
 - **Signed builds:** `SIGN_IDENTITY="Developer ID Application: …"
   NOTARY_PROFILE=… BUNDLE_FFMPEG=1 scripts/build_mac_app.sh` signs with the
   hardened runtime and notarizes. See `docs/release-plan.md` for what proper
@@ -260,7 +260,7 @@ apps/               the apps: the Activity interface and the library games share
 portmap.go          asks the router (NAT-PMP / UPnP) to forward ports
 subtitles.go        finds a movie's subtitles and turns text ones into timed lines
 media.go            what a file holds (from ffmpeg), PDF pages, titles from file names
-config.go, tools.go ~/.openhouseparty.json; finding the bundled tools
+config.go, tools.go settings (~/Library/Application Support/Open House Party); finding the bundled tools
 host_web/           the viewer page: viewer.html, host.js, host.css, hls.js, pdf.js
 media/              the stand-by card MediaMTX loops between movies
 packaging/          the app icon and the Info.plist Wails builds with

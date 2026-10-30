@@ -7,7 +7,8 @@ import (
 	"strconv"
 )
 
-// The queue and settings live in ~/.openhouseparty.json; nothing about a session does.
+// The queue and settings live in settings.json in dataDir; nothing about a
+// session does, except what an app on viewers' pages keeps (appsDir).
 // None of the settings are in the window: the file is the place to change them.
 type Config struct {
 	OpenRouterPorts bool    `json:"open_router_ports"` // ask the router (NAT-PMP/UPnP) to let friends in; false = this network only
@@ -72,21 +73,40 @@ func (n *Number) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func configPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".openhouseparty.json")
+// dataDir: everything the app keeps, ~/Library/Application Support/Open House Party
+func dataDir() string {
+	dir, _ := os.UserConfigDir()
+	return filepath.Join(dir, "Open House Party")
 }
 
-// oldConfigPath: where the app kept them when it was called TubeYap
-func oldConfigPath() string {
+func configPath() string { return filepath.Join(dataDir(), "settings.json") }
+
+// appsDir: where apps on viewers' pages keep what outlasts a session (the
+// graffiti wall, the last poll): apps/<name>.json in dataDir
+func appsDir() string { return filepath.Join(dataDir(), "apps") }
+
+// moveOldData brings over, the first time there's no dataDir, what earlier
+// builds kept in the home folder: the settings (~/.openhouseparty.json, or
+// ~/.tubeyap.json from when it was called TubeYap) and ~/.tubeyap/apps.
+func moveOldData() {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".tubeyap.json")
+	if _, err := os.Stat(dataDir()); err == nil || home == "" {
+		return
+	}
+	if err := os.MkdirAll(dataDir(), 0o755); err != nil {
+		return
+	}
+	for _, old := range []string{".openhouseparty.json", ".tubeyap.json"} {
+		if os.Rename(filepath.Join(home, old), configPath()) == nil {
+			break
+		}
+	}
+	os.Rename(filepath.Join(home, ".tubeyap", "apps"), appsDir())
+	os.Remove(filepath.Join(home, ".tubeyap")) // only if nothing else is in it
 }
 
 func loadConfig() *Config {
-	if _, err := os.Stat(configPath()); os.IsNotExist(err) {
-		os.Rename(oldConfigPath(), configPath()) // the list from before the new name, moved over (not copied: nothing left behind)
-	}
+	moveOldData()
 	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, Queue: []*Item{}}
 	if b, err := os.ReadFile(configPath()); err == nil {
 		json.Unmarshal(b, cfg)
@@ -100,7 +120,7 @@ func loadConfig() *Config {
 
 func saveConfig(cfg *Config) {
 	b, err := json.MarshalIndent(cfg, "", "  ")
-	if err == nil {
+	if err == nil && os.MkdirAll(dataDir(), 0o755) == nil {
 		os.WriteFile(configPath(), b, 0o644)
 	}
 }
