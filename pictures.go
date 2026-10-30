@@ -3,8 +3,8 @@ package main
 // The pictures the host keeps for the pages: put in a document by a viewer,
 // grabbed from the movie, or drawn by an app (the graffiti reel). A document
 // holds "asset:<id>" (Tiny Little Office's picture fence, its docs/library.md),
-// and the pages fetch img/<id>. They're written to PicturesDir, beside what
-// the apps keep, and when hosting starts any that nothing kept names is gone.
+// and the pages fetch img/<id>. They're kept in the party file (store.go),
+// beside what the apps keep, and when hosting starts any that nothing kept names is gone.
 
 import (
 	"bytes"
@@ -18,11 +18,8 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"net/http"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -52,14 +49,14 @@ type picture struct {
 
 type pictures struct {
 	mu     sync.Mutex
-	dir    string // "" keeps them in memory only
+	party  *party // nil keeps them in memory only
 	mem    map[string]picture
 	byHash map[[32]byte]string
 	total  int
 }
 
-func newPictures(dir string) *pictures {
-	return &pictures{dir: dir, mem: map[string]picture{}, byHash: map[[32]byte]string{}}
+func newPictures(party *party) *pictures {
+	return &pictures{party: party, mem: map[string]picture{}, byHash: map[[32]byte]string{}}
 }
 
 // put keeps b (of type mime) and says its reference and size; the same bytes twice are one picture
@@ -94,8 +91,8 @@ func (p *pictures) put(b []byte, mime string) (apps.Picture, error) {
 	p.mem[id] = picture{mime, b}
 	p.byHash[sum] = id
 	p.total += len(b)
-	if p.dir != "" && os.MkdirAll(p.dir, 0o700) == nil {
-		os.WriteFile(filepath.Join(p.dir, id+ext), b, 0o600)
+	if p.party != nil {
+		p.party.putPicture(id, mime, b)
 	}
 	pic.Ref = "asset:" + id
 	return pic, nil
@@ -111,42 +108,10 @@ func (p *pictures) get(id string) (picture, bool) {
 	if pic, ok := p.mem[id]; ok {
 		return pic, true
 	}
-	if p.dir == "" {
+	if p.party == nil {
 		return picture{}, false
 	}
-	found, _ := filepath.Glob(filepath.Join(p.dir, id+".*"))
-	for _, f := range found {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			continue
-		}
-		mime := "image/svg+xml"
-		for m, ext := range pictureTypes {
-			if filepath.Ext(f) == ext {
-				mime = m
-			}
-		}
-		return picture{mime, b}, true
-	}
-	return picture{}, false
-}
-
-// prunePictures: the kept pictures nothing in keep (the apps' files) names any more go
-func prunePictures(dir, keep string) {
-	named := map[string]bool{}
-	files, _ := filepath.Glob(filepath.Join(keep, "*.json"))
-	for _, f := range files {
-		b, _ := os.ReadFile(f)
-		for _, m := range assetRef.FindAllSubmatch(b, -1) {
-			named[string(m[1])] = true
-		}
-	}
-	pics, _ := filepath.Glob(filepath.Join(dir, "*"))
-	for _, f := range pics {
-		if id := strings.TrimSuffix(filepath.Base(f), filepath.Ext(f)); !named[id] {
-			os.Remove(f)
-		}
-	}
+	return p.party.picture(id)
 }
 
 // ---------- the movie's frames, and the routes (web.go) ----------

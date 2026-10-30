@@ -8,8 +8,6 @@ package apps
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -22,21 +20,20 @@ type ReelPage struct {
 	By   []string  `json:"by"` // who drew on it
 }
 
-// Reel is the session's reel, kept in <dir>/reel.json between sessions
+// Reel is the session's reel, kept on the host's shelf ("reel") between sessions
 type Reel struct {
 	mu      sync.Mutex
-	file    string // "" keeps nothing
+	shelf   Shelf // nil keeps nothing
 	pages   []ReelPage
 	version int
 }
 
 const reelMax = 500 // pages; the oldest go
 
-func NewReel(dir string) *Reel {
-	r := &Reel{}
-	if dir != "" {
-		r.file = filepath.Join(dir, "reel.json")
-		if b, err := os.ReadFile(r.file); err == nil {
+func NewReel(shelf Shelf) *Reel {
+	r := &Reel{shelf: shelf}
+	if shelf != nil {
+		if b, ok := shelf.Load("reel"); ok {
 			json.Unmarshal(b, &r.pages)
 		}
 	}
@@ -51,14 +48,11 @@ func (r *Reel) Add(p ReelPage) {
 		r.pages = r.pages[len(r.pages)-reelMax:]
 	}
 	r.version++
-	if r.file == "" {
+	if r.shelf == nil {
 		return
 	}
-	if b, err := json.Marshal(r.pages); err == nil && os.MkdirAll(filepath.Dir(r.file), 0o700) == nil {
-		tmp := r.file + ".tmp"
-		if os.WriteFile(tmp, b, 0o600) == nil {
-			os.Rename(tmp, r.file)
-		}
+	if b, err := json.Marshal(r.pages); err == nil {
+		r.shelf.Save("reel", b)
 	}
 }
 
@@ -135,7 +129,7 @@ type reelApp struct {
 
 func newReelApp(r *Room) Activity {
 	if r.Reel == nil {
-		r.Reel = NewReel("")
+		r.Reel = NewReel(nil)
 	}
 	return &reelApp{reel: r.Reel, seen: r.Reel.Version()}
 }

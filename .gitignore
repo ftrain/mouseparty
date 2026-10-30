@@ -3,6 +3,10 @@
 packaging/bin/
 dist/
 /build
+/mouseparty
+
+# Claude Code's worktrees for helpers
+.claude/worktrees/
 
 # OS and editors
 .DS_Store

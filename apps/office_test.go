@@ -76,7 +76,7 @@ func TestOfficeKept(t *testing.T) {
 func TestGraffitiTurnsThePage(t *testing.T) {
 	r, out := testRoom(ann)
 	m := &testMovie{pos: 754}
-	r.Movie, r.Reel = m, NewReel("")
+	r.Movie, r.Reel = m, NewReel(nil)
 	g := &graffiti{}
 	g.Message(r, ann, Msg{"kind": "line", "c": 1.0, "w": 2.0, "p": []any{[]any{0.1, 0.2}, []any{0.3, 0.4}}})
 	g.Tick(r, later(30*time.Second))
@@ -102,11 +102,11 @@ func TestGraffitiTurnsThePage(t *testing.T) {
 	}
 }
 
-// The reel is kept beside the apps' files
+// The reel is kept on the shelf, beside what the apps keep
 func TestReelKept(t *testing.T) {
-	dir := t.TempDir()
-	NewReel(dir).Add(ReelPage{Picture: Picture{Ref: "asset:9", W: 1280, H: 720, At: 3725}, When: time.Now()})
-	if d := NewReel(dir).Deck(); !strings.Contains(d, "## 1:02:05\n") || !strings.Contains(d, "asset:9") {
+	shelf := &MemShelf{}
+	NewReel(shelf).Add(ReelPage{Picture: Picture{Ref: "asset:9", W: 1280, H: 720, At: 3725}, When: time.Now()})
+	if d := NewReel(shelf).Deck(); !strings.Contains(d, "## 1:02:05\n") || !strings.Contains(d, "asset:9") {
 		t.Fatal(d)
 	}
 }

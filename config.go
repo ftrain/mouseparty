@@ -7,9 +7,9 @@ import (
 	"strconv"
 )
 
-// The queue and settings live in settings.json in dataDir; nothing about a
-// session does, except what an app on viewers' pages keeps (appsDir).
-// None of the settings are in the window: the file is the place to change them.
+// The queue and settings live in the party file (store.go), as one JSON
+// setting, "config"; nothing about a session does, except what an app on
+// viewers' pages keeps. None of the settings are in the window.
 type Config struct {
 	OpenRouterPorts bool    `json:"open_router_ports"` // ask the router (NAT-PMP/UPnP) to let friends in; false = this network only
 	Bitrate         string  `json:"bitrate"`
@@ -84,19 +84,13 @@ func dataDir() string {
 	return filepath.Join(dir, "Mouse Party")
 }
 
-func configPath() string { return filepath.Join(dataDir(), "settings.json") }
-
-// appsDir: where apps on viewers' pages keep what outlasts a session (the
-// graffiti wall, the last poll): apps/<name>.json in dataDir
-func appsDir() string { return filepath.Join(dataDir(), "apps") }
-
-// picturesDir: the pictures what they keep names (documents' pictures, the graffiti reel)
-func picturesDir() string { return filepath.Join(dataDir(), "pictures") }
-
-func loadConfig() *Config {
+// loadConfig: the settings kept in the party, or the defaults (p nil: nothing kept)
+func loadConfig(p *party) *Config {
 	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, Queue: []*Item{}}
-	if b, err := os.ReadFile(configPath()); err == nil {
-		json.Unmarshal(b, cfg)
+	if p != nil {
+		if b, ok := p.setting("config"); ok {
+			json.Unmarshal(b, cfg)
+		}
 	}
 	if cfg.Queue == nil {
 		cfg.Queue = []*Item{}
@@ -105,9 +99,11 @@ func loadConfig() *Config {
 	return cfg
 }
 
-func saveConfig(cfg *Config) {
-	b, err := json.MarshalIndent(cfg, "", "  ")
-	if err == nil && os.MkdirAll(dataDir(), 0o755) == nil {
-		os.WriteFile(configPath(), b, 0o644)
+func saveConfig(p *party, cfg *Config) {
+	if p == nil {
+		return
+	}
+	if b, err := json.Marshal(cfg); err == nil {
+		p.setSetting("config", b)
 	}
 }

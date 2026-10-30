@@ -40,7 +40,7 @@ func TestTLOOf(t *testing.T) {
 
 // a document made by pandoc itself (so nothing but pandoc.wasm is needed), read back
 func TestReadDocument(t *testing.T) {
-	h := &Host{pics: newPictures(""), pandoc: newWasmTool("pandoc"), reading: make(chan struct{}, 1)}
+	h := &Host{pics: newPictures(nil), pandoc: newWasmTool("pandoc"), reading: make(chan struct{}, 1)}
 	if !h.pandoc.ok() {
 		t.Skip("no pandoc.wasm: scripts/fetch_pandoc.sh")
 	}
@@ -98,10 +98,26 @@ func TestReadDocument(t *testing.T) {
 		t.Errorf("not slides:\n%s", deck)
 	}
 
+	sheet, err := h.readDocument(ctx, "shots.csv", []byte("Shot,Time,Note\nCU,1:02,\"Madeleine, at the bell\"\nLS,=SUM(1),x\n"), "sheet")
+	if want := "Shot | Time | Note\n--- | --- | ---\nCU | 1:02 | Madeleine, at the bell\nLS | '=SUM(1) | x\n"; err != nil || sheet != want {
+		t.Errorf("csv into a sheet: %v\n%s", err, sheet)
+	}
+
 	if _, err := h.readDocument(ctx, "x.exe", []byte("MZ"), "write"); err == nil {
 		t.Error("an .exe was read")
 	}
 	if _, err := h.readDocument(ctx, "broken.docx", []byte("not a zip"), "write"); err == nil {
 		t.Error("a broken .docx was read")
+	}
+}
+
+func TestSheetOf(t *testing.T) {
+	md := "# Shots\n\n| Shot | Time | Note |\n|:-----|-----:|------|\n| CU | 1:02 | a \\| b |\n| LS | =1+1 | 'quoted |\n\n| Other | Table |\n|---|---|\n| x | y |\n"
+	want := "Shot | Time | Note\n--- | --- | ---\nCU | 1:02 | a \\| b\nLS | '=1+1 | ''quoted\n"
+	if got := tloOf(md, "sheet", nil); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if tloOf("no table here\n", "sheet", nil) != "" {
+		t.Error("a sheet from no table")
 	}
 }

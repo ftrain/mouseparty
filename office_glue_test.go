@@ -75,7 +75,8 @@ func TestDocumentOverChat(t *testing.T) {
 
 // Pictures in and out, the same bytes kept once; frames cut from the movie playing
 func TestPicturesAndFrames(t *testing.T) {
-	h := &Host{pics: newPictures(t.TempDir())}
+	party := testParty(t, "")
+	h := &Host{pics: newPictures(party)}
 	var img bytes.Buffer
 	pic := image.NewRGBA(image.Rect(0, 0, 40, 30))
 	pic.Set(1, 1, color.White)
@@ -109,7 +110,7 @@ func TestPicturesAndFrames(t *testing.T) {
 	if r.StatusCode != 200 || r.Header.Get("Content-Type") != "image/png" || r.Header.Get("Content-Security-Policy") == "" {
 		t.Fatal(r.StatusCode, r.Header)
 	}
-	h.pics = newPictures(h.pics.dir) // a new session: from the disk
+	h.pics = newPictures(party) // a new session: from the party file
 	if _, ok := h.pics.get(strings.TrimPrefix(p1.Ref, "asset:")); !ok {
 		t.Fatal("not kept")
 	}
@@ -135,13 +136,13 @@ func TestPicturesAndFrames(t *testing.T) {
 
 // When hosting starts, the pictures nothing kept names are gone
 func TestPrunePictures(t *testing.T) {
-	keep, dir := t.TempDir(), t.TempDir()
-	p := newPictures(dir)
+	party := testParty(t, "")
+	p := newPictures(party)
 	a, _ := p.put([]byte("\x89PNG\r\n\x1a\nkept"), "image/png")
 	b, _ := p.put([]byte("\x89PNG\r\n\x1a\ngone"), "image/png")
-	writeFile(t, filepath.Join(keep, "write.json"), `{"text":"`+"```image\\n"+a.Ref+"\\n```"+`"}`)
-	prunePictures(dir, keep)
-	q := newPictures(dir)
+	party.Save("write", []byte(`{"text":"`+"```image\\n"+a.Ref+"\\n```"+`"}`))
+	party.prunePictures()
+	q := newPictures(party)
 	if _, ok := q.get(strings.TrimPrefix(a.Ref, "asset:")); !ok {
 		t.Fatal("pruned one a document names")
 	}

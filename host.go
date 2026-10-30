@@ -136,8 +136,7 @@ type Host struct {
 	MapPorts       bool // false: LAN (and tunnel) only, the router is left alone
 	CleanLeftovers bool // false: a check running beside a real session leaves it alone
 	Standby        []byte
-	AppsDir        string          // where apps keep what outlasts the session (apps.Keeper); "" nowhere
-	PicturesDir    string          // where the pictures they name are kept (pictures.go); "" in memory only
+	Party          *party          // where apps (apps.Keeper) and the pictures they name are kept (store.go); nil nowhere
 	DocAt          func(at string) // viewers went to another page of the database up (SetAt)
 
 	mu        sync.Mutex
@@ -201,14 +200,17 @@ func (h *Host) start() error {
 	h.mu.Lock()
 	h.key = base64.RawURLEncoding.EncodeToString(key)
 	h.chat = &Chat{conns: map[*chatConn]bool{}}
-	if h.PicturesDir != "" && h.AppsDir != "" {
-		prunePictures(h.PicturesDir, h.AppsDir)
+	env := apps.Env{Movie: h}
+	if h.Party != nil {
+		h.Party.prunePictures()
+		env.Shelf = h.Party
 	}
-	h.pics = newPictures(h.PicturesDir)
+	env.Reel = apps.NewReel(env.Shelf)
+	h.pics = newPictures(h.Party)
 	if h.pandoc == nil {
 		h.pandoc, h.reading = newWasmTool("pandoc"), make(chan struct{}, 1)
 	}
-	h.apps = newAppHost(h.chat, apps.Env{Movie: h, Dir: h.AppsDir, Reel: apps.NewReel(h.AppsDir)})
+	h.apps = newAppHost(h.chat, env)
 	h.chat.hello = h.greeting
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left

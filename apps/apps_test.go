@@ -3,7 +3,6 @@ package apps
 import (
 	"fmt"
 	"math/rand/v2"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -404,12 +403,12 @@ func TestAlone(t *testing.T) {
 }
 
 func TestKeepersOutlastTheSession(t *testing.T) {
-	dir := t.TempDir()
+	shelf := &MemShelf{}
 	viewers := func() []Viewer { return []Viewer{ann, bob} }
 	send := func(int, map[string]any) {}
 	start := func(name string) *Session {
 		kind, _ := Lookup(name)
-		return Start(kind, 1, "Ann", send, viewers, Env{Dir: dir})
+		return Start(kind, 1, "Ann", send, viewers, Env{Shelf: shelf})
 	}
 
 	g := start("graffiti")
@@ -435,7 +434,7 @@ func TestKeepersOutlastTheSession(t *testing.T) {
 
 	b := start("bingo") // not a Keeper: nothing written
 	b.Stop()
-	if files, _ := os.ReadDir(dir); len(files) != 2 {
-		t.Fatal(files)
+	if shelf.Len() != 2 {
+		t.Fatal(shelf)
 	}
 }

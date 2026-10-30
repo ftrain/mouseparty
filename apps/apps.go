@@ -23,8 +23,6 @@ package apps
 import (
 	"encoding/json"
 	"math/rand/v2"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -135,11 +133,48 @@ type Picture struct {
 }
 
 // Env is what a session's apps share from the host: the movie, where Keepers
-// keep ("" for nowhere), and the graffiti reel
+// keep (nil for nowhere), and the graffiti reel
 type Env struct {
 	Movie Movie
-	Dir   string
+	Shelf Shelf
 	Reel  *Reel
+}
+
+// Shelf is where what outlasts a session is kept, by name: the host's party
+// file (store.go in package main)
+type Shelf interface {
+	Load(name string) ([]byte, bool)
+	Save(name string, b []byte) error
+}
+
+// MemShelf keeps in memory, for as long as it's held (tests)
+type MemShelf struct {
+	mu sync.Mutex
+	m  map[string][]byte
+}
+
+func (s *MemShelf) Load(name string) ([]byte, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b, ok := s.m[name]
+	return b, ok
+}
+
+func (s *MemShelf) Save(name string, b []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.m == nil {
+		s.m = map[string][]byte{}
+	}
+	s.m[name] = b
+	return nil
+}
+
+// Len: how many things are kept
+func (s *MemShelf) Len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.m)
 }
 
 type Line struct {
@@ -186,24 +221,23 @@ type Session struct {
 	act   Activity
 	room  *Room
 	stop  chan struct{}
-	keep  string    // a Keeper's file; "" keeps nothing
+	shelf Shelf     // where a Keeper is kept; nil keeps nothing
 	dirty bool      // changed since it was last written
 	kept  time.Time // when it was
 }
 
 // Start runs kind, numbered id, until Stop; by is who opened it. send delivers
 // a message to one page (to > 0) or all (0); viewers lists the pages open. The
-// caller hands each page the app (Info). A Keeper is kept in env.Dir.
+// caller hands each page the app (Info). A Keeper is kept on env.Shelf.
 func Start(kind Kind, id int, by string, send func(to int, msg map[string]any), viewers func() []Viewer, env Env) *Session {
 	r := &Room{Movie: env.Movie, Reel: env.Reel, Rand: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())), id: id, send: send, viewers: viewers}
-	dir := env.Dir
 	s := &Session{Kind: kind, ID: id, By: by, room: r, stop: make(chan struct{})}
 	s.mu.Lock()
 	s.act = kind.New(r)
-	if k, ok := s.act.(Keeper); ok && dir != "" {
-		s.keep = filepath.Join(dir, kind.Name+".json")
-		if b, err := os.ReadFile(s.keep); err == nil {
-			k.Load(b) // a file that won't read: start fresh, and write over it
+	if k, ok := s.act.(Keeper); ok && env.Shelf != nil {
+		s.shelf = env.Shelf
+		if b, ok := s.shelf.Load(kind.Name); ok {
+			k.Load(b) // what won't read: start fresh, and write over it
 		}
 	}
 	s.mu.Unlock()
@@ -252,17 +286,12 @@ func (s *Session) Stop() {
 // save writes a Keeper, if it changed (with s.mu held)
 func (s *Session) save() {
 	k, ok := s.act.(Keeper)
-	if !ok || s.keep == "" || !s.dirty {
+	if !ok || s.shelf == nil || !s.dirty {
 		return
 	}
 	s.dirty, s.kept = false, time.Now()
-	b, err := json.Marshal(k.Save())
-	if err != nil || os.MkdirAll(filepath.Dir(s.keep), 0o700) != nil {
-		return
-	}
-	tmp := s.keep + ".tmp" // all of it or none: quitting mid-write leaves the last one
-	if os.WriteFile(tmp, b, 0o600) == nil {
-		os.Rename(tmp, s.keep)
+	if b, err := json.Marshal(k.Save()); err == nil {
+		s.shelf.Save(s.Kind.Name, b) // all of it or none: the last one stays until this is in
 	}
 }
 

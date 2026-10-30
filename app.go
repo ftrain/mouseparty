@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -37,6 +36,8 @@ type View struct {
 	Rows      []Row  `json:"rows"`
 	Selected  int    `json:"selected"` // -1: none
 	Slider    Slider `json:"slider"`
+	Locked    bool   `json:"locked"` // the party is sealed: the window asks for its passcode, and shows nothing else
+	Sealed    bool   `json:"sealed"` // the party is kept encrypted
 }
 
 type Row struct {
@@ -73,6 +74,9 @@ type App struct {
 	lastView []byte
 
 	cfg          *Config
+	party        *party        // what's kept (store.go); nil keeps nothing
+	locked       bool          // the party is sealed and its passcode not yet typed (party.go)
+	unlockWait   time.Duration // before the next try, after a wrong passcode
 	player       *Player
 	current      *Item       // the item now streaming
 	playing      bool        // Play pressed and not stopped: the big button says Stop
@@ -104,8 +108,10 @@ type App struct {
 }
 
 func NewApp(standby []byte) *App {
-	a := &App{jobs: make(chan func(), 4096), cfg: loadConfig(), jumpTo: -1, selected: -1, restoreSel: -1,
+	a := &App{jobs: make(chan func(), 4096), jumpTo: -1, selected: -1, restoreSel: -1,
 		language: hostLanguage(), standby: standby, cueCache: map[cueKey][]Cue{}}
+	a.party, a.locked = openTheParty(a.log)
+	a.cfg = loadConfig(a.party)
 	a.player = &Player{Log: a.log,
 		OnPosition: func(s float64) { a.do(func() { a.position(s) }) },
 		OnExit:     func(code int) { a.do(func() { a.finished(code) }) }}
@@ -160,11 +166,18 @@ func (a *App) startup(ctx context.Context) {
 	go a.watchFiles()
 	a.do(func() {
 		a.checkTools()
-		a.scanSubtitles()
-		if len(a.cfg.Queue) > 0 { // movies waiting from last time: start making their link
-			a.hostStart()
+		if !a.locked {
+			a.started()
 		}
 	})
+}
+
+// started: the list is known (at startup, or once the party is unlocked)
+func (a *App) started() {
+	a.scanSubtitles()
+	if len(a.cfg.Queue) > 0 { // movies waiting from last time: start making their link
+		a.hostStart()
+	}
 }
 
 // ---------- what the window calls ----------
@@ -223,6 +236,10 @@ func (a *App) state() string {
 func (a *App) view() View {
 	state := a.state()
 	v := View{Play: "play", PlayOn: state == "ready", Link: "copy", Selected: a.selected, Rows: []Row{}}
+	if a.locked {
+		return View{Play: "play", Link: "copy", Selected: -1, Rows: []Row{}, Locked: true, Sealed: true}
+	}
+	v.Sealed = a.party != nil && a.party.sealed
 	if a.playing {
 		v.Play, v.PlayOn = "stop", true
 	}
@@ -314,7 +331,7 @@ func (a *App) checkTools() {
 // The list is a playlist: movies stay in it, and cfg.Position is the row now
 // playing (or next to play). Finishing a movie moves it down a row.
 
-func (a *App) save() { saveConfig(a.cfg) }
+func (a *App) save() { saveConfig(a.party, a.cfg) }
 
 func (a *App) selectRow(i int) {
 	if i >= -1 && i < len(a.cfg.Queue) {
@@ -367,6 +384,11 @@ func (a *App) move(i, j int) {
 // name order), looked at off the app's goroutine. A subtitle file dropped onto a
 // movie (row, or the selected one) becomes its subtitles.
 func (a *App) addPaths(paths []string, row int) {
+	locked := false
+	a.wait(func() { locked = a.locked })
+	if locked { // the list isn't known until the party is open
+		return
+	}
 	var files, subs []string
 	for _, p := range paths {
 		st, err := os.Stat(p)
@@ -977,7 +999,7 @@ func (a *App) linkClicked() {
 }
 
 func (a *App) hostStart() {
-	if a.hostStarting || (a.host != nil && a.host.Running()) {
+	if a.locked || a.hostStarting || (a.host != nil && a.host.Running()) {
 		return
 	}
 	mediamtx := findTool("mediamtx")
@@ -992,7 +1014,7 @@ func (a *App) hostStart() {
 	}
 	h := NewHost(a.log, mediamtx, cloudflared, a.standby)
 	h.MapPorts = a.cfg.OpenRouterPorts
-	h.AppsDir, h.PicturesDir = appsDir(), picturesDir()
+	h.Party = a.party
 	h.DocAt = func(at string) { a.do(func() { a.docAt(at) }) }
 	if a.hostSetup != nil {
 		a.hostSetup(h)
@@ -1050,15 +1072,6 @@ func (a *App) watchFiles() {
 		})
 		time.Sleep(3 * time.Second)
 	}
-}
-
-// menu: the Mac's menu bar
-func (a *App) menu() *menu.Menu {
-	m := menu.NewMenu()
-	m.Append(menu.AppMenu())
-	m.Append(menu.EditMenu())
-	m.Append(menu.WindowMenu())
-	return m
 }
 
 // ---------- the viewers' guide ----------
@@ -1155,6 +1168,8 @@ func (a *App) shutdown(ctx context.Context) {
 			links = a.host.URLs()
 			a.host.Stop() // router ports closed, session key gone
 		}
+		a.party.close()
+		a.party = nil
 	})
 	if ctx != nil && len(links) > 0 { // and the link not left on the clipboard either
 		if text, err := runtime.ClipboardGetText(ctx); err == nil {

@@ -46,6 +46,7 @@ var (
 	mdSlide  = regexp.MustCompile(`^#{1,2} `)
 	mdInList = regexp.MustCompile(`^\s*([|>]|[-*+] |\d+[.)] )`)
 	mdSpaces = regexp.MustCompile(` {2,}`)
+	mdDashes = regexp.MustCompile(`^:?-+:?(?::?-+:?)*$`)
 )
 
 // postRead: a viewer's document, as a document of the app it was brought into
@@ -75,7 +76,7 @@ func (h *Host) postRead(w http.ResponseWriter, r *http.Request) {
 }
 
 // readDocument: the file's words, pictures and tables as a document of app
-// ("write" or "deck"), its pictures put in the picture store
+// ("write", "deck" or "sheet"), its pictures put in the picture store
 func (h *Host) readDocument(ctx context.Context, name string, b []byte, app string) (string, error) {
 	e := ext(name)
 	format := readFormats[e]
@@ -122,6 +123,9 @@ func (h *Host) readDocument(ctx context.Context, name string, b []byte, app stri
 // Office reads it, each picture kept by keep (or, where it can't be, its words)
 func tloOf(md, app string, keep func(src string) (apps.Picture, bool)) string {
 	md = strings.ReplaceAll(md, "\r\n", "\n")
+	if app == "sheet" {
+		return sheetOf(md)
+	}
 	var out strings.Builder
 	// the head: a title (and author) as the document's own first words
 	if rest, ok := strings.CutPrefix(md, "---\n"); ok {
@@ -217,6 +221,65 @@ func oneBlank(s string) string {
 		b.WriteString(l + "\n")
 	}
 	return b.String()
+}
+
+// sheetOf: the first table, as a Sheet holds one (its docs/tlo.md): at most
+// 26 columns, A to Z, and a cell that starts like a formula kept as its words
+func sheetOf(md string) string {
+	var rows [][]string
+	for _, line := range strings.Split(md, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			if len(rows) > 0 {
+				break // the first table ends
+			}
+			continue
+		}
+		cells := splitCells(strings.TrimSuffix(strings.TrimPrefix(line, "|"), "|"))
+		if len(rows) == 1 && mdDashes.MatchString(strings.Join(cells, "")) {
+			continue // the line under the head
+		}
+		rows = append(rows, cells[:min(len(cells), 26)])
+	}
+	if len(rows) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, row := range rows {
+		for j, c := range row {
+			if i > 0 && (strings.HasPrefix(c, "=") || strings.HasPrefix(c, "'")) {
+				c = "'" + c
+			}
+			if j > 0 {
+				b.WriteString(" | ")
+			}
+			b.WriteString(c)
+		}
+		b.WriteString("\n")
+		if i == 0 {
+			b.WriteString(strings.Repeat("--- | ", len(row)-1) + "---\n")
+		}
+	}
+	return b.String()
+}
+
+// splitCells: a table line's cells, split at its pipes but not at an escaped one (\|)
+func splitCells(line string) []string {
+	var cells []string
+	var cell strings.Builder
+	for i := 0; i < len(line); i++ {
+		switch {
+		case line[i] == '\\' && i+1 < len(line):
+			cell.WriteString(line[i : i+2])
+			i++
+		case line[i] == '|':
+			cells = append(cells, strings.TrimSpace(cell.String()))
+			cell.Reset()
+		default:
+			cell.WriteByte(line[i])
+		}
+	}
+	return append(cells, strings.TrimSpace(cell.String()))
 }
 
 // headValue: a one-line value of pandoc's YAML head, its quotes taken off
