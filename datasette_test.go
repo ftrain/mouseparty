@@ -170,3 +170,22 @@ func TestDatasetteStatic(t *testing.T) {
 		t.Fatal(err, a.Status)
 	}
 }
+
+// a database named with what a SQLite URI reads as its own (?, #, %) opens all the same
+func TestDatasetteOddNames(t *testing.T) {
+	py := needPython(t)
+	b, err := os.ReadFile(films(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"films #2.db", "100% films.db", "films?.db"} {
+		path := filepath.Join(t.TempDir(), name)
+		os.WriteFile(path, b, 0o644)
+		d := startDatasette(py, pythonHome(), path, "Films", "/k/data/t/", func(s string) { t.Log(s) })
+		a, err := d.ask("GET", "/k/data/t/.json", "", nil)
+		d.stop()
+		if err != nil || a.Status != 200 || !strings.Contains(body(t, a), "films") {
+			t.Fatalf("%s: %v %v", name, err, a)
+		}
+	}
+}

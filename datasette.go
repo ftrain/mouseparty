@@ -75,10 +75,11 @@ func startDatasette(py *wasmTool, home, path, title, base string, log func(strin
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	d := &datasette{in: inW, out: bufio.NewReaderSize(outR, 1<<20), cancel: cancel, ready: make(chan struct{}), gone: make(chan struct{}), log: log}
-	name := filepath.Base(path)
+	only := onlyFile{dir: filepath.Dir(path), name: filepath.Base(path)}
+	name := only.seen()
 	fsc := wazero.NewFSConfig().
 		WithReadOnlyDirMount(home, "/").
-		WithFSMount(onlyFile{dir: filepath.Dir(path), name: name}, "/data")
+		WithFSMount(only, "/data")
 	env := map[string]string{"PYTHONHOME": "/", "PYTHONPATH": "/site", "PYTHONDONTWRITEBYTECODE": "1", "HOME": "/"}
 	stderr := &lineLog{log: log, prefix: "Datasette: "}
 	go func() {
@@ -262,11 +263,18 @@ func (h *Host) datasetteBase(d *document) string { return "/" + h.key + "/data/"
 // onlyFile: a folder holding one file, read-only: all Python sees of the database's folder
 type onlyFile struct{ dir, name string }
 
+// seen: the file's name as Python sees it. Datasette opens it as a SQLite URI
+// (file:<path>?immutable=1), where ?, # and % mean something, and a name with
+// one of them in can't be opened ("unable to open database file").
+func (o onlyFile) seen() string {
+	return strings.NewReplacer("?", "_", "#", "_", "%", "_").Replace(o.name)
+}
+
 func (o onlyFile) Open(name string) (fs.File, error) {
 	switch name {
 	case ".":
 		return &oneDir{o}, nil
-	case o.name:
+	case o.seen():
 		return os.Open(filepath.Join(o.dir, o.name))
 	}
 	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
@@ -282,8 +290,15 @@ func (d *oneDir) ReadDir(int) ([]fs.DirEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []fs.DirEntry{fs.FileInfoToDirEntry(st)}, nil
+	return []fs.DirEntry{fs.FileInfoToDirEntry(renamed{st, d.o.seen()})}, nil
 }
+
+type renamed struct {
+	fs.FileInfo
+	name string
+}
+
+func (r renamed) Name() string { return r.name }
 
 // lineLog: what a program writes, to the log a line at a time
 type lineLog struct {
