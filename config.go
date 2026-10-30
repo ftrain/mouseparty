@@ -85,28 +85,7 @@ func configPath() string { return filepath.Join(dataDir(), "settings.json") }
 // graffiti wall, the last poll): apps/<name>.json in dataDir
 func appsDir() string { return filepath.Join(dataDir(), "apps") }
 
-// moveOldData brings over, the first time there's no dataDir, what earlier
-// builds kept in the home folder: the settings (~/.openhouseparty.json, or
-// ~/.tubeyap.json from when it was called TubeYap) and ~/.tubeyap/apps.
-func moveOldData() {
-	home, _ := os.UserHomeDir()
-	if _, err := os.Stat(dataDir()); err == nil || home == "" {
-		return
-	}
-	if err := os.MkdirAll(dataDir(), 0o755); err != nil {
-		return
-	}
-	for _, old := range []string{".openhouseparty.json", ".tubeyap.json"} {
-		if os.Rename(filepath.Join(home, old), configPath()) == nil {
-			break
-		}
-	}
-	os.Rename(filepath.Join(home, ".tubeyap", "apps"), appsDir())
-	os.Remove(filepath.Join(home, ".tubeyap")) // only if nothing else is in it
-}
-
 func loadConfig() *Config {
-	moveOldData()
 	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, Queue: []*Item{}}
 	if b, err := os.ReadFile(configPath()); err == nil {
 		json.Unmarshal(b, cfg)
