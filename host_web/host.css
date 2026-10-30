@@ -431,3 +431,8 @@ button { font-family: var(--font); }
     .guide-clock { font-size: 15px; white-space: nowrap; }
     .guide-zone { order: 5; flex-basis: 100%; }      /* its own line under the title */
 }
+/* another document (host.ts showText): drawn by Tiny Little Office's editors, read-only, in the PDF's place */
+.doc.text .doc-scroll, .doc.text .doc-bar { display: none; }
+.doc-text { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.doc-text > .to-editor { flex: 1 1 auto; min-height: 0; }
+.doc-text-note { margin: auto; color: #ccc; font: 15px ui-monospace, Menlo, monospace; }

@@ -254,8 +254,19 @@ func (h *Host) docFile(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	d := h.doc
 	h.mu.Unlock()
-	if d == nil || d.Kind != "pdf" || r.PathValue("token") != d.Token { // a database stays on the Mac
+	if d == nil || d.Kind == "db" || r.PathValue("token") != d.Token { // a database stays on the Mac
 		http.NotFound(w, r)
+		return
+	}
+	if d.Kind == "text" { // its words as the editors read them, once pandoc has
+		h.mu.Lock()
+		ready, app, text := d.Ready, d.App, d.text
+		h.mu.Unlock()
+		if !ready {
+			http.Error(w, "not read yet", http.StatusConflict)
+			return
+		}
+		writeJSON(w, map[string]string{"app": app, "text": text})
 		return
 	}
 	f, err := os.Open(d.Path)

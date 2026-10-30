@@ -53,17 +53,20 @@ func ext(path string) string { return strings.ToLower(filepath.Ext(path)) }
 
 func shareable(path string) bool {
 	e := ext(path)
-	return videoExts[e] || audioExts[e] || docExts[e] || dbExts[e]
+	return videoExts[e] || audioExts[e] || docExts[e] || dbExts[e] || readFormats[e] != ""
 }
 
-// kindOf: "video", "audio" (played over a still of its cover), "pdf" (read together)
-// or "db" (a SQLite database, looked through together)
+// kindOf: "video", "audio" (played over a still of its cover), "pdf" (read together),
+// "db" (a SQLite database, looked through together) or "text" (anything else
+// pandoc reads, pandoc.go: a Word file, a PowerPoint, a spreadsheet, an EPUB... read together)
 func kindOf(path string) string {
 	switch e := ext(path); {
 	case docExts[e]:
 		return "pdf"
 	case dbExts[e]:
 		return "db"
+	case readFormats[e] != "":
+		return "text"
 	case audioExts[e]:
 		return "audio"
 	}

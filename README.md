@@ -90,6 +90,12 @@ Terminal to read it.
   quiet moving spectrum of the sound.
 - **PDFs, read together:** while a PDF is up, friends' pages show the document
   itself over the video, turned to whatever page you're on.
+- **Other documents, read together:** Word, OpenOffice, RTF, PowerPoint, Excel,
+  CSV, EPUB, web pages, Markdown, LaTeX and the rest of what pandoc reads. While
+  one is up, your Mac reads it and friends' pages show it over the video: a
+  document, slides or a sheet.
+- **Zips:** dropped on the list, a zip is unpacked beside it, as the Finder
+  would, and everything in it the app can show is added.
 
 ### Subtitles
 

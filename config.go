@@ -20,10 +20,10 @@ type Config struct {
 	Position        int     `json:"position"` // queue row now playing, or next to play
 }
 
-// Item is one row: a movie, a song, a PDF or a database.
+// Item is one row: a movie, a song, a PDF, a database or another document.
 type Item struct {
 	Path      string        `json:"path"`
-	Kind      string        `json:"kind,omitempty"` // video, audio (played over a still of its cover), pdf (read together) or db (SQLite, looked through together)
+	Kind      string        `json:"kind,omitempty"` // video, audio (played over a still of its cover), pdf or text (a document pandoc reads: read together) or db (SQLite, looked through together)
 	Duration  float64       `json:"duration,omitempty"`
 	Note      string        `json:"note,omitempty"`
 	Pages     int           `json:"pages,omitempty"`
@@ -36,8 +36,8 @@ type Item struct {
 	Missing   bool          `json:"-"`                   // its file isn't there now (App.watchFiles)
 }
 
-// isDoc: a PDF or a database, which viewers' pages show themselves (the stream carries a card)
-func (it *Item) isDoc() bool { return it.kind() == "pdf" || it.kind() == "db" }
+// isDoc: a PDF, a database or another document, which viewers' pages show themselves (the stream carries a card)
+func (it *Item) isDoc() bool { return it.kind() == "pdf" || it.kind() == "db" || it.kind() == "text" }
 
 func (it *Item) kind() string {
 	if it.Kind == "" {

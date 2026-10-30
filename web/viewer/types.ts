@@ -50,11 +50,15 @@ export interface Schedule {
 export interface Doc {
     token: string;
     title: string;
-    kind: 'pdf' | 'db';
+    kind: 'pdf' | 'db' | 'text';
     pages: number;
     page: number;
     at: string; // a database: the page of it everyone is on
     back: boolean; // and there's one before it
+    // another document (session.go): read by pandoc as it goes up, then fetched from /doc/<token> as the editors' text
+    app?: 'write' | 'deck' | 'sheet';
+    ready?: boolean;
+    error?: string;
 }
 export interface DocNote {
     type: 'doc';

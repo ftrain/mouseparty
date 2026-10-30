@@ -715,11 +715,17 @@ async function setDoc(d) {
 	app.classList.toggle("reading", !!doc);
 	showSoundButton();
 	docEl.classList.toggle("data", doc?.kind === "db");
+	docEl.classList.toggle("text", doc?.kind === "text");
 	if (doc?.kind !== "db") closeDb();
+	if (doc?.kind !== "text") closeText();
 	if (!doc) return closePdf();
 	if (doc.kind === "db") {
 		closePdf();
 		return showDb(doc);
+	}
+	if (doc.kind === "text") {
+		closePdf();
+		return showText(doc);
 	}
 	byId("docPage").textContent = `${doc.page} / ${doc.pages}`;
 	if (pdfToken === doc.token) {
@@ -829,6 +835,47 @@ window.addEventListener("message", (e) => {
 		back: true
 	});
 });
+let textEl = null;
+let textKey = "";
+async function showText(d) {
+	const key = `${d.token}|${d.ready ? 1 : 0}|${d.error || ""}`;
+	if (key === textKey) return;
+	closeText();
+	textKey = key;
+	const el = textEl = document.createElement("div");
+	el.className = "doc-text";
+	docEl.append(el);
+	const note = (words) => el.replaceChildren(Object.assign(document.createElement("p"), {
+		className: "doc-text-note",
+		textContent: words
+	}));
+	if (d.error) return note(`Couldn’t read ${d.title}: ${d.error}`);
+	if (!d.ready) return note(`Reading ${d.title}…`);
+	note(`Opening ${d.title}…`);
+	try {
+		const r = await fetch(`${BASE}/doc/${encodeURIComponent(d.token)}`);
+		if (!r.ok) throw new Error(`${r.status}`);
+		const { app, text } = await r.json();
+		const lib = await (await import(
+			/* @vite-ignore */
+			`${BASE}/apps/office.js`
+)).library(BASE);
+		if (textEl !== el) return;
+		el.textContent = "";
+		await lib.editors.mount(app, text, el, () => {}, {
+			readOnly: true,
+			fill: true
+		});
+	} catch (e) {
+		console.log("document:", e);
+		if (textEl === el) note(`Couldn’t open ${d.title}`);
+	}
+}
+function closeText() {
+	textEl?.remove();
+	textEl = null;
+	textKey = "";
+}
 function toggleFit() {
 	fitWidth = !fitWidth;
 	docEl.classList.toggle("fit-width", fitWidth);

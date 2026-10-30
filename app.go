@@ -272,6 +272,8 @@ func (a *App) view() View {
 			length = fmt.Sprintf("%d pages", it.Pages)
 		} else if it.kind() == "db" {
 			length = formatBytes(it.Size)
+		} else if it.kind() == "text" {
+			length = strings.ToUpper(strings.TrimPrefix(ext(it.Path), "."))
 		} else if it.Duration > 0 {
 			length = formatTime(it.Duration)
 		}
@@ -283,7 +285,7 @@ func (a *App) view() View {
 }
 
 func (a *App) slider(state string) Slider {
-	if state == "doc" && a.current.kind() == "db" { // a database: no slider; viewers look through it
+	if state == "doc" && a.current.kind() != "pdf" { // a database or another document: no slider; viewers look through it
 		return Slider{Max: 1}
 	}
 	if state == "doc" { // a PDF: the slider is its pages
@@ -390,19 +392,32 @@ func (a *App) addPaths(paths []string, row int) {
 		return
 	}
 	var files, subs []string
+	// a folder's files that can be shown, in name order
+	walk := func(dir string) []string {
+		var found []string
+		filepath.WalkDir(dir, func(f string, d os.DirEntry, err error) error {
+			if err == nil && !d.IsDir() && shareable(f) && d.Name()[0] != '.' {
+				found = append(found, f)
+			}
+			return nil
+		})
+		sort.Slice(found, func(i, j int) bool { return strings.ToLower(found[i]) < strings.ToLower(found[j]) })
+		return found
+	}
 	for _, p := range paths {
 		st, err := os.Stat(p)
 		switch {
 		case err == nil && st.IsDir():
-			var found []string
-			filepath.WalkDir(p, func(f string, d os.DirEntry, err error) error {
-				if err == nil && !d.IsDir() && shareable(f) && d.Name()[0] != '.' {
-					found = append(found, f)
-				}
-				return nil
-			})
-			sort.Slice(found, func(i, j int) bool { return strings.ToLower(found[i]) < strings.ToLower(found[j]) })
-			files = append(files, found...)
+			files = append(files, walk(p)...)
+		case err == nil && ext(p) == ".zip": // unpacked beside it (zip.go), then as a folder
+			dir, err := unzip(p)
+			if err != nil {
+				a.log("Couldn't unpack " + filepath.Base(p) + ": " + err.Error())
+			}
+			if dir != "" {
+				a.log("Unpacked " + filepath.Base(p) + " into " + dir)
+				files = append(files, walk(dir)...)
+			}
 		case shareable(p):
 			files = append(files, p)
 		case subExts[ext(p)]:
@@ -410,7 +425,7 @@ func (a *App) addPaths(paths []string, row int) {
 		case err == nil && playable(p): // dropped by itself, in a format with no usual name: ffmpeg says it plays
 			files = append(files, p)
 		default:
-			a.log("Not a video, sound, PDF or database file, skipped: " + filepath.Base(p))
+			a.log("Not a video, sound, document, database or zip file, skipped: " + filepath.Base(p))
 		}
 	}
 	var items []*Item
@@ -432,6 +447,11 @@ func (a *App) addPaths(paths []string, row int) {
 			}
 			items = append(items, it)
 			a.log(fmt.Sprintf("Queued %s (%d pages)", filepath.Base(p), it.Pages))
+			continue
+		}
+		if kindOf(p) == "text" { // read by pandoc when it's up (session.go)
+			items = append(items, &Item{Path: p, Kind: "text"})
+			a.log("Queued " + filepath.Base(p))
 			continue
 		}
 		info := probe(p)
@@ -721,10 +741,10 @@ func (a *App) turnPage(step int) {
 		return
 	}
 	d := a.current
-	if d.kind() == "db" && step < 0 {
+	if d.kind() != "pdf" && step < 0 {
 		return
 	}
-	if d.kind() == "db" || d.Page+step > d.Pages { // past a PDF's last page, or on from a database
+	if d.kind() != "pdf" || d.Page+step > d.Pages { // past a PDF's last page, or on from a database or another document
 		a.log("Finished " + filepath.Base(d.Path) + ".")
 		a.docDone = true
 		a.player.Stop()
@@ -1112,7 +1132,7 @@ func (a *App) schedule() []ScheduleRow {
 		}
 		rows = append(rows, r)
 		if start != nil {
-			if it.isDoc() { // a PDF or a database takes as long as the reading does: what follows it has no time yet
+			if it.isDoc() { // a document takes as long as the reading does: what follows it has no time yet
 				start = nil
 			} else {
 				s := *start + it.Duration + gap

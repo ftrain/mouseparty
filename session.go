@@ -4,6 +4,10 @@ package main
 // /status: subtitles, the movie's position, the guide and a PDF read together.
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/ftrain/mouseparty/apps"
@@ -32,12 +36,28 @@ type document struct {
 	Token string   `json:"token"`
 	Path  string   `json:"-"`
 	Title string   `json:"title"`
-	Kind  string   `json:"kind"` // "pdf" or "db"
+	Kind  string   `json:"kind"` // "pdf", "db" or "text"
 	Pages int      `json:"pages"`
 	Page  int      `json:"page"`
 	At    string   `json:"at"`   // a database: the page of it everyone is on ("" its first; data.go)
 	Back  bool     `json:"back"` // and there's one before it to go back to
 	trail []string // the pages before it
+	// another document (text): read by pandoc as it goes up; ready when its words are, at /doc/<token>
+	App   string `json:"app,omitempty"` // the editor it's drawn by: write, deck or sheet
+	Ready bool   `json:"ready,omitempty"`
+	Error string `json:"error,omitempty"` // why it couldn't be read
+	text  string
+}
+
+// textApp: which of Tiny Little Office's editors a document is read into, by what it is
+func textApp(path string) string {
+	switch ext(path) {
+	case ".pptx":
+		return "deck"
+	case ".xlsx", ".csv", ".tsv":
+		return "sheet"
+	}
+	return "write"
 }
 
 const trailMax = 100
@@ -139,12 +159,14 @@ func (h *Host) scheduleJSON() map[string]any {
 	return map[string]any{"type": "schedule", "rows": rows, "now": float64(time.Now().UnixMicro()) / 1e6}
 }
 
-// ---------- a PDF read together, or a database looked through ----------
+// ---------- a PDF read together, a database looked through, another document read ----------
 // While one is up the stream carries a card, and viewers' pages show it over the
 // video: a PDF fetched from /doc/<token> (that file only, for as long as it is up),
 // turned to whatever page the host is on; a database's pages, made here from the
 // file opened read-only (data.go: the file itself never goes), on whichever one
-// anyone went to last (SetAt).
+// anyone went to last (SetAt); another document read by pandoc (pandoc.go) into
+// Tiny Little Office's text, fetched from /doc/<token> as that, its pictures in
+// the picture store, and drawn read-only by the editors.
 
 func (h *Host) SetDocument(d document) {
 	var data *dataDB
@@ -157,12 +179,57 @@ func (h *Host) SetDocument(d document) {
 			h.Log("Could not open " + d.Title + ": " + err.Error())
 		}
 	}
+	if d.Kind == "text" {
+		d.App = textApp(d.Path)
+	}
 	h.mu.Lock()
 	old := h.data
 	h.doc, h.data = &d, data
 	h.mu.Unlock()
 	if old != nil {
 		old.Close()
+	}
+	h.broadcast(h.docJSON())
+	if d.Kind == "text" {
+		go h.readText(h.doc)
+	}
+}
+
+// readText: a document up, read by pandoc (seconds, the first time), then pages are told it's ready
+func (h *Host) readText(d *document) {
+	text, err := "", error(nil)
+	st, serr := os.Stat(d.Path)
+	switch {
+	case serr != nil:
+		err = serr
+	case st.Size() > readMaxBytes:
+		err = fmt.Errorf("it's over %d MB", readMaxBytes>>20)
+	default:
+		var b []byte
+		if b, err = os.ReadFile(d.Path); err == nil {
+			if h.reading != nil {
+				h.reading <- struct{}{} // after any a viewer brought in
+				defer func() { <-h.reading }()
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), readTime)
+			text, err = h.readDocument(ctx, filepath.Base(d.Path), b, d.App)
+			cancel()
+		}
+	}
+	h.mu.Lock()
+	still := h.doc == d
+	if still {
+		d.text, d.Ready = text, err == nil
+		if err != nil {
+			d.Error = err.Error()
+		}
+	}
+	h.mu.Unlock()
+	if !still {
+		return
+	}
+	if err != nil && h.Log != nil {
+		h.Log("Could not read " + d.Title + ": " + err.Error())
 	}
 	h.broadcast(h.docJSON())
 }
