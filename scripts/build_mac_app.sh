@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build "Open House Party.app": the Go app (Wails, pinned, run through `go run`) with what
 # hosting from the Mac needs inside it: MediaMTX and cloudflared, and optionally
-# ffmpeg. Apple Silicon only (macOS 13+, Go's own minimum).
+# ffmpeg, and pandoc as WebAssembly (scripts/fetch_pandoc.sh). Apple Silicon only (macOS 13+, Go's own minimum).
 #
 # MediaMTX and cloudflared are single static Go binaries, so they are copied in
 # from Homebrew (brew install mediamtx cloudflared), or from MEDIAMTX_BIN /
@@ -60,6 +60,7 @@ for bin in "${TOOLS[@]}"; do
     fi
 done
 [ -f media/standby_opus.mp4 ] || scripts/make_standby_card.sh
+scripts/fetch_pandoc.sh   # pandoc as WebAssembly, run in-process (wasm.go): documents brought in
 
 go run "$WAILS" build -platform darwin/arm64 -skipbindings -trimpath -clean
 rm -rf "$DIST/$APP_NAME.app"
@@ -70,6 +71,8 @@ mkdir -p "$APP/Contents/Resources/bin"          # main.go's bundledBin looks her
 for bin in "${TOOLS[@]}"; do
     cp "$bin" "$APP/Contents/Resources/bin/"
 done
+mkdir -p "$APP/Contents/Resources/wasm"         # wasm.go's findWasm looks here
+cp build/pandoc/pandoc.wasm "$APP/Contents/Resources/wasm/"
 # the viewer page, read from here on every page load (it's built in too)
 ditto host_web "$APP/Contents/Resources/host_web"
 # Open House Party's licence and everything else's, ffmpeg's GPL among them (licenses/README.md)

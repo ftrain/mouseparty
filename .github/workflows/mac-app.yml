@@ -92,6 +92,7 @@ jobs:
         # with the exact sources of the ffmpeg inside, as its GPL asks
         run: |
           scripts/build_ffmpeg.sh --fetch
-          gh release create "$GITHUB_REF_NAME" dist/OpenHouseParty-macos-arm64.zip build/ffmpeg/src/* \
+          scripts/fetch_pandoc.sh --fetch
+          gh release create "$GITHUB_REF_NAME" dist/OpenHouseParty-macos-arm64.zip build/ffmpeg/src/* build/pandoc/src/* \
             --title "Open House Party $GITHUB_REF_NAME" \
-            --notes "OpenHouseParty-macos-arm64.zip is the app: Apple Silicon Macs, macOS 13 or later. Unzip, move to Applications, and the first time: System Settings > Privacy & Security > Open Anyway. The other files are the exact sources of the ffmpeg inside it (GPL), which scripts/build_ffmpeg.sh builds from."
+            --notes "OpenHouseParty-macos-arm64.zip is the app: Apple Silicon Macs, macOS 13 or later. Unzip, move to Applications, and the first time: System Settings > Privacy & Security > Open Anyway. The other files are the exact sources of the ffmpeg inside it (GPL), which scripts/build_ffmpeg.sh builds from, and of its pandoc (GPL; its own WebAssembly release build, scripts/fetch_pandoc.sh)."

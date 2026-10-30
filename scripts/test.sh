@@ -8,6 +8,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ -x build/ffmpeg/bin/ffmpeg ]; then export PATH="$PWD/build/ffmpeg/bin:$PATH"; fi
 
+scripts/fetch_pandoc.sh >/dev/null   # pandoc.wasm, for reading documents (pandoc_test.go)
+
 go vet ./...
 go test ./... "$@"
 go run . --selftest

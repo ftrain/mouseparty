@@ -91,6 +91,7 @@ func (h *Host) startWeb() error {
 	mux.HandleFunc("POST /{key}/img", h.postPicture)
 	mux.HandleFunc("GET /{key}/img/{id}", h.getPicture)
 	mux.HandleFunc("POST /{key}/grab", h.grab)
+	mux.HandleFunc("POST /{key}/read", h.postRead) // a document brought in (pandoc.go)
 
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", h.HTTPPort))
 	if err != nil {
@@ -120,6 +121,8 @@ func (h *Host) onlyWithKey(next http.Handler) http.Handler {
 		limit := int64(64 * 1024)
 		if strings.HasSuffix(r.URL.Path, "/img") {
 			limit = pictureMaxBytes
+		} else if strings.HasSuffix(r.URL.Path, "/read") {
+			limit = readMaxBytes
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		next.ServeHTTP(w, r)

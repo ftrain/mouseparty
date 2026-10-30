@@ -167,6 +167,8 @@ type Host struct {
 	pics      *pictures
 	showing   *nowShowing
 	grabbing  sync.Mutex
+	pandoc    *wasmTool     // documents brought in are read by it (pandoc.go)
+	reading   chan struct{} // one at a time
 
 	tunnelURL        string
 	tunnelRegistered time.Time
@@ -203,6 +205,9 @@ func (h *Host) start() error {
 		prunePictures(h.PicturesDir, h.AppsDir)
 	}
 	h.pics = newPictures(h.PicturesDir)
+	if h.pandoc == nil {
+		h.pandoc, h.reading = newWasmTool("pandoc"), make(chan struct{}, 1)
+	}
 	h.apps = newAppHost(h.chat, apps.Env{Movie: h, Dir: h.AppsDir, Reel: apps.NewReel(h.AppsDir)})
 	h.chat.hello = h.greeting
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
@@ -284,6 +289,7 @@ func (h *Host) Stop() {
 	if h.apps != nil {
 		h.apps.closeAll()
 	}
+	h.pandoc.close()
 	if chat != nil {
 		chat.closeAll()
 	}

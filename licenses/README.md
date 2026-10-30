@@ -12,6 +12,7 @@ its authors publish it, and the built app carries this whole folder in
 | **ffmpeg**, Open House Party's own build (`scripts/build_ffmpeg.sh`) | 9.0.2 | **GPL-2.0-or-later** as built (it includes x264); FFmpeg itself is LGPL-2.1-or-later | see below |
 | [MediaMTX](https://github.com/bluenviron/mediamtx) | 1.21.3 | MIT | `mediamtx/` |
 | [cloudflared](https://github.com/cloudflare/cloudflared) | 2026.10.3 | Apache-2.0 | `cloudflared/` |
+| [pandoc](https://pandoc.org), its own WebAssembly release build (`pandoc.wasm`, `scripts/fetch_pandoc.sh`), run inside the app by wazero: documents brought in (`pandoc.go`) | 3.13 | **GPL-2.0-or-later** (with the parts its `COPYRIGHT` lists under their own) | `pandoc/`; source below |
 
 The ffmpeg in the app is built statically from these, each a pinned release
 checked against its SHA-256 by `scripts/build_ffmpeg.sh`:
@@ -29,6 +30,10 @@ checked against its SHA-256 by `scripts/build_ffmpeg.sh`:
 **ffmpeg's source.** Every GitHub release of Open House Party has these exact source
 archives attached beside the app, and `scripts/build_ffmpeg.sh` rebuilds the
 same ffmpeg from them: the configuration it uses is in that script.
+
+**pandoc's source.** Every release also has the source of the pandoc inside
+attached (`scripts/fetch_pandoc.sh --fetch`), as the GPL asks; the build is
+pandoc's own, from its release, checked against its SHA-256.
 
 ## In the viewer page friends load
 
@@ -65,6 +70,7 @@ with its licence file in `go/<module path>/`. All are MIT, BSD or Apache-2.0.
 | github.com/jackpal/gateway | BSD-3-Clause |
 | github.com/jackpal/go-nat-pmp | Apache-2.0 |
 | github.com/pdfcpu/pdfcpu | Apache-2.0 |
+| github.com/tetratelabs/wazero, WebAssembly in Go (pandoc: `wasm.go`) | Apache-2.0 |
 | modernc.org/sqlite, SQLite in Go (a database up: `data.go`), with SQLite itself (public domain, `LICENSE-SQLITE`) | BSD-3-Clause |
 | modernc.org/libc, modernc.org/mathutil, modernc.org/memory, github.com/remyoudompheng/bigfft, github.com/google/uuid | BSD-3-Clause |
 | github.com/dustin/go-humanize, mattn/go-isatty, ncruces/go-strftime | MIT |

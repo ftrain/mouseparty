@@ -84,6 +84,14 @@
     // Lucide's camera, as the library's icons are given (lucide 1.54, ISC)
     const CAMERA = [['path', { d: 'M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z' }],
         ['circle', { cx: '12', cy: '13', r: '3' }]];
+    // documents the host reads (pandoc.go's readFormats), into the kinds that take one: its words at the end, or its slides after these
+    const READS = new Set(['write', 'deck']);
+    const READABLE = ['.docx', '.odt', '.rtf', '.epub', '.fb2', '.html', '.htm', '.xhtml', '.tex', '.latex', '.typ', '.md', '.markdown',
+        '.txt', '.rst', '.org', '.textile', '.wiki', '.adoc', '.dbk', '.opml', '.ipynb', '.pptx', '.xlsx', '.csv', '.tsv'];
+    const readable = (f) => READABLE.includes(`.${f.name.split('.').pop()}`.toLowerCase());
+    // Lucide's file-up (lucide 1.54, ISC)
+    const FILE_UP = [['path', { d: 'M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z' }],
+        ['path', { d: 'M14 2v5a1 1 0 0 0 1 1h5' }], ['path', { d: 'M12 12v6' }], ['path', { d: 'm15 15-3-3-3 3' }]];
 
     OpenHouseParty.apps.office = (ctx, view) => {
         const h = OpenHouseParty.lib.h;
@@ -154,7 +162,7 @@
         const mount = async () => {
             page.textContent = '';
             page.classList.toggle('scrolls', app === 'write');
-            const commands = TAKES_PICTURES.has(app) ? [grabCommand()] : [];
+            const commands = [...(TAKES_PICTURES.has(app) ? [grabCommand()] : []), ...(READS.has(app) ? [readCommand()] : [])];
             mounted = await lib.editors.mount(app, lib.kernel.write(doc), page, () => {}, { onOps: changed, fill: true, commands, context: {} });
         };
 
@@ -200,6 +208,54 @@
                 grabbing = false;
             }
         };
+
+        // a document brought in, by the bar's button or dropped on the window: the host reads it (pandoc.go), and its
+        // words, tables and pictures go at the end of this one, for everyone (Slides: as slides after these)
+        let reading = false;
+        const readCommand = () => lib.editors.command({
+            id: 'host.read', scope: 'host', where: ['bar'], icon: FILE_UP,
+            label: () => 'Bring in a document', hint: () => 'A Word, OpenOffice or PowerPoint file, an EPUB, a web page, LaTeX…, added at the end',
+            disabled: () => reading, does: () => choose(),
+        });
+        const choose = () => {
+            const input = h('input', { type: 'file', accept: READABLE.join(',') });
+            input.addEventListener('change', () => input.files[0] && bringIn(input.files[0]));
+            input.click();
+        };
+        const bringIn = async (file) => {
+            if (reading || !mounted) return;
+            reading = true;
+            say(`Reading ${file.name}…`);
+            try {
+                const r = await fetch(`${ctx.base}/read?name=${encodeURIComponent(file.name)}&app=${app}`, { method: 'POST', body: file });
+                if (!r.ok) { say(r.status === 413 ? 'That file is too big' : (await r.text()).trim() || 'That file could not be read'); return; }
+                const { text } = await r.json();
+                const K = lib.kernel, now = K.applyAll(doc, pending);
+                let blocks = K.parse(text).blocks;
+                if (!blocks.length) { say(`Nothing in ${file.name} to bring in`); return; }
+                if (app === 'deck' && now.blocks.length) blocks = [K.parse('x\n\n---\n\nx').blocks[1], ...blocks];   // the next slide
+                const op = { op: 'splice', at: now.blocks.length, n: 0, blocks };
+                if (JSON.stringify([op]).length > 1 << 20 || !applied(now, [op])) { say(`${file.name} is too long to bring in`); return; }
+                mounted.applyRemote([op]);
+                changed([op]);
+                say(`Brought in ${file.name}`);
+            } catch (e) {
+                say('That file could not be read');
+            } finally {
+                reading = false;
+            }
+        };
+        // dropped: a picture is the editor's own, any other document the host's to read
+        box.addEventListener('dragover', (e) => {
+            if (READS.has(app) && [...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file' && !i.type.startsWith('image/'))) e.preventDefault();
+        }, true);
+        box.addEventListener('drop', (e) => {
+            const file = [...(e.dataTransfer?.files || [])].find(readable);
+            if (!file || !READS.has(app) || !mounted) return;
+            e.preventDefault();
+            e.stopPropagation();
+            bringIn(file);
+        }, true);
 
         (async () => {
             lib = await office.load(ctx.base);

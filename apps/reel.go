@@ -94,10 +94,10 @@ func (r *Reel) Deck() string {
 		if p.Title != "" {
 			head = p.Title + ", " + head
 		}
-		b.WriteString("\n---\n\n## " + escapeLine(head) + "\n\n")
-		fmt.Fprintf(&b, "```image {alt=%q w=%d h=%d}\n%s\n```\n", "Graffiti at "+head, p.W, p.H, p.Ref)
+		b.WriteString("\n---\n\n## " + EscapeLine(head) + "\n\n")
+		b.WriteString(ImageFence(p.Picture, "Graffiti at "+head))
 		if len(p.By) > 0 {
-			b.WriteString("\n> Drawn by " + escapeLine(strings.Join(p.By, ", ")) + ", " + p.When.Format("Jan 2, 3:04 PM") + "\n")
+			b.WriteString("\n> Drawn by " + EscapeLine(strings.Join(p.By, ", ")) + ", " + p.When.Format("Jan 2, 3:04 PM") + "\n")
 		}
 	}
 	return b.String()
@@ -112,10 +112,18 @@ func clock(s float64) string {
 	return fmt.Sprintf("%d:%02d", t/60, t%60)
 }
 
-// escapeLine: words that can't break out of their line, or be read as marks
-func escapeLine(s string) string {
+// EscapeLine: words that can't break out of their line, or be read as marks
+func EscapeLine(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	return strings.NewReplacer(`\`, `\\`, "*", `\*`, "_", `\_`, "`", "\\`", "{", `\{`, "[", `\[`, "<", `\<`, "~", `\~`, "=", `\=`, "+", `\+`).Replace(s)
+}
+
+// ImageFence: a picture the host keeps, as a Tiny Little Office document holds
+// it (its docs/tlo.md): its words on one line, a double quote made single, as the
+// library's own imageBlock writes them (a \" ends them, and every attribute with them)
+func ImageFence(p Picture, alt string) string {
+	alt = strings.ReplaceAll(strings.Join(strings.Fields(alt), " "), `"`, "'")
+	return fmt.Sprintf("```image {alt=\"%s\" w=%d h=%d}\n%s\n```\n", alt, p.W, p.H, p.Ref)
 }
 
 // reelApp shows the reel, the newest page as it comes
