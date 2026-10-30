@@ -1,10 +1,10 @@
-// TubeYap viewer for a session hosted from someone's Mac (host.go).
+// Open House Party viewer for a session hosted from someone's Mac (host.go).
 // Video: WebRTC straight from the host (WHEP), or HLS from the host if WebRTC
 // can't get through. Chat: a WebSocket to the host. BASE is /<session key>.
 // Nothing here talks to any other server, except a STUN server when the host
 // shares through Cloudflare (it lists it in /status): that lets WebRTC punch
 // through both ends' routers.
-const BASE = window.TUBEYAP_BASE;
+const BASE = window.OPENHOUSEPARTY_BASE;
 // Sessions are meant to leave nothing behind: what the page remembers (your
 // name, subtitle language, whether chat is hidden) lasts only as long as the tab
 const store = window.sessionStorage;
@@ -180,7 +180,7 @@ function endSession(why) {
     setApp(null);
     doc = null;
     document.getElementById('doc').hidden = true;
-    document.title = 'TubeYap';
+    document.title = 'Open House Party';
     document.getElementById('guide').hidden = true;
     document.getElementById('viewerCount').textContent = '';
     try { store.clear(); } catch (e) {}
@@ -194,7 +194,7 @@ function endSession(why) {
 // ---------- chat ----------
 let ws = null;
 let myName = null;
-try { myName = store.getItem('tubeyapName'); } catch (e) {}
+try { myName = store.getItem('openhousepartyName'); } catch (e) {}
 let retry = 1000;
 const box = document.getElementById('chatMessagesOverlay');
 
@@ -251,7 +251,7 @@ function join(name) {
     name = name.trim().slice(0, 30);
     if (!name) return;
     myName = name;
-    try { store.setItem('tubeyapName', name); } catch (e) {}
+    try { store.setItem('openhousepartyName', name); } catch (e) {}
     send({ type: 'join', name });
     showChatInput();
 }
@@ -337,7 +337,7 @@ document.getElementById('nameBtn').addEventListener('click', () => {
 // Remembered per device. While hidden, the chat tab on the video's right edge
 // counts the messages that arrive (not your own, not joins and leaves).
 let chatHidden = false;
-try { chatHidden = store.getItem('tubeyapChatHidden') === '1'; } catch (e) {}
+try { chatHidden = store.getItem('openhousepartyChatHidden') === '1'; } catch (e) {}
 let unread = 0;
 const chatTab = document.getElementById('chatTab');
 const unreadEl = document.getElementById('unread');
@@ -357,7 +357,7 @@ function setChatHidden(hidden) {
         box.scrollTop = box.scrollHeight;
     }
     showUnread();
-    try { store.setItem('tubeyapChatHidden', hidden ? '1' : '0'); } catch (e) {}
+    try { store.setItem('openhousepartyChatHidden', hidden ? '1' : '0'); } catch (e) {}
 }
 document.getElementById('hideChat').addEventListener('click', () => setChatHidden(true));
 setChatHidden(chatHidden);
@@ -456,7 +456,7 @@ let chosen = null;         // the track id showing, or null
 let cueList = [];          // [[start, end, text]] in movie seconds
 let nudge = 0;             // seconds: positive shows them later
 let wanted = null;         // remembered across movies: a language (or label), or 'off'; null until they pick
-try { wanted = store.getItem('tubeyapSubs'); } catch (e) {}
+try { wanted = store.getItem('openhousepartySubs'); } catch (e) {}
 
 function setSubs(s) {
     if (!s) return;
@@ -486,7 +486,7 @@ async function choose(id, remember = true) {
     const t = subs.tracks.find((t) => t.id === id);
     if (remember) {
         wanted = t ? (t.lang || t.label) : 'off';
-        try { store.setItem('tubeyapSubs', wanted); } catch (e) {}
+        try { store.setItem('openhousepartySubs', wanted); } catch (e) {}
     }
     ccBtn.classList.toggle('on', !!id);
     buildMenu();
@@ -572,7 +572,7 @@ function setSchedule(m) {
     schedule = { rows: m.rows, skew: Date.now() / 1000 - m.now };   // add skew to a host time to get ours
     // the tab is named after what's on (the first row has a start time once the host presses Play)
     const on = m.rows[0];
-    document.title = on && on.start != null ? on.title : 'TubeYap';
+    document.title = on && on.start != null ? on.title : 'Open House Party';
     if (!guide.hidden) renderGuide();
 }
 
@@ -766,12 +766,12 @@ setInterval(() => { if (!ended) pollStatus(); }, STATUS_POLL_MS);
 // ---------- apps (apps.go) ----------
 // The host can put an app on everyone's page for a while: over the video
 // (graffiti) or filling the stage (a room). Each is a script, apps/<name>.js, that
-// sets TubeYap.apps[name] to a function of (ctx, view) returning whichever of
+// sets OpenHouseParty.apps[name] to a function of (ctx, view) returning whichever of
 // {view(v), message(m), said(name, text), resize(), stop()} it needs, usually with
 // apps/lib.js's help. ctx.send(m) goes to the app on the host (apps/); this
 // viewer's view of it comes back to view(v) whenever it changes, and its events
 // to message(m).
-window.TubeYap = { apps: {} };
+window.OpenHouseParty = { apps: {} };
 const appLayer = document.getElementById('appLayer');
 const appBtn = document.getElementById('appBtn');
 let myId = null;           // this page's socket, as the host numbers them
@@ -791,10 +791,10 @@ function script(name) {
 
 // loadAppScript: lib.js (what they all share) once, then the app's own
 async function loadAppScript(name) {
-    if (!TubeYap.lib) await script('lib');
-    if (!TubeYap.apps[name]) await script(name);
-    if (!TubeYap.apps[name]) throw new Error(name);
-    return TubeYap.apps[name];
+    if (!OpenHouseParty.lib) await script('lib');
+    if (!OpenHouseParty.apps[name]) await script(name);
+    if (!OpenHouseParty.apps[name]) throw new Error(name);
+    return OpenHouseParty.apps[name];
 }
 
 async function setApp(m) {

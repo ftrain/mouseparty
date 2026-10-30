@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ftrain/tubeyap/apps"
+	"github.com/ftrain/openhouseparty/apps"
 )
 
 // The whole app without its window: host on free ports (no router, no tunnel),
@@ -18,7 +18,7 @@ func TestPlayThroughTheList(t *testing.T) {
 	if findTool("mediamtx") == "" || findTool("ffmpeg") == "" {
 		t.Skip("needs mediamtx and ffmpeg")
 	}
-	t.Setenv("HOME", t.TempDir()) // never the real ~/.tubeyap.json
+	t.Setenv("HOME", t.TempDir()) // never the real settings (dataDir)
 	dir := t.TempDir()
 	var clips []string
 	for i, tone := range []int{440, 660} {

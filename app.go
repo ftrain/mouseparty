@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ftrain/tubeyap/apps"
+	"github.com/ftrain/openhouseparty/apps"
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -709,7 +709,7 @@ func (a *App) showPage(page int) {
 // ---------- subtitles ----------
 // Each movie has Subtitles (what was found: tracks in the file and files beside
 // it) and Subs, what to do with them. Text subtitles are offered to viewers;
-// "burn" and the offset are only in ~/.tubeyap.json.
+// "burn" and the offset are only in the settings file.
 
 func subsSettings(it *Item) *SubsSettings {
 	if it.Subs == nil {
@@ -964,6 +964,7 @@ func (a *App) hostStart() {
 	}
 	h := NewHost(a.log, mediamtx, cloudflared, a.standby)
 	h.MapPorts = a.cfg.OpenRouterPorts
+	h.AppsDir = appsDir()
 	if a.hostSetup != nil {
 		a.hostSetup(h)
 	}

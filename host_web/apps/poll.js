@@ -1,6 +1,6 @@
 // Polls (apps/poll.go): ask a question, everyone votes. Over the video.
-TubeYap.apps.poll = (ctx, view) => {
-    const L = TubeYap.lib, h = L.h;
+OpenHouseParty.apps.poll = (ctx, view) => {
+    const L = OpenHouseParty.lib, h = L.h;
     const m = L.mount(ctx, 'tr', (v, kit) => {
         const out = [h('h2', {}, 'Poll')];
         const p = v.poll;

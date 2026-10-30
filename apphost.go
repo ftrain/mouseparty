@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ftrain/tubeyap/apps"
+	"github.com/ftrain/openhouseparty/apps"
 )
 
 type appHost struct {
@@ -46,7 +46,7 @@ func (h *Host) StartApp(name string, d time.Duration) bool {
 	if old != nil {
 		old.Stop()
 	}
-	s := apps.Start(kind, d, h.apps.send, h.apps.chat.viewers, h.apps.movie)
+	s := apps.Start(kind, d, h.apps.send, h.apps.chat.viewers, h.apps.movie, h.AppsDir)
 	h.apps.mu.Lock()
 	h.apps.now = s
 	h.apps.mu.Unlock()

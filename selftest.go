@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// selftest is `TubeYap --selftest`: host from this Mac (router untouched), check the
+// selftest is `OpenHouseParty --selftest`: host from this Mac (router untouched), check the
 // page, the stand-by stream and the WebRTC handshake answer, publish a short
 // countdown, and stop. 0 if it all worked. For checking a build, here or in CI.
 func selftest() int {
@@ -51,7 +51,7 @@ func selftest() int {
 	check("pdf.js comes as JavaScript", func() (string, error) { return typeIs(base+"assets/pdf.worker.min.mjs", "text/javascript") })
 	check("apps' scripts come as JavaScript", func() (string, error) { return typeIs(base+"apps/graffiti.js", "text/javascript") })
 	check("only apps' scripts", func() (string, error) { return statusIs(base+"apps/nope.js", 404) })
-	if pdf, err := os.CreateTemp("", "tubeyap-*.pdf"); err == nil {
+	if pdf, err := os.CreateTemp("", "openhouseparty-*.pdf"); err == nil {
 		pdf.WriteString("%PDF-1.4\n%%EOF\n")
 		pdf.Close()
 		h.SetDocument("t1", pdf.Name(), "Self-test", 1, 1)

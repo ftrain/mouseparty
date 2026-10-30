@@ -27,7 +27,7 @@ import (
 
 const (
 	lease       = 600 // seconds; renewed well before it runs out, so after a crash they lapse within ten minutes
-	description = "TubeYap"
+	description = "Open House Party"
 )
 
 // defaultGateway: the router's LAN address
@@ -73,7 +73,7 @@ func isPublic(ip string) bool {
 	return true
 }
 
-// igd is what TubeYap uses of a UPnP router's WAN connection service; goupnp's
+// igd is what Open House Party uses of a UPnP router's WAN connection service; goupnp's
 // WANIPConnection1/2 and WANPPPConnection1 clients all have it.
 type igd interface {
 	GetExternalIPAddress() (string, error)

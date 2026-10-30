@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ftrain/tubeyap/apps"
+	"github.com/ftrain/openhouseparty/apps"
 	"github.com/gorilla/websocket"
 )
 

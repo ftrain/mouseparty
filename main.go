@@ -1,4 +1,4 @@
-// TubeYap: watch movies with friends, hosted from this Mac, gone when you quit.
+// Open House Party: watch movies with friends, hosted from this Mac, gone when you quit.
 //
 // A Wails app: two big buttons (Play/Stop, and Copy link) over a list of movies,
 // music and PDFs (app.go, frontend/). It plays them one after another with ffmpeg
@@ -6,10 +6,12 @@
 // (host_web/: WebRTC video, HLS fallback, chat) behind a link with a random key.
 // No server anywhere else. Quit, and the session, the chat and the link are gone.
 //
-//	TubeYap               the app
-//	TubeYap --selftest    host on free ports, check it all works, and stop
+//	OpenHouseParty               the app
+//	OpenHouseParty --selftest    host on free ports, check it all works, and stop
 //
-// The queue and settings live in ~/.tubeyap.json; nothing about a session does.
+// The queue and settings, and what apps keep (the graffiti wall, the last poll),
+// live in ~/Library/Application Support/Open House Party; nothing else about a
+// session does.
 package main
 
 import (
@@ -49,7 +51,7 @@ func main() {
 		os.Exit(0)
 	}()
 	err := wails.Run(&options.App{
-		Title:            "TubeYap",
+		Title:            "Open House Party",
 		Width:            520,
 		Height:           620,
 		MinWidth:         380,
@@ -63,9 +65,9 @@ func main() {
 		Bind:             []any{app},
 		Menu:             app.menu(),
 		Mac: &mac.Options{
-			About: &mac.AboutInfo{Title: "TubeYap", Message: "Watch movies with friends, hosted from this Mac.\n\n" +
+			About: &mac.AboutInfo{Title: "Open House Party", Message: "Watch movies with friends, hosted from this Mac.\n\n" +
 				"MIT licence. It includes ffmpeg (GPL), MediaMTX, cloudflared and more, each under its own " +
-				"licence: see Contents/Resources/Licenses inside the app, and github.com/ftrain/tubeyap."},
+				"licence: see Contents/Resources/Licenses inside the app, and github.com/ftrain/openhouseparty."},
 		},
 	})
 	if err != nil {

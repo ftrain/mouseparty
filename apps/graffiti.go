@@ -2,7 +2,10 @@ package apps
 
 // Graffiti: everyone draws on the video. Lines are kept in the video's own
 // coordinates (0-1 across and down the 16:9 picture), so they land on the same
-// spot for every viewer whatever their window. Sketch draws the same way.
+// spot for every viewer whatever their window. Sketch draws the same way. The
+// wall is kept: it's there again the next time Graffiti is up.
+
+import "encoding/json"
 
 const (
 	graffitiColors    = 6     // the palette is the script's; a colour is its index
@@ -66,4 +69,21 @@ func (g *graffiti) Message(r *Room, from Viewer, m Msg) {
 		g.points += len(l.Points)
 		r.All(Msg{"kind": "line", "line": l})
 	}
+}
+
+func (g *graffiti) Save() any { return g.lines }
+
+func (g *graffiti) Load(b []byte) error {
+	var lines []Stroke
+	if err := json.Unmarshal(b, &lines); err != nil {
+		return err
+	}
+	for _, l := range lines {
+		if g.points+len(l.Points) > graffitiMaxTotal {
+			break
+		}
+		g.lines = append(g.lines, l)
+		g.points += len(l.Points)
+	}
+	return nil
 }

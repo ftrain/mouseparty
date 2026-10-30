@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the ffmpeg TubeYap ships: static (nothing outside macOS to link), and cut
+# Build the ffmpeg Open House Party ships: static (nothing outside macOS to link), and cut
 # down to what the app uses. It still reads anything (every decoder, container
 # and parser), but it writes only H.264 (x264) and Opus over RTSP, PNG (a song's
 # cover) and WebVTT (subtitles for viewers), plus Matroska and MP4 for the tests;

@@ -74,7 +74,11 @@ func TestAppsOverChat(t *testing.T) {
 	a.WriteJSON(map[string]any{"type": "app", "app": "room", "kind": "go", "x": 0.5, "y": 0.5}) // no name yet: ignored
 	a.WriteJSON(map[string]any{"type": "join", "name": "Ann"})
 	a.WriteJSON(map[string]any{"type": "app", "app": "room", "kind": "go", "x": 0.25, "y": 0.75})
-	if m := next(b, "app"); m["kind"] != "avatar" || m["avatar"].(map[string]any)["name"] != "Ann" || m["from"] == nil {
+	m = next(b, "app")
+	if m["kind"] == "view" { // Ann taking a name sends everyone their view again
+		m = next(b, "app")
+	}
+	if m["kind"] != "avatar" || m["avatar"].(map[string]any)["name"] != "Ann" || m["from"] == nil {
 		t.Fatal(m)
 	}
 	a.Close()

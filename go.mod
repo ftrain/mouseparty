@@ -1,4 +1,4 @@
-module github.com/ftrain/tubeyap
+module github.com/ftrain/openhouseparty
 
 go 1.27.1
 

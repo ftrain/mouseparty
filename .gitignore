@@ -2,7 +2,7 @@
 # the script copies it to dist; build/vendor holds the static ffmpeg
 packaging/bin/
 dist/
-build/
+/build
 
 # OS and editors
 .DS_Store

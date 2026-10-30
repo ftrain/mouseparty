@@ -1,6 +1,6 @@
 # ENABLE
 
-ENABLE ("Enhanced North American Benchmark Lexicon"), the word list TubeYap's
+ENABLE ("Enhanced North American Benchmark Lexicon"), the word list Open House Party's
 word games check plays against (`apps/enable.txt.gz`, gzipped). Its authors put
 it in the public domain: there is no licence to include.
 

@@ -55,7 +55,7 @@ func encodingArgs(o StreamOpts) []string {
 // textFile: text for drawtext goes through a file, so no character in it can break
 // the filter syntax (and expansion=none stops drawtext reading %{...} in it)
 func textFile(text string) string {
-	f, err := os.CreateTemp("", "tubeyap-*.txt")
+	f, err := os.CreateTemp("", "openhouseparty-*.txt")
 	if err != nil {
 		return ""
 	}
@@ -126,7 +126,7 @@ func documentCommand(title string, o StreamOpts) ([]string, []string) {
 	return cardCommand([]CardLine{
 		{"> reading together", green, 40, "h/2-120", true},
 		{title, "white", size, "h/2-40", false},
-		{"the pages are on the TubeYap page", "0x8e8e93", 28, "h/2+80", true},
+		{"the pages are on the Open House Party page", "0x8e8e93", 28, "h/2+80", true},
 	}, 0, o)
 }
 
@@ -163,7 +163,7 @@ func offsetSRT(path string, offset float64) (string, error) {
 		end := ((n[4]*3600+n[5]*60+n[6])*1000 + n[7]) + shift
 		return stamp(start) + " --> " + stamp(end)
 	})
-	f, err := os.CreateTemp("", "tubeyap-*.srt")
+	f, err := os.CreateTemp("", "openhouseparty-*.srt")
 	if err != nil {
 		return "", err
 	}
@@ -198,7 +198,7 @@ func soundInfo(path string) SoundInfo {
 
 // extractCover: the cover art, as a PNG file to loop under the sound, or ""
 func extractCover(path string, index int) string {
-	f, err := os.CreateTemp("", "tubeyap-*.png")
+	f, err := os.CreateTemp("", "openhouseparty-*.png")
 	if err != nil {
 		return ""
 	}
