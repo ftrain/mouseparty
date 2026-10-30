@@ -922,7 +922,7 @@ async function openApp(info) {
 	if (!w) {
 		const el = document.createElement("div");
 		el.className = "win" + (info.glass ? " glass" : "") + (["office", "reel"].includes(info.script) ? " office" : "");
-		el.innerHTML = "<div class=\"win-bar\"><span class=\"win-icon\"></span><span class=\"win-title\"></span><input class=\"win-glass\" type=\"range\" min=\"15\" max=\"100\" title=\"See-through or solid (for you)\" aria-label=\"How solid this window is\"><button class=\"win-btn win-min\" title=\"Hide it (for you)\">–</button><button class=\"win-btn win-close\" title=\"Close it for everyone\">✕</button></div><div class=\"win-body\"></div>" + [
+		el.innerHTML = "<div class=\"win-bar\"><span class=\"win-icon\"></span><span class=\"win-title\"></span><input class=\"win-glass\" type=\"range\" min=\"2\" max=\"100\" title=\"See-through or solid (for you)\" aria-label=\"How solid this window is\"><button class=\"win-btn win-min\" title=\"Hide it (for you)\">–</button><button class=\"win-btn win-close\" title=\"Close it for everyone\">✕</button></div><div class=\"win-body\"></div>" + [
 			"nw",
 			"ne",
 			"sw",

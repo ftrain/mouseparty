@@ -45,21 +45,26 @@ button { font-family: var(--font); }
 /* The apps' windows (host.js), over the video: each moved by its bar and sized
    by its four corners, by each viewer for themselves. Around them, the player. */
 .desk { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
-/* Tinted glass over the movie: --glass (the slider in the bar, each viewer's own, 0.15-1) is how solid
-   it is; what's inside sizes itself to the window (container units, host_web/apps/lib.js) */
+/* Tinted glass over the movie: --glass (the slider in the bar, each viewer's own, 0.02-1) is how solid
+   it is, at its least the barest glimmer; what's inside sizes itself to the window (container units,
+   host_web/apps/lib.js). A window with things on a ground (the Pinboard) fades in two halves: the first half
+   of the slider takes the ground away (--glass-ground), the second the things on it (--glass-things) */
 .win {
     --glass: 0.6;
+    --glass-ground: clamp(0, (var(--glass) - 0.5) * 2, 1);
+    --glass-things: clamp(0, var(--glass) * 2, 1);
     --pink: #ff5fa2; --violet: #a78bfa; --cyan: #3ee0ff; --yellow: #ffd23f; --lime: #7cf27a;
     position: absolute; display: flex; flex-direction: column; pointer-events: auto; border-radius: 14px;
     background: rgb(18 14 32 / var(--glass));
     -webkit-backdrop-filter: blur(calc(var(--glass) * 14px)) saturate(1.3); backdrop-filter: blur(calc(var(--glass) * 14px)) saturate(1.3);
-    border: 1px solid rgb(255 255 255 / 0.18); box-shadow: 0 10px 40px rgb(0 0 0 / calc(var(--glass) * 0.6));
+    border: 1px solid rgb(255 255 255 / calc(0.05 + var(--glass) * 0.13)); box-shadow: 0 10px 40px rgb(0 0 0 / calc(var(--glass) * 0.6));
     font-family: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, sans-serif;
 }
 .win[hidden] { display: none; }
 .win-bar {
     position: relative; flex: none; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 4px 0 10px;
-    background: rgb(0 0 0 / calc(0.2 + var(--glass) * 0.35)); color: #fff; font-size: 13px; font-weight: 700;
+    background: rgb(0 0 0 / calc(0.06 + var(--glass) * 0.5)); color: #fff; font-size: 13px; font-weight: 700;
+    text-shadow: 0 1px 3px rgb(0 0 0 / 0.8); /* readable on the picture when the bar is all but gone */
     border-radius: 13px 13px 0 0; cursor: move; user-select: none; touch-action: none;
 }
 .win-bar::after {   /* a ribbon of party colours under the bar */

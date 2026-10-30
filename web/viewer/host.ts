@@ -1028,7 +1028,7 @@ function setApps(list: AppInfo[]) {
     for (const a of list) openApp(a); // the ones already up start again, where they were, from the view just sent
 }
 
-// how solid each kind of window is for this viewer (the slider in its bar), 0.15 to 1: the movie shows through the rest
+// how solid each kind of window is for this viewer (the slider in its bar), 0.02 to 1: the movie shows through the rest
 const GLASS_KEY = 'mousepartyGlass';
 const glassOf: Record<string, number> = (() => {
     try {
@@ -1049,7 +1049,7 @@ async function openApp(info: AppInfo) {
         el.className = 'win' + (info.glass ? ' glass' : '') + (['office', 'reel'].includes(info.script) ? ' office' : '');
         el.innerHTML =
             '<div class="win-bar"><span class="win-icon"></span><span class="win-title"></span>' +
-            '<input class="win-glass" type="range" min="15" max="100" title="See-through or solid (for you)" aria-label="How solid this window is">' +
+            '<input class="win-glass" type="range" min="2" max="100" title="See-through or solid (for you)" aria-label="How solid this window is">' +
             '<button class="win-btn win-min" title="Hide it (for you)">–</button>' +
             '<button class="win-btn win-close" title="Close it for everyone">✕</button></div>' +
             '<div class="win-body"></div>' +

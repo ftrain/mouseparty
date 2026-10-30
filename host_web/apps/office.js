@@ -64,7 +64,22 @@ const css = () => {
 .office-page.scrolls { overflow: auto; display: block; }
 .office-page.scrolls > .to-editor { min-height: 100%; }
 .office-page.scrolls to-bar { position: sticky; top: 0; z-index: 5; }
-.office-page to-bar { flex-wrap: wrap; overflow: visible; height: auto; }   /* a window is narrower than the page the bar measures */`));
+.office-page to-bar { flex-wrap: wrap; overflow: visible; height: auto; }   /* a window is narrower than the page the bar measures */
+/* narrow, the bar is a menu (☰): a strip with its button, and the bar, wrapped, only while it's open */
+.office-strip { display: none; flex: none; align-items: center; padding: 4px 6px; background: var(--to-bg); }
+.office.narrow .office-strip { display: flex; }
+.office.narrow:not(.menu-open) to-bar { display: none; }
+.office-burger { display: grid; place-items: center; width: 34px; height: 28px; padding: 0; border-radius: 7px; cursor: pointer;
+                 color: var(--to-ink); background: rgb(255 255 255 / 0.06); border: 1px solid rgb(255 255 255 / 0.2); }
+.office-burger svg { width: 18px; height: 18px; }
+.office-burger[aria-expanded="true"] { background: rgb(255 255 255 / 0.18); }
+/* the Pinboard fades in two halves (host.css): its ground goes over the slider's first half, the things on it over the second */
+.win.office:has(.office[data-app="pinboard"]) { background: rgb(18 14 32 / var(--glass-ground));
+              -webkit-backdrop-filter: blur(calc(var(--glass-ground) * 14px)) saturate(1.3); backdrop-filter: blur(calc(var(--glass-ground) * 14px)) saturate(1.3);
+              --to-bg: rgb(19 19 22 / var(--glass-ground)); --to-paper: rgb(30 30 34 / var(--glass-ground)); }
+.office[data-app="pinboard"] svg.pin-canvas { background: rgb(36 36 40 / var(--glass-ground)); }
+.office[data-app="pinboard"] .pin-ground { opacity: var(--glass-ground); }
+.office[data-app="pinboard"] .pin-item, .office[data-app="pinboard"] .pin-hint { opacity: var(--glass-things); }`));
 };
 let seed = null;
 const seedNext = (name, text) => {
@@ -123,6 +138,7 @@ const READABLE = [
 	".tsv"
 ];
 const readable = (f) => READABLE.includes(`.${f.name.split(".").pop()}`.toLowerCase());
+const MENU = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 5h16\"/><path d=\"M4 12h16\"/><path d=\"M4 19h16\"/></svg>";
 const FILE_UP = [
 	["path", { d: "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" }],
 	["path", { d: "M14 2v5a1 1 0 0 0 1 1h5" }],
@@ -130,10 +146,44 @@ const FILE_UP = [
 	["path", { d: "m15 15-3-3-3 3" }]
 ];
 const office = (ctx, view) => {
-	const box = h("div", { class: "office" });
+	const box = h("div", {
+		class: "office",
+		"data-app": view.app
+	});
 	const page = h("div", { class: "office-page" });
-	box.append(page);
+	const burger = h("button", {
+		class: "office-burger",
+		type: "button",
+		title: "The menu",
+		"aria-label": "Menu",
+		"aria-expanded": "false"
+	});
+	burger.innerHTML = MENU;
+	box.append(h("div", { class: "office-strip" }, burger), page);
 	ctx.layer.append(box);
+	let need = 0;
+	const menu = (open) => {
+		box.classList.toggle("menu-open", open);
+		burger.setAttribute("aria-expanded", String(open));
+	};
+	const fit = () => {
+		const bar = page.querySelector("to-bar");
+		if (!bar) return;
+		if (bar.offsetParent) {
+			const kids = [...bar.children];
+			const width = kids.reduce((w, k) => w + k.offsetWidth, 0) + 6 * Math.max(0, kids.length - 1) + 16;
+			if (width > 16) need = width;
+		}
+		const narrow = need > 0 && box.clientWidth < need;
+		box.classList.toggle("narrow", narrow);
+		if (!narrow) menu(false);
+	};
+	burger.addEventListener("click", () => menu(!box.classList.contains("menu-open")));
+	box.addEventListener("keydown", (e) => {
+		if (e.key === "Escape" && box.classList.contains("menu-open")) menu(false);
+	});
+	const sizes = new ResizeObserver(fit);
+	sizes.observe(box);
 	css();
 	let lib = null, mounted = null, stopped = false;
 	let app = view.app, doc = null, seq = 0, pending = [], inflight = null, client = newClient(), n = 0;
@@ -212,6 +262,8 @@ const office = (ctx, view) => {
 			commands,
 			context: {}
 		});
+		need = 0;
+		requestAnimationFrame(fit);
 	};
 	const putPicture = async (file) => {
 		const editor = mounted.editor;
@@ -443,6 +495,7 @@ const office = (ctx, view) => {
 		},
 		stop() {
 			stopped = true;
+			sizes.disconnect();
 		}
 	};
 };
