@@ -1,6 +1,7 @@
 package apps
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"os"
 	"strings"
@@ -91,7 +92,7 @@ func TestSessionSendsViews(t *testing.T) {
 	viewers := []Viewer{ann, bob}
 	kind, _ := Lookup("anagram")
 	s := Start(kind, 3, "Ann", func(to int, m map[string]any) { out = append(out, sent{to, m}) },
-		func() []Viewer { return viewers }, nil, "")
+		func() []Viewer { return viewers }, Env{})
 	defer s.Stop()
 	if info := s.Info(ann); len(out) != 0 || info["id"] != 3 || info["name"] != "anagram" || info["by"] != "Ann" || info["view"] == nil {
 		t.Fatal(info, out)
@@ -304,10 +305,18 @@ func TestBlanksAndPoll(t *testing.T) {
 type testMovie struct {
 	lines []Line
 	pos   float64
+	kept  []string
 }
 
 func (m *testMovie) Lines() []Line             { return m.lines }
 func (m *testMovie) Position() (float64, bool) { return m.pos, true }
+func (m *testMovie) Frame() ([]byte, Picture, error) {
+	return []byte("png"), Picture{W: 1920, H: 800, At: m.pos, Title: "The Movie"}, nil
+}
+func (m *testMovie) Keep(b []byte, mime string) (Picture, error) {
+	m.kept = append(m.kept, string(b))
+	return Picture{Ref: fmt.Sprintf("asset:%d", len(m.kept)), W: 1280, H: 720}, nil
+}
 
 func TestBingoListens(t *testing.T) {
 	m := &testMovie{}
@@ -400,7 +409,7 @@ func TestKeepersOutlastTheSession(t *testing.T) {
 	send := func(int, map[string]any) {}
 	start := func(name string) *Session {
 		kind, _ := Lookup(name)
-		return Start(kind, 1, "Ann", send, viewers, nil, dir)
+		return Start(kind, 1, "Ann", send, viewers, Env{Dir: dir})
 	}
 
 	g := start("graffiti")

@@ -68,7 +68,7 @@ func (h *Host) startWeb() error {
 	mux.HandleFunc("GET /{key}/apps/{name}", func(w http.ResponseWriter, r *http.Request) { // an app's script
 		name, _ := strings.CutSuffix(r.PathValue("name"), ".js")
 		b, err := fs.ReadFile(web, "apps/"+name+".js")
-		if _, known := apps.Lookup(name); (!known && name != "lib" && name != "icons") || err != nil {
+		if !appScript(name) || err != nil {
 			http.NotFound(w, r)
 			return
 		}
@@ -84,6 +84,12 @@ func (h *Host) startWeb() error {
 	mux.HandleFunc("GET /{key}/status", h.status)
 	mux.HandleFunc("GET /{key}/subs/{token}/{id}", h.subsFile)
 	mux.HandleFunc("GET /{key}/doc/{token}", h.docFile)
+	mux.HandleFunc("GET /{key}/office/{path...}", func(w http.ResponseWriter, r *http.Request) { // Tiny Little Office's editors
+		officeFile(w, r, web)
+	})
+	mux.HandleFunc("POST /{key}/img", h.postPicture)
+	mux.HandleFunc("GET /{key}/img/{id}", h.getPicture)
+	mux.HandleFunc("POST /{key}/grab", h.grab)
 
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", h.HTTPPort))
 	if err != nil {
@@ -110,7 +116,11 @@ func (h *Host) onlyWithKey(next http.Handler) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+		limit := int64(64 * 1024)
+		if strings.HasSuffix(r.URL.Path, "/img") {
+			limit = pictureMaxBytes
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -253,6 +263,39 @@ func (h *Host) docFile(w http.ResponseWriter, r *http.Request) {
 	st, _ := f.Stat()
 	w.Header().Set("Content-Type", "application/pdf")
 	http.ServeContent(w, r, "", st.ModTime(), f)
+}
+
+// appScript: a script an app is drawn by (apps.Kind.Script), or what they share
+func appScript(name string) bool {
+	if name == "lib" || name == "icons" {
+		return true
+	}
+	for _, k := range apps.Kinds {
+		if k.Script() == name {
+			return true
+		}
+	}
+	return false
+}
+
+// officeFile: Tiny Little Office's built editors (scripts/vendor_office.sh), as the
+// types a module, a stylesheet and a font must come as
+func officeFile(w http.ResponseWriter, r *http.Request, web fs.FS) {
+	name := "office/" + r.PathValue("path")
+	b, err := fs.ReadFile(web, name)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	types := map[string]string{".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css; charset=utf-8",
+		".woff2": "font/woff2", ".json": "application/json", ".txt": "text/plain; charset=utf-8"}
+	t, ok := types[filepath.Ext(name)]
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", t)
+	w.Write(b)
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

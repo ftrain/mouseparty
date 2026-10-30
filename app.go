@@ -632,6 +632,7 @@ func (a *App) finished(code int) {
 	a.subToken = ""
 	if a.host != nil && a.host.Running() {
 		a.host.ClearSubtitles()
+		a.host.SetShowing("", "")
 		a.host.ClearDocument()
 	}
 	if a.docDone { // turned past a PDF's last page: it stopped because it's finished
@@ -845,6 +846,11 @@ func (a *App) offerSubtitles(it *Item) {
 	a.subToken = strconv.FormatInt(time.Now().UnixMilli(), 10)
 	if a.host != nil && a.host.Running() {
 		a.host.ClearSubtitles()
+		if it.kind() == "video" { // frames from it, for documents and the graffiti reel
+			a.host.SetShowing(it.Path, displayTitle(it.Path))
+		} else {
+			a.host.SetShowing("", "")
+		}
 	}
 	if it.kind() == "pdf" || subsSettings(it).Mode != "viewers" {
 		return
@@ -959,7 +965,7 @@ func (a *App) hostStart() {
 	}
 	h := NewHost(a.log, mediamtx, cloudflared, a.standby)
 	h.MapPorts = a.cfg.OpenRouterPorts
-	h.AppsDir = appsDir()
+	h.AppsDir, h.PicturesDir = appsDir(), picturesDir()
 	if a.hostSetup != nil {
 		a.hostSetup(h)
 	}

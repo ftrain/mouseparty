@@ -34,6 +34,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/ftrain/openhouseparty/apps"
 )
 
 const (
@@ -135,6 +137,7 @@ type Host struct {
 	CleanLeftovers bool // false: a check running beside a real session leaves it alone
 	Standby        []byte
 	AppsDir        string // where apps keep what outlasts the session (apps.Keeper); "" nowhere
+	PicturesDir    string // where the pictures they name are kept (pictures.go); "" in memory only
 
 	mu        sync.Mutex
 	key       string
@@ -159,6 +162,9 @@ type Host struct {
 	schedule  []ScheduleRow
 	doc       *document
 	apps      *appHost
+	pics      *pictures
+	showing   *nowShowing
+	grabbing  sync.Mutex
 
 	tunnelURL        string
 	tunnelRegistered time.Time
@@ -191,7 +197,11 @@ func (h *Host) start() error {
 	h.mu.Lock()
 	h.key = base64.RawURLEncoding.EncodeToString(key)
 	h.chat = &Chat{conns: map[*chatConn]bool{}}
-	h.apps = newAppHost(h.chat, h, h.AppsDir)
+	if h.PicturesDir != "" && h.AppsDir != "" {
+		prunePictures(h.PicturesDir, h.AppsDir)
+	}
+	h.pics = newPictures(h.PicturesDir)
+	h.apps = newAppHost(h.chat, apps.Env{Movie: h, Dir: h.AppsDir, Reel: apps.NewReel(h.AppsDir)})
 	h.chat.hello = h.greeting
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left

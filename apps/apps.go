@@ -86,6 +86,23 @@ var Kinds = []Kind{
 	{"spies", "Spies", "venetian-mask", false, "big", 4, newSpies},
 	{"werewolf", "Werewolf", "moon-star", false, "big", 4, newWerewolf},
 	{"poll", "Polls", "chart-column", false, "small", 1, newPoll},
+	// documents everyone edits at once (office.go), and the graffiti reel
+	{"write", "Document", "file-text", false, "big", 1, newOffice("write")},
+	{"outline", "Outline", "list-tree", false, "big", 1, newOffice("outline")},
+	{"deck", "Slides", "presentation", false, "big", 1, newOffice("deck")},
+	{"sheet", "Sheet", "sheet", false, "big", 1, newOffice("sheet")},
+	{"diagram", "Diagram", "workflow", false, "big", 1, newOffice("diagram")},
+	{"draw", "Drawing", "pen-tool", false, "big", 1, newOffice("draw")},
+	{"reel", "Graffiti Reel", "film", false, "big", 1, newReelApp},
+}
+
+// Script: the script that draws a kind, host_web/apps/<Script>.js: every
+// document's is office.js
+func (k Kind) Script() string {
+	if IsOffice(k.Name) {
+		return "office"
+	}
+	return k.Name
 }
 
 func Lookup(name string) (Kind, bool) {
@@ -97,10 +114,31 @@ func Lookup(name string) (Kind, bool) {
 	return Kind{}, false
 }
 
-// Movie is what's playing, for apps that play along with it (Bingo)
+// Movie is what's playing, for apps that play along with it (Bingo), and the
+// pictures the host keeps for the pages (documents' pictures, frames, the reel)
 type Movie interface {
-	Lines() []Line             // its subtitles, if viewers are offered any
-	Position() (float64, bool) // seconds into it; false when no movie is playing
+	Lines() []Line                               // its subtitles, if viewers are offered any
+	Position() (float64, bool)                   // seconds into it; false when no movie is playing
+	Frame() ([]byte, Picture, error)             // the frame showing now, a PNG, and what it is (no Ref: not kept)
+	Keep(b []byte, mime string) (Picture, error) // a picture an app made, kept as the pages' are
+}
+
+// Picture is one the host keeps: Ref is what a document holds ("asset:…"),
+// served to the pages at img/<id>; At and Title say what frame it is, if one
+type Picture struct {
+	Ref   string  `json:"ref"`
+	W     int     `json:"w"`
+	H     int     `json:"h"`
+	At    float64 `json:"at,omitempty"`
+	Title string  `json:"title,omitempty"`
+}
+
+// Env is what a session's apps share from the host: the movie, where Keepers
+// keep ("" for nowhere), and the graffiti reel
+type Env struct {
+	Movie Movie
+	Dir   string
+	Reel  *Reel
 }
 
 type Line struct {
@@ -111,6 +149,7 @@ type Line struct {
 // Room is what an Activity can do: talk to the viewers, and know about them
 type Room struct {
 	Movie Movie
+	Reel  *Reel
 	Rand  *rand.Rand
 
 	id      int                              // which app this is, of those open: on everything sent
@@ -153,9 +192,10 @@ type Session struct {
 
 // Start runs kind, numbered id, until Stop; by is who opened it. send delivers
 // a message to one page (to > 0) or all (0); viewers lists the pages open. The
-// caller hands each page the app (Info). A Keeper is kept in dir ("" for nowhere).
-func Start(kind Kind, id int, by string, send func(to int, msg map[string]any), viewers func() []Viewer, movie Movie, dir string) *Session {
-	r := &Room{Movie: movie, Rand: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())), id: id, send: send, viewers: viewers}
+// caller hands each page the app (Info). A Keeper is kept in env.Dir.
+func Start(kind Kind, id int, by string, send func(to int, msg map[string]any), viewers func() []Viewer, env Env) *Session {
+	r := &Room{Movie: env.Movie, Reel: env.Reel, Rand: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())), id: id, send: send, viewers: viewers}
+	dir := env.Dir
 	s := &Session{Kind: kind, ID: id, By: by, room: r, stop: make(chan struct{})}
 	s.mu.Lock()
 	s.act = kind.New(r)
@@ -175,7 +215,7 @@ func (s *Session) Info(v Viewer) map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := s.Kind
-	return map[string]any{"id": s.ID, "name": k.Name, "title": k.Title, "icon": k.Icon, "glass": k.Glass, "size": k.Size,
+	return map[string]any{"id": s.ID, "name": k.Name, "script": k.Script(), "title": k.Title, "icon": k.Icon, "glass": k.Glass, "size": k.Size,
 		"by": s.By, "view": s.act.View(v)}
 }
 

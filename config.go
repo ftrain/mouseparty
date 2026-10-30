@@ -85,6 +85,9 @@ func configPath() string { return filepath.Join(dataDir(), "settings.json") }
 // graffiti wall, the last poll): apps/<name>.json in dataDir
 func appsDir() string { return filepath.Join(dataDir(), "apps") }
 
+// picturesDir: the pictures what they keep names (documents' pictures, the graffiti reel)
+func picturesDir() string { return filepath.Join(dataDir(), "pictures") }
+
 func loadConfig() *Config {
 	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, Queue: []*Item{}}
 	if b, err := os.ReadFile(configPath()); err == nil {

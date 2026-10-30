@@ -787,6 +787,7 @@ setInterval(() => { if (!ended) pollStatus(); }, STATUS_POLL_MS);
 // said(name, text), resize(), stop()} it needs, usually with apps/lib.js's help.
 // ctx.layer is the window's inside; ctx.send(m) goes to the app on the host;
 // this viewer's view comes back to view(v) whenever it changes, events to message(m).
+// A document of any kind is drawn by one script, apps/office.js (info.script).
 window.OpenHouseParty = { apps: {} };
 const desk = document.getElementById('desk');
 const dock = document.getElementById('dock');
@@ -818,8 +819,9 @@ async function loadAppScript(name) {
     return OpenHouseParty.apps[name];
 }
 
+let iconsLoading = null;   // one load, however many windows ask at once
 async function icons() {
-    if (typeof lucide !== 'function') await script('icons');
+    if (typeof lucide !== 'function') await (iconsLoading = iconsLoading || script('icons'));
 }
 const icon = (name) => (typeof lucide === 'function' ? lucide(name) : '');
 
@@ -871,13 +873,15 @@ async function openApp(info) {
     w.inst = null;
     w.body.textContent = '';
     let start;
-    try { start = await loadAppScript(info.name); } catch (e) { return; }
+    try { start = await loadAppScript(info.script || info.name); } catch (e) { return; }
     if (wins.get(info.id) !== w || w.info !== info) return;    // closed, or started again, meanwhile
     const ctx = {
         layer: w.body,
         send: (msg) => send({ ...msg, type: 'app', id: info.id }),
         me: () => ({ id: myId, name: myName }),
         videoBox: () => videoBox(w),
+        base: BASE,                       // the session's path: pictures (img/), the documents' editors (office/)
+        open: (name) => { openedHere = name; send({ type: 'app_open', name }); },   // another app, for everyone
     };
     w.inst = start(ctx, info.view) || {};
 }

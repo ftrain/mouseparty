@@ -51,6 +51,8 @@ func selftest() int {
 	check("pdf.js comes as JavaScript", func() (string, error) { return typeIs(base+"assets/pdf.worker.min.mjs", "text/javascript") })
 	check("apps' scripts come as JavaScript", func() (string, error) { return typeIs(base+"apps/graffiti.js", "text/javascript") })
 	check("only apps' scripts", func() (string, error) { return statusIs(base+"apps/nope.js", 404) })
+	check("the documents' editors come as JavaScript", func() (string, error) { return typeIs(base+"office/editors.js", "text/javascript") })
+	check("documents are drawn by office.js", func() (string, error) { return typeIs(base+"apps/office.js", "text/javascript") })
 	if pdf, err := os.CreateTemp("", "openhouseparty-*.pdf"); err == nil {
 		pdf.WriteString("%PDF-1.4\n%%EOF\n")
 		pdf.Close()

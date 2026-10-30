@@ -173,7 +173,7 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 		c.joined(apps.Viewer{ID: conn.id})
 	}
 
-	ws.SetReadLimit(64 * 1024)
+	ws.SetReadLimit(2 << 20) // a document written down (apps/office.go)
 	ws.SetReadDeadline(time.Now().Add(45 * time.Second))
 	ws.SetPongHandler(func(string) error { return ws.SetReadDeadline(time.Now().Add(45 * time.Second)) })
 	defer func() {

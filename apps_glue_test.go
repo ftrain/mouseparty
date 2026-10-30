@@ -16,7 +16,7 @@ import (
 func TestAppsOverChat(t *testing.T) {
 	h := &Host{}
 	h.chat = &Chat{conns: map[*chatConn]bool{}}
-	h.apps = newAppHost(h.chat, h, "")
+	h.apps = newAppHost(h.chat, apps.Env{Movie: h})
 	h.chat.hello = h.greeting
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
