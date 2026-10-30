@@ -1698,4 +1698,37 @@ board-hiring = Anbochaj
 board-candidates-from-application-to-hire = Kandida yo depi aplikasyon jiska anbochaj, ak pòs la ak pwochen etap la.
 board-content-calendar = Kalandriye kontni
 board-pieces-from-idea-to-published = Atik yo depi lide a jiska piblikasyon, ak chanèl la, otè a ak dat la.
+common-pinboard = Tablo pinèz
+pinboard-pinboard = tablo pinèz
+pinboard-notes-pictures-frames-and-arrows = Nòt kole, foto, kad ak flèch sou yon tablo san bò, pou n kloure epi desinen ansanm.
+pinboard-select = Chwazi
+pinboard-frame = Kad
+pinboard-pen = Plim
+pinboard-arrow = Flèch
+pinboard-pink = Woz
+pinboard-describe-picture = Dekri foto a
+pinboard-connect = Konekte
+pinboard-arrowhead = Pwent flèch
+pinboard-bring-to-front = Mete devan
+pinboard-fit-everything = Montre tout
+pinboard-in-hand = Seleksyon
+pinboard-empty-board = Yon tablo pinèz vid
+pinboard-board-of-n-things = { $n ->
+        [one] Yon tablo pinèz ak { $n } bagay
+       *[other] Yon tablo pinèz ak { $n } bagay
+    }
+pinboard-frames-named = Kad: { $frames }
+pinboard-hint-select = Trennen tablo a pou w deplase; Shift epi trennen pou w chwazi plizyè
+pinboard-hint-chosen = Trennen pou w deplase, kwen an pou w chanje gwosè; klike de fwa pou w modifye tèks la
+pinboard-hint-place = Tape sou tablo a pou w mete youn la, oswa trennen pou w ba l gwosè
+pinboard-hint-pen = Trennen pou w desinen
+pinboard-hint-arrow = Peze sou yon bagay epi lage l sou yon lòt
+pinboard-hint-typing = Tape tèks la; Antre fini
+pinboard-hint-read = Trennen pou w deplase; pense, oswa Ctrl ak wou a, pou w zoume
+pinboard-film-board = Tablo fim
+pinboard-film-board-blurb = Tablo yon seminè sou Rear Window: zak yo, endis yo, motif yo ak kesyon yo.
+pinboard-mood-board = Tablo atmosfè
+pinboard-mood-board-blurb = Palèt, limyè, son ak kote yon kout metraj, yon kad pou chak.
+pinboard-retro = Retwospektiv
+pinboard-retro-blurb = Sa k te mache byen, sa k pa t mache ak sa pou n eseye apre, chak pwoblèm konekte ak solisyon li.
 `;export{e as default};

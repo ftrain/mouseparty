@@ -1665,4 +1665,36 @@ board-hiring = 採用
 board-candidates-from-application-to-hire = 応募から採用までの候補者を、職種と次のステップつきで管理します。
 board-content-calendar = コンテンツカレンダー
 board-pieces-from-idea-to-published = アイデアから公開までのコンテンツを、チャネル・担当者・日付つきで管理します。
+common-pinboard = ピンボード
+pinboard-pinboard = ピンボード
+pinboard-notes-pictures-frames-and-arrows = 果てのないボードに付箋、写真、フレーム、矢印。みんなで貼って描けます。
+pinboard-select = 選択
+pinboard-frame = フレーム
+pinboard-pen = ペン
+pinboard-arrow = 矢印
+pinboard-pink = ピンク
+pinboard-describe-picture = 画像を説明
+pinboard-connect = つなぐ
+pinboard-arrowhead = 矢じり
+pinboard-bring-to-front = 最前面へ
+pinboard-fit-everything = すべて表示
+pinboard-in-hand = 選択範囲
+pinboard-empty-board = 空のピンボード
+pinboard-board-of-n-things = { $n ->
+       *[other] { $n } 個のピンボード
+    }
+pinboard-frames-named = フレーム：{ $frames }
+pinboard-hint-select = ボードをドラッグして移動、Shift を押しながらドラッグで複数を選択
+pinboard-hint-chosen = ドラッグで移動、角でサイズ変更、ダブルクリックで文字を編集
+pinboard-hint-place = ボードをタップして置くか、ドラッグして大きさを決めます
+pinboard-hint-pen = ドラッグして描く
+pinboard-hint-arrow = ひとつを押して別のものの上で離す
+pinboard-hint-typing = 文字を入力、Enter で完了
+pinboard-hint-read = ドラッグで移動、ピンチか Ctrl とスクロールでズーム
+pinboard-film-board = 映画ボード
+pinboard-film-board-blurb = 『裏窓』のゼミのボード：幕、手がかり、モチーフ、問い。
+pinboard-mood-board = ムードボード
+pinboard-mood-board-blurb = 短編映画の色、光、音、場所をそれぞれフレームに。
+pinboard-retro = 振り返り
+pinboard-retro-blurb = うまくいったこと、いかなかったこと、次に試すこと。問題ごとに解決策へつなげて。
 `;export{e as default};

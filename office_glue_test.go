@@ -62,9 +62,9 @@ func TestDocumentOverChat(t *testing.T) {
 		t.Fatal(opened)
 	}
 	id := opened["id"]
-	typed := []any{map[string]any{"op": "text", "at": 0, "from": 0, "to": 0, "runs": []any{map[string]any{"t": "Rosebud"}}}}
+	typed := `[{"op":"text","at":0,"from":0,"to":0,"runs":[{"t":"Rosebud"}]}]`
 	a.WriteJSON(map[string]any{"type": "app", "id": id, "kind": "edit", "base": 0, "eid": "a:1", "ops": typed})
-	if m := next(b, appKind("ops")); m["seq"] != 1.0 || m["eid"] != "a:1" {
+	if m := next(b, appKind("ops")); m["seq"] != 1.0 || m["eid"] != "a:1" || m["ops"] != typed {
 		t.Fatal(m)
 	}
 	b.WriteJSON(map[string]any{"type": "app", "id": id, "kind": "edit", "base": 0, "eid": "b:1", "ops": typed})

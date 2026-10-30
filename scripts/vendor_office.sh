@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 TLO_REPO=https://github.com/aboard-io/tinylittleoffice
-TLO_REF=${TLO_REF:-12f2221ad00ca94cf1bae88f3f042ec9d00673bf}   # the v2 branch
+TLO_REF=${TLO_REF:-924fbca4e5bab89c5d9281cfbf7049f924a0495b}   # the pinboard branch, from v2
 
 if [ -n "${TLO_SRC:-}" ]; then
     SRC=$TLO_SRC

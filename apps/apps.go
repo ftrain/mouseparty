@@ -93,6 +93,7 @@ var Kinds = []Kind{
 	{"sheet", "Sheet", "sheet", false, "big", 1, newOffice("sheet")},
 	{"diagram", "Diagram", "workflow", false, "big", 1, newOffice("diagram")},
 	{"draw", "Drawing", "pen-tool", false, "big", 1, newOffice("draw")},
+	{"pinboard", "Pinboard", "layout-dashboard", false, "big", 1, newOffice("pinboard")},
 	{"reel", "Graffiti Reel", "film", false, "big", 1, newReelApp},
 }
 

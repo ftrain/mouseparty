@@ -1731,4 +1731,38 @@ board-hiring = Contratación
 board-candidates-from-application-to-hire = Candidatos desde la solicitud hasta la contratación, con el puesto y el siguiente paso.
 board-content-calendar = Calendario de contenidos
 board-pieces-from-idea-to-published = Piezas desde la idea hasta la publicación, con el canal, el autor y la fecha.
+common-pinboard = Tablero de notas
+pinboard-pinboard = tablero de notas
+pinboard-notes-pictures-frames-and-arrows = Notas adhesivas, imágenes, marcos y flechas en un tablero sin bordes, para fijar y dibujar en grupo.
+pinboard-select = Seleccionar
+pinboard-frame = Marco
+pinboard-pen = Pluma
+pinboard-arrow = Flecha
+pinboard-pink = Rosa
+pinboard-describe-picture = Describir imagen
+pinboard-connect = Conectar
+pinboard-arrowhead = Punta de flecha
+pinboard-bring-to-front = Traer al frente
+pinboard-fit-everything = Ver todo
+pinboard-in-hand = Selección
+pinboard-empty-board = Un tablero de notas vacío
+pinboard-board-of-n-things = { $n ->
+        [one] Un tablero de notas con un elemento
+        [many] Un tablero de notas con { $n } elementos
+       *[other] Un tablero de notas con { $n } elementos
+    }
+pinboard-frames-named = Marcos: { $frames }
+pinboard-hint-select = Arrastra el tablero para moverte; Mayús y arrastrar para seleccionar varios
+pinboard-hint-chosen = Arrastra para mover, la esquina para cambiar el tamaño; doble clic para editar el texto
+pinboard-hint-place = Toca el tablero para poner uno ahí, o arrastra para darle tamaño
+pinboard-hint-pen = Arrastra para dibujar
+pinboard-hint-arrow = Pulsa sobre un elemento y suelta sobre otro
+pinboard-hint-typing = Escribe el texto; Intro para terminar
+pinboard-hint-read = Arrastra para moverte; pellizca, o Ctrl y la rueda, para hacer zoom
+pinboard-film-board = Tablero de cine
+pinboard-film-board-blurb = El tablero de un seminario sobre La ventana indiscreta: los actos, las pistas, los motivos y las preguntas.
+pinboard-mood-board = Tablero de ambiente
+pinboard-mood-board-blurb = La paleta, la luz, el sonido y los lugares de un cortometraje, un marco para cada uno.
+pinboard-retro = Retrospectiva
+pinboard-retro-blurb = Lo que salió bien, lo que no y lo que probaremos después, cada problema unido a su solución.
 `;export{e as default};

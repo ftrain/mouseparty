@@ -1698,4 +1698,37 @@ board-hiring = אויפנעמען ארבעטער
 board-candidates-from-application-to-hire = קאנדידאטן פון דער אפליקאציע ביז מען נעמט זיי אויף, מיט דער שטעלע און דעם קומענדיגן שריט.
 board-content-calendar = אינהאלט קאלענדאר
 board-pieces-from-idea-to-published = שטיקער פון א געדאנק ביז ארויסגעגעבן, מיט דעם קאנאל, דעם שרייבער און דעם דאטום.
+common-pinboard = שפּילקע־ברעט
+pinboard-pinboard = שפּילקע־ברעט
+pinboard-notes-pictures-frames-and-arrows = קלעפּצעטלעך, בילדער, ראַמען און פֿײַלן אויף אַ ברעט אָן ראַנדן, צוזאַמען צו צושפּילקען און צייכענען.
+pinboard-select = אויסקלייבן
+pinboard-frame = ראַם
+pinboard-pen = פען
+pinboard-arrow = פייל
+pinboard-pink = ראזע
+pinboard-describe-picture = באשרייבן דאס בילד
+pinboard-connect = פֿאַרבינדן
+pinboard-arrowhead = פֿײַל־שפּיץ
+pinboard-bring-to-front = ברענגען אויף פאראויס
+pinboard-fit-everything = ווײַזן אַלץ
+pinboard-in-hand = אויסקלײַב
+pinboard-empty-board = אַ ליידיק שפּילקע־ברעט
+pinboard-board-of-n-things = { $n ->
+        [one] אַ שפּילקע־ברעט מיט איין זאַך
+       *[other] אַ שפּילקע־ברעט מיט { $n } זאַכן
+    }
+pinboard-frames-named = ראַמען: { $frames }
+pinboard-hint-select = שלעפּט דעם ברעט זיך צו רירן; Shift און שלעפּן קלײַבט אויס עטלעכע
+pinboard-hint-chosen = שלעפּט צו רירן, דעם ווינקל צו ענדערן די גרייס; טאָפּל־קליקט צו רעדאַגירן דעם טעקסט
+pinboard-hint-place = דריקט אויפֿן ברעט אַוועקצולייגן איינס, אָדער שלעפּט צו געבן די גרייס
+pinboard-hint-pen = שלעפּט צו צייכענען
+pinboard-hint-arrow = דריקט אויף איין זאַך און לאָזט אָפּ אויף אַן אַנדערער
+pinboard-hint-typing = שרײַבט דעם טעקסט; Enter ענדיקט
+pinboard-hint-read = שלעפּט זיך צו רירן; קנײַפּט, אָדער Ctrl און דאָס רעדל, צו פֿאַרגרעסערן
+pinboard-film-board = פֿילם־ברעט
+pinboard-film-board-blurb = דער ברעט פֿון אַ סעמינאַר וועגן „Rear Window“: די אַקטן, די אָנווײַזן, די מאָטיוון און די פֿראַגעס.
+pinboard-mood-board = שטימונג־ברעט
+pinboard-mood-board-blurb = די פּאַליטרע, די ליכט, דער קלאַנג און די ערטער פֿון אַ קורצן פֿילם, אַ ראַם יעדעס.
+pinboard-retro = צוריקבליק
+pinboard-retro-blurb = וואָס איז געלונגען, וואָס נישט און וואָס צו פּרוּוון ווײַטער, יעדע פּראָבלעם פֿאַרבונדן מיט איר לייזונג.
 `;export{e as default};

@@ -1731,4 +1731,38 @@ board-hiring = Contratação
 board-candidates-from-application-to-hire = Candidatos da inscrição à contratação, com a vaga e o próximo passo.
 board-content-calendar = Calendário de conteúdo
 board-pieces-from-idea-to-published = Peças da ideia à publicação, com o canal, o autor e a data.
+common-pinboard = Mural
+pinboard-pinboard = mural
+pinboard-notes-pictures-frames-and-arrows = Notas adesivas, imagens, molduras e setas num mural sem bordas, para fixar e desenhar juntos.
+pinboard-select = Selecionar
+pinboard-frame = Moldura
+pinboard-pen = Caneta
+pinboard-arrow = Seta
+pinboard-pink = Rosa
+pinboard-describe-picture = Descrever imagem
+pinboard-connect = Conectar
+pinboard-arrowhead = Ponta da seta
+pinboard-bring-to-front = Trazer para frente
+pinboard-fit-everything = Mostrar tudo
+pinboard-in-hand = Seleção
+pinboard-empty-board = Um mural vazio
+pinboard-board-of-n-things = { $n ->
+        [one] Um mural com um item
+        [many] Um mural com { $n } itens
+       *[other] Um mural com { $n } itens
+    }
+pinboard-frames-named = Molduras: { $frames }
+pinboard-hint-select = Arraste o mural para se mover; Shift e arrastar para selecionar vários
+pinboard-hint-chosen = Arraste para mover, o canto para redimensionar; clique duas vezes para editar o texto
+pinboard-hint-place = Toque no mural para colocar um ali, ou arraste para definir o tamanho
+pinboard-hint-pen = Arraste para desenhar
+pinboard-hint-arrow = Pressione um item e solte sobre outro
+pinboard-hint-typing = Digite o texto; Enter para terminar
+pinboard-hint-read = Arraste para se mover; pince, ou Ctrl e a roda, para dar zoom
+pinboard-film-board = Mural de cinema
+pinboard-film-board-blurb = O mural de um seminário sobre Janela Indiscreta: os atos, as pistas, os motivos e as perguntas.
+pinboard-mood-board = Painel de referências
+pinboard-mood-board-blurb = A paleta, a luz, o som e os lugares de um curta-metragem, uma moldura cada.
+pinboard-retro = Retrospectiva
+pinboard-retro-blurb = O que deu certo, o que não deu e o que tentar depois, cada problema ligado à sua solução.
 `;export{e as default};

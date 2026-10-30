@@ -6,9 +6,12 @@ package apps
 // built from github.com/aboard-io/tinylittleoffice).
 //
 // The host is the one order of operations the library asks for (its
-// docs/kernel.md §12), and does nothing else: it never reads an op. A page
+// docs/kernel.md §12), and does nothing else: it never changes an op. A page
 // sends what its editor did as {"kind": "edit", "base", "ops", "eid"}, made
-// against version base. When base is the latest, the ops are the next version
+// against version base, the ops as the page wrote them in JSON, passed on as
+// they came (decoded and encoded again, a picture's attributes would come out
+// in another order than the kernel keeps them, and the pages' texts would
+// differ). When base is the latest, the ops are the next version
 // and go to every page ({"kind": "ops", "seq", "by", "eid", "ops"}); when it
 // isn't, the page is told to try again ({"kind": "retry"}): by then it has had
 // the versions it missed, and has rebased its ops over them (the library's
@@ -32,14 +35,14 @@ const (
 // officeApps: the Tiny Little Office app each document kind is drawn by
 var officeApps = map[string]string{
 	"write": "write", "outline": "outline", "deck": "deck", "sheet": "sheet",
-	"diagram": "diagram", "draw": "draw",
+	"diagram": "diagram", "draw": "draw", "pinboard": "pinboard",
 }
 
 type officeEdit struct {
 	Seq int    `json:"seq"`
 	By  int    `json:"by"` // the page's socket: not kept (Save drops it; nothing is keyed by IDs past a session)
 	Eid string `json:"eid"`
-	Ops []any  `json:"ops"`
+	Ops string `json:"ops"` // a JSON array of the kernel's ops, as the page wrote it
 }
 
 type office struct {
@@ -70,8 +73,8 @@ func (o *office) Message(r *Room, from Viewer, m Msg) {
 	case "edit":
 		base, ok1 := m.Int("base", 0, 1<<40)
 		eid, ok2 := m["eid"].(string)
-		ops, ok3 := m["ops"].([]any)
-		if !ok1 || !ok2 || !ok3 || len(eid) > officeEid || len(ops) == 0 || len(ops) > officeMaxOps {
+		ops, ok3 := m["ops"].(string)
+		if !ok1 || !ok2 || !ok3 || len(eid) > officeEid || len(ops) > officeMaxText {
 			return
 		}
 		if !officeOpsOK(ops) || len(o.edits) >= officeMaxEdits {
@@ -106,10 +109,14 @@ func (o *office) Message(r *Room, from Viewer, m Msg) {
 	}
 }
 
-// officeOpsOK: ops the host can stand behind without reading them. The
-// library's third rule for a shared document: no op on the head's lock
-// (docs/kernel.md §12), which only the server can keep.
-func officeOpsOK(ops []any) bool {
+// officeOpsOK: ops the host can stand behind: a few of them, each one an op,
+// and the library's third rule for a shared document, no op on the head's
+// lock (docs/kernel.md §12), which only the server can keep
+func officeOpsOK(text string) bool {
+	var ops []any
+	if json.Unmarshal([]byte(text), &ops) != nil || len(ops) == 0 || len(ops) > officeMaxOps {
+		return false
+	}
 	for _, op := range ops {
 		o, ok := op.(map[string]any)
 		if !ok {
@@ -127,8 +134,8 @@ type officeKept struct {
 	Text  string `json:"text"`
 	From  int    `json:"from"`
 	Edits []struct {
-		Seq int   `json:"seq"`
-		Ops []any `json:"ops"`
+		Seq int    `json:"seq"`
+		Ops string `json:"ops"`
 	} `json:"edits"`
 }
 
@@ -136,8 +143,8 @@ func (o *office) Save() any {
 	k := officeKept{Text: o.text, From: o.from}
 	for _, e := range o.edits {
 		k.Edits = append(k.Edits, struct {
-			Seq int   `json:"seq"`
-			Ops []any `json:"ops"`
+			Seq int    `json:"seq"`
+			Ops string `json:"ops"`
 		}{e.Seq, e.Ops})
 	}
 	return k

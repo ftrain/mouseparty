@@ -1809,4 +1809,39 @@ board-hiring = Rekrutacja
 board-candidates-from-application-to-hire = Kandydaci od zgłoszenia do zatrudnienia, ze stanowiskiem i kolejnym krokiem.
 board-content-calendar = Kalendarz treści
 board-pieces-from-idea-to-published = Materiały od pomysłu do publikacji, z kanałem, autorem i datą.
+common-pinboard = Tablica
+pinboard-pinboard = tablica
+pinboard-notes-pictures-frames-and-arrows = Karteczki, obrazy, ramki i strzałki na tablicy bez krawędzi, do wspólnego przypinania i rysowania.
+pinboard-select = Zaznacz
+pinboard-frame = Ramka
+pinboard-pen = Pióro
+pinboard-arrow = Strzałka
+pinboard-pink = Różowy
+pinboard-describe-picture = Opisz obraz
+pinboard-connect = Połącz
+pinboard-arrowhead = Grot strzałki
+pinboard-bring-to-front = Przesuń na wierzch
+pinboard-fit-everything = Pokaż wszystko
+pinboard-in-hand = Zaznaczenie
+pinboard-empty-board = Pusta tablica
+pinboard-board-of-n-things = { $n ->
+        [one] Tablica z jedną rzeczą
+        [few] Tablica z { $n } rzeczami
+        [many] Tablica z { $n } rzeczami
+       *[other] Tablica z { $n } rzeczy
+    }
+pinboard-frames-named = Ramki: { $frames }
+pinboard-hint-select = Przeciągnij tablicę, aby się poruszać; Shift i przeciągnięcie zaznacza kilka
+pinboard-hint-chosen = Przeciągnij, aby przesunąć, róg, aby zmienić rozmiar; kliknij dwukrotnie, aby edytować tekst
+pinboard-hint-place = Dotknij tablicy, aby coś tam położyć, lub przeciągnij, aby nadać rozmiar
+pinboard-hint-pen = Przeciągnij, aby rysować
+pinboard-hint-arrow = Naciśnij jedną rzecz i puść na drugiej
+pinboard-hint-typing = Wpisz tekst; Enter kończy
+pinboard-hint-read = Przeciągnij, aby się poruszać; uszczypnij lub Ctrl i kółko, aby powiększyć
+pinboard-film-board = Tablica filmowa
+pinboard-film-board-blurb = Tablica seminarium o Oknie na podwórze: akty, tropy, motywy i pytania.
+pinboard-mood-board = Tablica nastroju
+pinboard-mood-board-blurb = Paleta, światło, dźwięk i miejsca krótkiego filmu, każde w swojej ramce.
+pinboard-retro = Retrospektywa
+pinboard-retro-blurb = Co poszło dobrze, co nie i co spróbujemy następnym razem, każdy problem połączony z rozwiązaniem.
 `;export{e as default};

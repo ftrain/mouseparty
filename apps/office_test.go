@@ -7,11 +7,12 @@ import (
 	"time"
 )
 
-func edit(base int, eid string, ops ...any) Msg {
+func edit(base int, eid string, ops string) Msg {
 	return Msg{"kind": "edit", "base": float64(base), "eid": eid, "ops": ops}
 }
 
-var typed = map[string]any{"op": "text", "at": 0.0, "from": 0.0, "to": 0.0, "runs": []any{map[string]any{"t": "hi"}}}
+// as the page writes them: the attributes' order is the kernel's, and is kept
+const typed = `[{"op":"splice","at":0,"n":0,"blocks":[{"k":"fence","lang":"image","body":"asset:1","a":{"kv":{"alt":"x","w":"2","h":"1"}}}]}]`
 
 // The host only orders: the latest version's edit goes to everyone, a late one is sent back to try again
 func TestOfficeOrders(t *testing.T) {
@@ -19,7 +20,7 @@ func TestOfficeOrders(t *testing.T) {
 	o := newOffice("write")(r).(*office)
 	o.Message(r, ann, edit(0, "a1", typed))
 	o.Message(r, bob, edit(0, "b1", typed)) // made against 0, which is no longer the latest
-	if len(*out) != 2 || (*out)[0].to != 0 || (*out)[0].msg["kind"] != "ops" || (*out)[0].msg["seq"] != 1 || (*out)[0].msg["by"] != 1 {
+	if len(*out) != 2 || (*out)[0].to != 0 || (*out)[0].msg["kind"] != "ops" || (*out)[0].msg["seq"] != 1 || (*out)[0].msg["by"] != 1 || (*out)[0].msg["ops"] != typed {
 		t.Fatal(*out)
 	}
 	if (*out)[1].to != bob.ID || (*out)[1].msg["kind"] != "retry" || (*out)[1].msg["eid"] != "b1" {
@@ -43,7 +44,7 @@ func TestOfficeOrders(t *testing.T) {
 
 	// the library's rule 3: nothing sets the head's lock
 	*out = nil
-	o.Message(r, ann, edit(2, "a2", map[string]any{"op": "head", "key": "lock", "value": "A1"}))
+	o.Message(r, ann, edit(2, "a2", `[{"op":"head","key":"lock","value":"A1"}]`))
 	if o.seq != 2 || (*out)[0].msg["kind"] != "refused" {
 		t.Fatal(*out)
 	}

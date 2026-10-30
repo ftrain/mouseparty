@@ -69,6 +69,7 @@
     const newClient = () => Math.random().toString(36).slice(2, 10);
     // the kinds a frame can go into, as a picture where the caret is (or at the end)
     const TAKES_PICTURES = new Set(['write', 'deck', 'pinboard']);
+    const APPENDS_PICTURES = new Set(['write', 'deck']);   // a picture block at the end is one of their pages' too
     // Lucide's camera, as the library's icons are given (lucide 1.54, ISC)
     const CAMERA = [['path', { d: 'M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z' }],
         ['circle', { cx: '12', cy: '13', r: '3' }]];
@@ -83,7 +84,17 @@
 
         let lib = null, mounted = null, stopped = false;
         let app = view.app, doc = null, seq = 0, pending = [], inflight = null, client = newClient(), n = 0;
+        let seeding = false;   // an empty document, given its first text: nothing is drawn until the host says what it is
         const say = (text) => lib && lib.editors.toast(text);
+        // ops travel as the JSON this page or another wrote, which the host passes on untouched
+        const opsOf = (text) => {
+            try {
+                const ops = JSON.parse(text);
+                return Array.isArray(ops) ? ops : [];
+            } catch (e) {
+                return [];
+            }
+        };
 
         // the document as every page takes an edit: null where its ops don't apply, or leave what the text wouldn't keep
         const applied = (d, ops) => {
@@ -99,7 +110,7 @@
         const load = (state) => {
             const K = lib.kernel;
             let d = K.parse(state.text || '');
-            for (const e of state.edits || []) d = applied(d, e.ops) || d;
+            for (const e of state.edits || []) d = applied(d, opsOf(e.ops)) || d;
             doc = d;
             seq = state.seq;
             pending = [];
@@ -113,7 +124,7 @@
             const ops = pending.slice();
             if (!applied(doc, ops)) return sync();
             inflight = { eid: `${client}:${++n}`, count: ops.length };
-            ctx.send({ kind: 'edit', base: seq, eid: inflight.eid, ops });
+            ctx.send({ kind: 'edit', base: seq, eid: inflight.eid, ops: JSON.stringify(ops) });
         };
         const sync = () => { inflight = null; ctx.send({ kind: 'sync' }); };
         const changed = (ops) => {
@@ -143,11 +154,16 @@
             editor.addEventListener('docops', count);
             const dt = new DataTransfer();
             dt.items.add(file);
-            const target = editor.contains(document.activeElement) ? document.activeElement : (editor.querySelector('[contenteditable]') || editor);
+            // where the editor takes a paste: its words where the caret was, or a board (which takes one only while focused)
+            if (!editor.contains(document.activeElement) || document.activeElement.closest('to-bar')) {
+                const surface = editor.querySelector('.pin-wrap') || editor.querySelector('[contenteditable="true"]');
+                if (surface) surface.focus();
+            }
+            const target = editor.contains(document.activeElement) ? document.activeElement : editor;
             try { target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true, composed: true })); } catch (e) {}
             await new Promise((r) => setTimeout(r, 1200));
             editor.removeEventListener('docops', count);
-            if (heard.n || stopped) return;
+            if (heard.n || stopped || !APPENDS_PICTURES.has(app)) return;
             const pic = await lib.editors.host.images.put(file);
             const K = lib.kernel, now = K.applyAll(doc, pending);
             const op = { op: 'splice', at: now.blocks.length, n: 0, blocks: [K.imageBlock(pic.ref, file.name.replace(/\.\w+$/, ''), pic.w, pic.h)] };
@@ -177,16 +193,29 @@
             lib = await office.load(ctx.base);
             if (stopped) return;
             load(view);
-            const seed = OpenHouseParty.seed;   // a copy someone asked for on this page (the reel's "Make it slides")
-            if (seed && seed.name === app && view.seq === 0 && !view.text) {
-                OpenHouseParty.seed = null;
-                ctx.send({ kind: 'seed', text: seed.text });
+            if (view.seq === 0 && !view.text) {
+                // a new document starts as a copy someone asked for on this page (the reel's "Make it slides"), or
+                // as its app's own blank (a pinboard's empty table, which everyone's first things must share)
+                const seed = OpenHouseParty.seed && OpenHouseParty.seed.name === app ? OpenHouseParty.seed.text : null;
+                if (seed !== null) OpenHouseParty.seed = null;
+                const text = seed !== null ? seed : await lib.editors.appOf(app)?.blank?.();
+                if (text) {
+                    seeding = true;
+                    ctx.send({ kind: 'seed', text });
+                    return;     // drawn when the host's view comes back with it (or another page's seed)
+                }
             }
             await mount();
         })();
 
         return {
             view(v) {
+                if (lib && seeding && v.text) {
+                    seeding = false;
+                    load(v);
+                    mount();
+                    return;
+                }
                 // every page gets the whole state again when someone arrives: only a document still at its start takes it
                 if (!lib || !mounted || v.seq !== 0 || seq !== 0 || pending.length || (v.text || '') === shown()) return;
                 load(v);
@@ -197,7 +226,8 @@
                 if (m.kind === 'ops') {
                     if (m.seq <= seq) return;
                     if (m.seq !== seq + 1) return sync();
-                    const next = applied(doc, m.ops);
+                    const ops = opsOf(m.ops);
+                    const next = applied(doc, ops);
                     if (inflight && m.eid === inflight.eid) {
                         // ours, taken: already shown here, and checked before it went
                         if (!next) return sync();
@@ -211,7 +241,7 @@
                     }
                     if (next) {
                         try {
-                            const [mine, passed] = lib.kernel.cross(pending, m.ops);
+                            const [mine, passed] = lib.kernel.cross(pending, ops);
                             pending = mine;
                             mounted.applyRemote(passed);
                         } catch (e) {

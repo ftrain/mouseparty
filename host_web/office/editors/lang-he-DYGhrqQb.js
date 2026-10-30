@@ -1731,4 +1731,38 @@ board-hiring = גיוס
 board-candidates-from-application-to-hire = מועמדים מהגשת המועמדות ועד הקבלה לעבודה, עם התפקיד והשלב הבא.
 board-content-calendar = לוח תוכן
 board-pieces-from-idea-to-published = תכנים מרעיון ועד פרסום, עם הערוץ, הכותב והתאריך.
+common-pinboard = לוח נעיצה
+pinboard-pinboard = לוח נעיצה
+pinboard-notes-pictures-frames-and-arrows = פתקים, תמונות, מסגרות וחצים על לוח בלי שוליים, לנעוץ ולצייר יחד.
+pinboard-select = בחירה
+pinboard-frame = מסגרת
+pinboard-pen = עט
+pinboard-arrow = חץ
+pinboard-pink = ורוד
+pinboard-describe-picture = תיאור התמונה
+pinboard-connect = חיבור
+pinboard-arrowhead = ראש חץ
+pinboard-bring-to-front = הבאה לחזית
+pinboard-fit-everything = הצגת הכול
+pinboard-in-hand = בחירה
+pinboard-empty-board = לוח נעיצה ריק
+pinboard-board-of-n-things = { $n ->
+        [one] לוח נעיצה עם פריט אחד
+        [two] לוח נעיצה עם שני פריטים
+       *[other] לוח נעיצה עם { $n } פריטים
+    }
+pinboard-frames-named = מסגרות: { $frames }
+pinboard-hint-select = גרירת הלוח מזיזה אותו; Shift וגרירה בוחרים כמה
+pinboard-hint-chosen = גרירה מזיזה, הפינה משנה גודל; לחיצה כפולה עורכת את הטקסט
+pinboard-hint-place = הקשה על הלוח מניחה שם אחד, וגרירה קובעת את גודלו
+pinboard-hint-pen = גרירה מציירת
+pinboard-hint-arrow = לחיצה על פריט אחד ושחרור על אחר
+pinboard-hint-typing = הקלדת הטקסט; Enter לסיום
+pinboard-hint-read = גרירה מזיזה; צביטה, או Ctrl וגלגלת, משנה את התצוגה
+pinboard-film-board = לוח סרט
+pinboard-film-board-blurb = לוח של סמינר על «חלון אחורי»: המערכות, הרמזים, המוטיבים והשאלות.
+pinboard-mood-board = לוח השראה
+pinboard-mood-board-blurb = הפלטה, האור, הקול והמקומות של סרט קצר, מסגרת לכל אחד.
+pinboard-retro = רטרוספקטיבה
+pinboard-retro-blurb = מה הצליח, מה לא ומה ננסה בפעם הבאה, כל בעיה מחוברת לפתרון שלה.
 `;export{e as default};

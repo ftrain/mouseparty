@@ -1698,4 +1698,37 @@ board-hiring = নিয়োগ
 board-candidates-from-application-to-hire = আবেদন থেকে নিয়োগ পর্যন্ত প্রার্থীরা, পদ আর পরের ধাপসহ।
 board-content-calendar = কনটেন্ট ক্যালেন্ডার
 board-pieces-from-idea-to-published = আইডিয়া থেকে প্রকাশ পর্যন্ত লেখা, চ্যানেল, লেখক আর তারিখসহ।
+common-pinboard = পিনবোর্ড
+pinboard-pinboard = পিনবোর্ড
+pinboard-notes-pictures-frames-and-arrows = কিনারাহীন বোর্ডে স্টিকি নোট, ছবি, ফ্রেম আর তীর, একসাথে লাগানো আর আঁকার জন্য।
+pinboard-select = বাছাই
+pinboard-frame = ফ্রেম
+pinboard-pen = কলম
+pinboard-arrow = তীর
+pinboard-pink = গোলাপি
+pinboard-describe-picture = ছবির বর্ণনা
+pinboard-connect = যুক্ত করুন
+pinboard-arrowhead = তীরের মাথা
+pinboard-bring-to-front = সামনে আনুন
+pinboard-fit-everything = সব দেখান
+pinboard-in-hand = নির্বাচন
+pinboard-empty-board = একটি খালি পিনবোর্ড
+pinboard-board-of-n-things = { $n ->
+        [one] { $n }টি জিনিসের পিনবোর্ড
+       *[other] { $n }টি জিনিসের পিনবোর্ড
+    }
+pinboard-frames-named = ফ্রেম: { $frames }
+pinboard-hint-select = ঘুরতে বোর্ড টানুন; কয়েকটি বাছতে Shift দিয়ে টানুন
+pinboard-hint-chosen = সরাতে টানুন, আকার বদলাতে কোণ; লেখা বদলাতে ডাবল-ক্লিক করুন
+pinboard-hint-place = একটি রাখতে বোর্ডে ট্যাপ করুন, বা আকার দিতে টানুন
+pinboard-hint-pen = আঁকতে টানুন
+pinboard-hint-arrow = একটিতে চাপুন আর অন্যটিতে ছাড়ুন
+pinboard-hint-typing = লেখা টাইপ করুন; Enter দিলে শেষ
+pinboard-hint-read = ঘুরতে টানুন; জুম করতে চিমটি দিন, বা Ctrl আর স্ক্রল
+pinboard-film-board = চলচ্চিত্র বোর্ড
+pinboard-film-board-blurb = রিয়ার উইন্ডো নিয়ে একটি সেমিনারের বোর্ড: অঙ্ক, সূত্র, মোটিফ আর প্রশ্ন।
+pinboard-mood-board = মুড বোর্ড
+pinboard-mood-board-blurb = একটি স্বল্পদৈর্ঘ্য চলচ্চিত্রের রং, আলো, শব্দ আর জায়গা, প্রতিটির একটি ফ্রেম।
+pinboard-retro = রেট্রো
+pinboard-retro-blurb = কী ভালো হয়েছে, কী হয়নি আর এরপর কী চেষ্টা করব, প্রতিটি সমস্যা তার সমাধানের সাথে যুক্ত।
 `;export{e as default};

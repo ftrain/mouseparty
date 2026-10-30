@@ -1698,4 +1698,37 @@ board-hiring = भर्ती
 board-candidates-from-application-to-hire = आवेदन से नौकरी तक के उम्मीदवार, पद और अगले कदम के साथ।
 board-content-calendar = कंटेंट कैलेंडर
 board-pieces-from-idea-to-published = आइडिया से छपने तक की सामग्री, चैनल, लेखक और तारीख़ के साथ।
+common-pinboard = पिनबोर्ड
+pinboard-pinboard = पिनबोर्ड
+pinboard-notes-pictures-frames-and-arrows = बिना किनारों वाले बोर्ड पर चिपचिपे नोट, तस्वीरें, फ़्रेम और तीर, साथ मिलकर लगाने और बनाने के लिए।
+pinboard-select = चुनें
+pinboard-frame = फ़्रेम
+pinboard-pen = पेन
+pinboard-arrow = तीर
+pinboard-pink = गुलाबी
+pinboard-describe-picture = तस्वीर का विवरण
+pinboard-connect = जोड़ें
+pinboard-arrowhead = तीर का सिरा
+pinboard-bring-to-front = आगे लाएँ
+pinboard-fit-everything = सब दिखाएँ
+pinboard-in-hand = चयन
+pinboard-empty-board = एक खाली पिनबोर्ड
+pinboard-board-of-n-things = { $n ->
+        [one] एक चीज़ वाला पिनबोर्ड
+       *[other] { $n } चीज़ों वाला पिनबोर्ड
+    }
+pinboard-frames-named = फ़्रेम: { $frames }
+pinboard-hint-select = घूमने के लिए बोर्ड को खींचें; कई चुनने के लिए Shift के साथ खींचें
+pinboard-hint-chosen = हिलाने के लिए खींचें, आकार बदलने के लिए कोना; शब्द बदलने के लिए डबल-क्लिक करें
+pinboard-hint-place = एक रखने के लिए बोर्ड पर टैप करें, या आकार देने के लिए खींचें
+pinboard-hint-pen = बनाने के लिए खींचें
+pinboard-hint-arrow = एक चीज़ पर दबाएँ और दूसरी पर छोड़ें
+pinboard-hint-typing = शब्द टाइप करें; Enter से पूरा
+pinboard-hint-read = घूमने के लिए खींचें; ज़ूम के लिए पिंच करें, या Ctrl और स्क्रॉल
+pinboard-film-board = फ़िल्म बोर्ड
+pinboard-film-board-blurb = रियर विंडो पर एक सेमिनार का बोर्ड: अंक, सुराग, मोटिफ़ और सवाल।
+pinboard-mood-board = मूड बोर्ड
+pinboard-mood-board-blurb = एक लघु फ़िल्म के रंग, रोशनी, आवाज़ और जगहें, हर एक का अपना फ़्रेम।
+pinboard-retro = रेट्रो
+pinboard-retro-blurb = क्या अच्छा रहा, क्या नहीं, और आगे क्या आज़माएँ, हर समस्या उसके हल से जुड़ी।
 `;export{e as default};

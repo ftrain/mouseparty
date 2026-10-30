@@ -1731,4 +1731,38 @@ board-hiring = Recrutement
 board-candidates-from-application-to-hire = Les candidats, de la candidature à l’embauche, avec le poste et la prochaine étape.
 board-content-calendar = Calendrier éditorial
 board-pieces-from-idea-to-published = Les contenus, de l’idée à la publication, avec le canal, l’auteur et la date.
+common-pinboard = Tableau d’épingles
+pinboard-pinboard = tableau d’épingles
+pinboard-notes-pictures-frames-and-arrows = Notes, images, cadres et flèches sur un tableau sans bords, à épingler et à dessiner ensemble.
+pinboard-select = Sélectionner
+pinboard-frame = Cadre
+pinboard-pen = Stylo
+pinboard-arrow = Flèche
+pinboard-pink = Rose
+pinboard-describe-picture = Décrire l’image
+pinboard-connect = Relier
+pinboard-arrowhead = Pointe de flèche
+pinboard-bring-to-front = Premier plan
+pinboard-fit-everything = Tout afficher
+pinboard-in-hand = Sélection
+pinboard-empty-board = Un tableau d’épingles vide
+pinboard-board-of-n-things = { $n ->
+        [one] Un tableau d’épingles d’un élément
+        [many] Un tableau d’épingles de { $n } éléments
+       *[other] Un tableau d’épingles de { $n } éléments
+    }
+pinboard-frames-named = Cadres\xA0: { $frames }
+pinboard-hint-select = Glissez le tableau pour vous déplacer ; Maj et glisser pour en sélectionner plusieurs
+pinboard-hint-chosen = Glissez pour déplacer, le coin pour redimensionner ; double-cliquez pour modifier le texte
+pinboard-hint-place = Touchez le tableau pour en poser un, ou glissez pour lui donner sa taille
+pinboard-hint-pen = Glissez pour dessiner
+pinboard-hint-arrow = Appuyez sur un élément et relâchez sur un autre
+pinboard-hint-typing = Tapez le texte ; Entrée pour terminer
+pinboard-hint-read = Glissez pour vous déplacer ; pincez, ou Ctrl et la molette, pour zoomer
+pinboard-film-board = Tableau de film
+pinboard-film-board-blurb = Le tableau d’un séminaire sur Fenêtre sur cour\xA0: les actes, les indices, les motifs et les questions.
+pinboard-mood-board = Planche d’ambiance
+pinboard-mood-board-blurb = La palette, la lumière, le son et les lieux d’un court métrage, un cadre chacun.
+pinboard-retro = Rétrospective
+pinboard-retro-blurb = Ce qui a marché, ce qui n’a pas marché et ce qu’on essaiera ensuite, chaque problème relié à sa solution.
 `;export{e as default};

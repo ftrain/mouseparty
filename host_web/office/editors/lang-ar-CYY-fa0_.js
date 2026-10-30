@@ -1886,4 +1886,41 @@ board-hiring = التوظيف
 board-candidates-from-application-to-hire = المرشحون من التقديم حتى التعيين، مع الوظيفة والخطوة التالية.
 board-content-calendar = تقويم المحتوى
 board-pieces-from-idea-to-published = المواد من الفكرة حتى النشر، مع القناة والكاتب والتاريخ.
+common-pinboard = لوحة الملاحظات
+pinboard-pinboard = لوحة ملاحظات
+pinboard-notes-pictures-frames-and-arrows = ملاحظات لاصقة وصور وإطارات وأسهم على لوحة بلا حواف، للتثبيت والرسم معًا.
+pinboard-select = تحديد
+pinboard-frame = إطار
+pinboard-pen = قلم
+pinboard-arrow = سهم
+pinboard-pink = وردي
+pinboard-describe-picture = وصف الصورة
+pinboard-connect = وصل
+pinboard-arrowhead = رأس السهم
+pinboard-bring-to-front = إحضار إلى الأمام
+pinboard-fit-everything = إظهار الكل
+pinboard-in-hand = التحديد
+pinboard-empty-board = لوحة ملاحظات فارغة
+pinboard-board-of-n-things = { $n ->
+        [zero] لوحة ملاحظات بلا عناصر
+        [one] لوحة ملاحظات بعنصر واحد
+        [two] لوحة ملاحظات بعنصرين
+        [few] لوحة ملاحظات بـ { $n } عناصر
+        [many] لوحة ملاحظات بـ { $n } عنصرًا
+       *[other] لوحة ملاحظات بـ { $n } عنصر
+    }
+pinboard-frames-named = الإطارات: { $frames }
+pinboard-hint-select = اسحب اللوحة للتنقل؛ Shift مع السحب لتحديد عدة عناصر
+pinboard-hint-chosen = اسحب للنقل، والزاوية لتغيير الحجم؛ انقر مرتين لتحرير النص
+pinboard-hint-place = انقر على اللوحة لوضع واحد هناك، أو اسحب لتحديد حجمه
+pinboard-hint-pen = اسحب للرسم
+pinboard-hint-arrow = اضغط على عنصر وأفلت على آخر
+pinboard-hint-typing = اكتب النص؛ Enter للإنهاء
+pinboard-hint-read = اسحب للتنقل؛ اقرص، أو Ctrl مع العجلة، للتكبير
+pinboard-film-board = لوحة فيلم
+pinboard-film-board-blurb = لوحة حلقة دراسية عن «النافذة الخلفية»: الفصول والأدلة والموتيفات والأسئلة.
+pinboard-mood-board = لوحة الأجواء
+pinboard-mood-board-blurb = لوحة ألوان فيلم قصير وضوؤه وصوته وأماكنه، لكل منها إطار.
+pinboard-retro = مراجعة
+pinboard-retro-blurb = ما نجح وما لم ينجح وما سنجربه بعد ذلك، وكل مشكلة موصولة بحلها.
 `;export{e as default};

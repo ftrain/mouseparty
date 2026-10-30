@@ -1698,4 +1698,37 @@ board-hiring = Personalsuche
 board-candidates-from-application-to-hire = Kandidaten von der Bewerbung bis zur Einstellung, mit Stelle und nächstem Schritt.
 board-content-calendar = Redaktionsplan
 board-pieces-from-idea-to-published = Beiträge von der Idee bis zur Veröffentlichung, mit Kanal, Autor und Datum.
+common-pinboard = Pinnwand
+pinboard-pinboard = Pinnwand
+pinboard-notes-pictures-frames-and-arrows = Haftnotizen, Bilder, Rahmen und Pfeile auf einer Wand ohne Ränder, zum gemeinsamen Anheften und Zeichnen.
+pinboard-select = Auswählen
+pinboard-frame = Rahmen
+pinboard-pen = Stift
+pinboard-arrow = Pfeil
+pinboard-pink = Rosa
+pinboard-describe-picture = Bild beschreiben
+pinboard-connect = Verbinden
+pinboard-arrowhead = Pfeilspitze
+pinboard-bring-to-front = In den Vordergrund
+pinboard-fit-everything = Alles zeigen
+pinboard-in-hand = Auswahl
+pinboard-empty-board = Eine leere Pinnwand
+pinboard-board-of-n-things = { $n ->
+        [one] Eine Pinnwand mit einem Element
+       *[other] Eine Pinnwand mit { $n } Elementen
+    }
+pinboard-frames-named = Rahmen: { $frames }
+pinboard-hint-select = Zieh die Wand, um dich zu bewegen; Umschalt und Ziehen wählt mehrere aus
+pinboard-hint-chosen = Ziehen verschiebt, die Ecke ändert die Größe; Doppelklick bearbeitet den Text
+pinboard-hint-place = Tippe auf die Wand, um eins abzulegen, oder zieh, um die Größe festzulegen
+pinboard-hint-pen = Ziehen zum Zeichnen
+pinboard-hint-arrow = Auf ein Element drücken und auf einem anderen loslassen
+pinboard-hint-typing = Text eingeben; Eingabe beendet
+pinboard-hint-read = Ziehen zum Bewegen; Spreizen, oder Strg und Mausrad, zum Zoomen
+pinboard-film-board = Filmwand
+pinboard-film-board-blurb = Die Wand eines Seminars zu Das Fenster zum Hof: die Akte, die Hinweise, die Motive und die Fragen.
+pinboard-mood-board = Moodboard
+pinboard-mood-board-blurb = Palette, Licht, Ton und Orte eines Kurzfilms, je ein Rahmen.
+pinboard-retro = Rückblick
+pinboard-retro-blurb = Was gut lief, was nicht und was wir als Nächstes versuchen, jedes Problem mit seiner Lösung verbunden.
 `;export{e as default};

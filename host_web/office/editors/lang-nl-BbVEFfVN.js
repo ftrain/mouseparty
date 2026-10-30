@@ -1698,4 +1698,37 @@ board-hiring = Werving
 board-candidates-from-application-to-hire = Kandidaten van sollicitatie tot aanname, met de functie en de volgende stap.
 board-content-calendar = Contentkalender
 board-pieces-from-idea-to-published = Stukken van idee tot gepubliceerd, met het kanaal, de auteur en de datum.
+common-pinboard = Prikbord
+pinboard-pinboard = prikbord
+pinboard-notes-pictures-frames-and-arrows = Plakbriefjes, afbeeldingen, kaders en pijlen op een bord zonder randen, om samen op te prikken en te tekenen.
+pinboard-select = Selecteren
+pinboard-frame = Kader
+pinboard-pen = Pen
+pinboard-arrow = Pijl
+pinboard-pink = Roze
+pinboard-describe-picture = Afbeelding beschrijven
+pinboard-connect = Verbinden
+pinboard-arrowhead = Pijlpunt
+pinboard-bring-to-front = Naar voren
+pinboard-fit-everything = Alles tonen
+pinboard-in-hand = Selectie
+pinboard-empty-board = Een leeg prikbord
+pinboard-board-of-n-things = { $n ->
+        [one] Een prikbord met één ding
+       *[other] Een prikbord met { $n } dingen
+    }
+pinboard-frames-named = Kaders: { $frames }
+pinboard-hint-select = Sleep het bord om je te verplaatsen; Shift en slepen om er meerdere te selecteren
+pinboard-hint-chosen = Sleep om te verplaatsen, de hoek om het formaat te wijzigen; dubbelklik om de tekst te bewerken
+pinboard-hint-place = Tik op het bord om er een neer te zetten, of sleep om het formaat te kiezen
+pinboard-hint-pen = Sleep om te tekenen
+pinboard-hint-arrow = Druk op het ene ding en laat los op het andere
+pinboard-hint-typing = Typ de tekst; Enter is klaar
+pinboard-hint-read = Sleep om je te verplaatsen; knijp, of Ctrl en scrollen, om te zoomen
+pinboard-film-board = Filmbord
+pinboard-film-board-blurb = Het bord van een seminar over Rear Window: de bedrijven, de aanwijzingen, de motieven en de vragen.
+pinboard-mood-board = Moodboard
+pinboard-mood-board-blurb = Het palet, het licht, het geluid en de plekken van een korte film, elk een kader.
+pinboard-retro = Terugblik
+pinboard-retro-blurb = Wat goed ging, wat niet en wat we hierna proberen, elk probleem verbonden met de oplossing.
 `;export{e as default};

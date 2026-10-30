@@ -1731,4 +1731,38 @@ board-hiring = Selezione del personale
 board-candidates-from-application-to-hire = I candidati, dalla candidatura all’assunzione, con il ruolo e il passo successivo.
 board-content-calendar = Calendario editoriale
 board-pieces-from-idea-to-published = I contenuti, dall’idea alla pubblicazione, con il canale, l’autore e la data.
+common-pinboard = Bacheca
+pinboard-pinboard = bacheca
+pinboard-notes-pictures-frames-and-arrows = Post-it, immagini, cornici e frecce su una bacheca senza bordi, da appuntare e disegnare insieme.
+pinboard-select = Seleziona
+pinboard-frame = Cornice
+pinboard-pen = Penna
+pinboard-arrow = Freccia
+pinboard-pink = Rosa
+pinboard-describe-picture = Descrivi l’immagine
+pinboard-connect = Collega
+pinboard-arrowhead = Punta di freccia
+pinboard-bring-to-front = Porta in primo piano
+pinboard-fit-everything = Mostra tutto
+pinboard-in-hand = Selezione
+pinboard-empty-board = Una bacheca vuota
+pinboard-board-of-n-things = { $n ->
+        [one] Una bacheca con un elemento
+        [many] Una bacheca con { $n } elementi
+       *[other] Una bacheca con { $n } elementi
+    }
+pinboard-frames-named = Cornici: { $frames }
+pinboard-hint-select = Trascina la bacheca per spostarti; Maiusc e trascina per selezionarne diversi
+pinboard-hint-chosen = Trascina per spostare, l’angolo per ridimensionare; doppio clic per modificare il testo
+pinboard-hint-place = Tocca la bacheca per metterne uno lì, o trascina per dargli la misura
+pinboard-hint-pen = Trascina per disegnare
+pinboard-hint-arrow = Premi su un elemento e rilascia su un altro
+pinboard-hint-typing = Scrivi il testo; Invio per finire
+pinboard-hint-read = Trascina per spostarti; pizzica, o Ctrl e la rotella, per lo zoom
+pinboard-film-board = Bacheca di cinema
+pinboard-film-board-blurb = La bacheca di un seminario su La finestra sul cortile: gli atti, gli indizi, i motivi e le domande.
+pinboard-mood-board = Moodboard
+pinboard-mood-board-blurb = La palette, la luce, il suono e i luoghi di un cortometraggio, una cornice ciascuno.
+pinboard-retro = Retrospettiva
+pinboard-retro-blurb = Cosa è andato bene, cosa no e cosa provare la prossima volta, ogni problema collegato alla sua soluzione.
 `;export{e as default};

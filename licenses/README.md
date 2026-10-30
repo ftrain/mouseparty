@@ -36,7 +36,7 @@ same ffmpeg from them: the configuration it uses is in that script.
 |---|---|---|---|
 | [hls.js](https://github.com/video-dev/hls.js) | 1.6.15 | Apache-2.0 | `hls.js/` |
 | [pdf.js](https://github.com/mozilla/pdf.js) | 6.3.289 | Apache-2.0 | `pdf.js/` |
-| [Tiny Little Office](https://github.com/aboard-io/tinylittleoffice)'s editors and kernel, the documents (`host_web/office/`, `scripts/vendor_office.sh`) | v2, 12f2221 | MIT | `tinylittleoffice/` |
+| [Tiny Little Office](https://github.com/aboard-io/tinylittleoffice)'s editors and kernel, the documents (`host_web/office/`, `scripts/vendor_office.sh`) | pinboard (from v2), 924fbca | MIT | `tinylittleoffice/` |
 
 Tiny Little Office's build bundles its own dependencies into those files (Lit,
 Lucide, MapLibre, mathjs, Fluent, fflate, d3-sankey and what they bring, all

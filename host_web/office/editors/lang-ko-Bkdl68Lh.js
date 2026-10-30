@@ -1633,4 +1633,36 @@ board-hiring = 채용
 board-candidates-from-application-to-hire = 지원부터 채용까지의 후보자를 직무와 다음 단계와 함께 봅니다.
 board-content-calendar = 콘텐츠 캘린더
 board-pieces-from-idea-to-published = 아이디어부터 발행까지의 콘텐츠를 채널, 작성자, 날짜와 함께 봅니다.
+common-pinboard = 핀보드
+pinboard-pinboard = 핀보드
+pinboard-notes-pictures-frames-and-arrows = 끝없는 보드에 메모, 사진, 프레임, 화살표를 함께 붙이고 그려요.
+pinboard-select = 선택
+pinboard-frame = 프레임
+pinboard-pen = 펜
+pinboard-arrow = 화살표
+pinboard-pink = 분홍
+pinboard-describe-picture = 이미지 설명
+pinboard-connect = 연결
+pinboard-arrowhead = 화살촉
+pinboard-bring-to-front = 맨 앞으로 가져오기
+pinboard-fit-everything = 모두 보기
+pinboard-in-hand = 선택 항목
+pinboard-empty-board = 빈 핀보드
+pinboard-board-of-n-things = { $n ->
+       *[other] 항목 { $n }개가 있는 핀보드
+    }
+pinboard-frames-named = 프레임: { $frames }
+pinboard-hint-select = 보드를 끌어 이동하고, Shift를 누른 채 끌면 여러 개를 선택해요
+pinboard-hint-chosen = 끌어서 옮기고, 모서리로 크기를 바꾸고, 두 번 클릭해 글자를 고쳐요
+pinboard-hint-place = 보드를 탭해 하나 놓거나, 끌어서 크기를 정해요
+pinboard-hint-pen = 끌어서 그리기
+pinboard-hint-arrow = 한 항목을 누르고 다른 항목 위에서 놓기
+pinboard-hint-typing = 글자를 입력하고 Enter로 마치기
+pinboard-hint-read = 끌어서 이동하고, 집거나 Ctrl과 스크롤로 확대·축소
+pinboard-film-board = 영화 보드
+pinboard-film-board-blurb = 〈이창〉 세미나 보드: 막, 단서, 모티프, 질문.
+pinboard-mood-board = 무드 보드
+pinboard-mood-board-blurb = 단편 영화의 색, 빛, 소리, 장소를 각각 프레임에.
+pinboard-retro = 회고
+pinboard-retro-blurb = 잘된 것, 안된 것, 다음에 해 볼 것. 문제마다 해결책으로 연결해요.
 `;export{e as default};

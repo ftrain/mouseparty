@@ -1774,4 +1774,39 @@ board-hiring = Наймання
 board-candidates-from-application-to-hire = Кандидати від відгуку до наймання, з посадою та наступним кроком.
 board-content-calendar = Контент-план
 board-pieces-from-idea-to-published = Матеріали від ідеї до публікації, з каналом, автором і датою.
+common-pinboard = Дошка нотаток
+pinboard-pinboard = дошка нотаток
+pinboard-notes-pictures-frames-and-arrows = Стікери, зображення, рамки й стрілки на дошці без країв, щоб разом пришпилювати й малювати.
+pinboard-select = Вибрати
+pinboard-frame = Рамка
+pinboard-pen = Перо
+pinboard-arrow = Стрілка
+pinboard-pink = Рожевий
+pinboard-describe-picture = Описати картинку
+pinboard-connect = З’єднати
+pinboard-arrowhead = Вістря стрілки
+pinboard-bring-to-front = На передній план
+pinboard-fit-everything = Показати все
+pinboard-in-hand = Виділення
+pinboard-empty-board = Порожня дошка нотаток
+pinboard-board-of-n-things = { $n ->
+        [one] Дошка нотаток: { $n } елемент
+        [few] Дошка нотаток: { $n } елементи
+        [many] Дошка нотаток: { $n } елементів
+       *[other] Дошка нотаток: { $n } елемента
+    }
+pinboard-frames-named = Рамки: { $frames }
+pinboard-hint-select = Перетягніть дошку, щоб рухатися нею; Shift і перетягування виділяють кілька
+pinboard-hint-chosen = Перетягніть, щоб зсунути, кут — щоб змінити розмір; подвійний клік — редагування тексту
+pinboard-hint-place = Торкніться дошки, щоб поставити його там, або потягніть, щоб задати розмір
+pinboard-hint-pen = Потягніть, щоб малювати
+pinboard-hint-arrow = Натисніть на одне й відпустіть на іншому
+pinboard-hint-typing = Введіть текст; Enter — готово
+pinboard-hint-read = Потягніть, щоб рухатися; зведіть пальці або Ctrl і коліщатко — масштаб
+pinboard-film-board = Дошка фільму
+pinboard-film-board-blurb = Дошка семінару про «Вікно у двір»: акти, докази, мотиви й запитання.
+pinboard-mood-board = Дошка настрою
+pinboard-mood-board-blurb = Палітра, світло, звук і місця короткого фільму, по рамці на кожне.
+pinboard-retro = Ретроспектива
+pinboard-retro-blurb = Що вдалося, що ні й що спробувати далі, кожна проблема пов’язана з її рішенням.
 `;export{e as default};

@@ -46,8 +46,8 @@ person's Mac and a link.
 
 ## What's built on this branch
 
-- **Documents as apps.** Document, Outline, Slides, Sheet, Diagram and Drawing
-  are in the app picker beside the games. Each opens a window over the video
+- **Documents as apps.** Document, Outline, Slides, Sheet, Diagram, Drawing
+  and Pinboard are in the app picker beside the games. Each opens a window over the video
   for everyone, drawn by Tiny Little Office's own editors (built from a pinned
   commit by `scripts/vendor_office.sh` into `host_web/office/`).
 - **Editing at once.** The host is the one order of operations the library
@@ -60,7 +60,17 @@ person's Mac and a link.
   shared-document client (`src/kit/share/multiparty.ts`) step for step, and
   runs over the chat socket already open, so it works on the plain-http Wi-Fi
   link too (the library's journal needs WebCrypto, which browsers only allow
-  over https). `apps/office.go`, `host_web/apps/office.js`.
+  over https). The ops pass through the host as the JSON text a page wrote:
+  decoded and encoded again, a picture's attributes came out in another order
+  and two pages' documents parted. A new document is seeded with its app's
+  blank before anyone touches it, so a pinboard's first two notes land in one
+  table. `apps/office.go`, `host_web/apps/office.js`.
+- **The Pinboard**, new in Tiny Little Office (its `pinboard` branch): notes,
+  text, pictures, frames, pen strokes and arrows on an open canvas, a table
+  with a row per thing and a stable id each, so arrows keep their ends when
+  people add and take things away at once; a move is a write of two cells, so
+  two people dragging two things never collide. A frame grabbed in it is
+  pinned in the middle of the view.
 - **Pictures.** The editors' Insert ▾ Picture, paste and drop all work: the
   host keeps pictures (PNG, JPEG, GIF, WebP; never an SVG from a viewer),
   serves them under the session key, keeps the same bytes once, and writes

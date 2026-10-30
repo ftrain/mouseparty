@@ -1665,4 +1665,36 @@ board-hiring = 招聘
 board-candidates-from-application-to-hire = 从投递到录用的候选人，附职位和下一步。
 board-content-calendar = 内容日历
 board-pieces-from-idea-to-published = 从创意到发布的内容，附渠道、作者和日期。
+common-pinboard = 图钉板
+pinboard-pinboard = 图钉板
+pinboard-notes-pictures-frames-and-arrows = 在没有边界的板上贴便签、图片、框和箭头，一起钉、一起画。
+pinboard-select = 选择
+pinboard-frame = 框
+pinboard-pen = 钢笔
+pinboard-arrow = 箭头
+pinboard-pink = 粉色
+pinboard-describe-picture = 描述图片
+pinboard-connect = 连接
+pinboard-arrowhead = 箭头
+pinboard-bring-to-front = 置于顶层
+pinboard-fit-everything = 显示全部
+pinboard-in-hand = 所选内容
+pinboard-empty-board = 空的图钉板
+pinboard-board-of-n-things = { $n ->
+       *[other] 有 { $n } 项内容的图钉板
+    }
+pinboard-frames-named = 框：{ $frames }
+pinboard-hint-select = 拖动板子来移动；按住 Shift 拖动可选多项
+pinboard-hint-chosen = 拖动来移动，拖角调整大小；双击编辑文字
+pinboard-hint-place = 点按板子放一个，或拖动定大小
+pinboard-hint-pen = 拖动来画
+pinboard-hint-arrow = 在一项上按下，在另一项上松开
+pinboard-hint-typing = 输入文字；按 Enter 完成
+pinboard-hint-read = 拖动来移动；捏合或按住 Ctrl 滚动来缩放
+pinboard-film-board = 电影板
+pinboard-film-board-blurb = 一堂关于《后窗》的研讨课板：幕、线索、母题和问题。
+pinboard-mood-board = 情绪板
+pinboard-mood-board-blurb = 一部短片的色彩、光线、声音和地点，各占一个框。
+pinboard-retro = 复盘
+pinboard-retro-blurb = 做得好的、没做好的、下次要试的，每个问题都连到它的解决办法。
 `;export{e as default};
