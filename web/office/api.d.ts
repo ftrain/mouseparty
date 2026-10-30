@@ -1,0 +1,186 @@
+/**
+ * Tiny Little Office for programs and agents: served by the site at /api.js (an entry of the build of its
+ * own) and used by the command line (packages/doc). A document is a link; this makes links and reads them,
+ * over the same codec, routes and kernel the site uses. Nothing here touches the DOM: it runs in a page, in
+ * Node 24, Deno or Bun as it is.
+ *
+ *   import { link, read } from 'https://tinylittleoffice.com/api.js';
+ *   const url = link('sheet', 'Item | Cost:money\n--- | ---\nRent | 1200\n', { title: 'Budget' });
+ *   read(url).text;   // the document's TLO text, its title in the head
+ *   await text(url);  // what the document says, as Markdown (its text layer: src/doc/text.ts)
+ *   const { url, password } = await link('write', 'Salaries…\n', { seal: true });  // under a password the app made
+ *   toJson(read(url).text);  // the kernel's document as JSON (packages/doc/schema/tlo.schema.json); fromJson gives the text back
+ *
+ * The apps' definitions (their names and templates) are a lazy import: `apps()` and `templates()` are
+ * asynchronous so that the rest stays small (budgets.json holds /api.js to its size). So are the examples:
+ * `shapes(app)` lists what an app reads, `example(app, shape)` gives the smallest document that shows a shape
+ * (cut from the app's templates by scripts/make-skill.ts into packages/doc/examples/<app>.json), and
+ * `tryDraft(app, text)` checks a draft in one call. In Node, which imports no module from a URL, the npm package
+ * `tinylittleoffice` is this module (packages/doc).
+ */
+import { type Doc } from './doc/index.ts';
+import { URL_LIMIT } from './kit/core/codec.ts';
+import { diff, type Change } from './kit/text/diff.ts';
+export type { Change, Doc };
+export { diff, URL_LIMIT };
+/** Where links point by default. Any copy of the site works: the document is in the link, not on the server. */
+export declare const SITE: string;
+/** A document's text as a link's payload (the shortest of the codec's three forms). */
+export declare const encode: (text: string) => string;
+/** A payload's text; '' for one that cannot be read. */
+export declare const decode: (payload: string) => string;
+/** TLO text as the kernel's document: a head of fields and a list of blocks (docs/kernel.md). */
+export declare const parse: (text: string) => Doc;
+/** The kernel's document as canonical TLO text. */
+export declare const write: (doc: Doc) => string;
+/**
+ * TLO text as the kernel's document in JSON: its keys in the order the types name them, two-space indent. The
+ * contract is the JSON Schema at packages/doc/schema/tlo.schema.json, written from the kernel's types.
+ */
+export declare const toJson: (text: string) => string;
+/** A document in JSON as canonical TLO text; one that does not fit the schema throws, naming the path of the fault. */
+export declare const fromJson: (json: string) => string;
+export interface LinkOptions {
+    /** The document's name (into its head). */
+    title?: string;
+    /** Who made it: a person, or an agent's name; a claim, shown as such. */
+    by?: string;
+    /** A view: a file to download on arrival ('pdf', 'docx', 'csv', …), or 'embed'. */
+    view?: string;
+    /** Open as pages to read (the Display Link), not in the editor. */
+    display?: boolean;
+    /** A deck's show link: open presenting. */
+    show?: boolean;
+    /** The language the link opens in, as src/i18n names it ('ht', 'pt-br'); the reader's browser's when absent. */
+    lang?: string;
+    /** The site the link opens on; this one by default. */
+    site?: string;
+    /** Refused: the app makes every password (Paul, 2026-10-11); ask for one with `seal: true`. */
+    password?: never;
+}
+/** Under a password: the link holds only ciphertext, and the password, made here, is returned beside it. */
+export interface SealOptions extends LinkOptions {
+    seal: true;
+}
+/** What a sealed link is: the link, and the password that opens it (send it another way than the link). */
+export interface Sealed {
+    url: string;
+    password: string;
+}
+/** Said when a password is handed in: nobody chooses one, so nobody chooses a weak one. */
+export declare const PASSWORD_REFUSED = "The app makes the password; ask for one with seal.";
+/**
+ * The packed link for a document in an app: "<site><app>/#/v1/<app>/<payload>". With `seal: true`, the document
+ * sealed under a password the app makes (kit/share/passwords.ts, kit/share/crypt.ts), as the Password dialog does: the
+ * link and the password, asynchronously (WebCrypto is). A `password` given is refused.
+ */
+export declare function link(app: string, text: string, opts: SealOptions): Promise<Sealed>;
+export declare function link(app: string, text: string, opts?: LinkOptions): string;
+/** The plain-parameter link for a document ("<site><app>/#title=…&doc=…"): longer, but readable and writable by hand. */
+export declare const plain: (app: string, text: string, opts?: Pick<LinkOptions, 'title' | 'by' | 'view' | 'site'>) => string;
+export interface Read {
+    app: string;
+    /** '' for the editor; a file's extension, or 'embed'. */
+    view: string;
+    /** The document's TLO text. */
+    text: string;
+    /** The same document as JSON (toJson). */
+    json: string;
+    /** The head's title, '' when it names none (an app may also take its name from its words). */
+    title: string;
+    /** The head's by, '' when it names no one. */
+    by: string;
+    display: boolean;
+    /** The language the link opens in, when it names one. */
+    lang?: string;
+}
+/** Read a link (packed or plain, or only its fragment): the app, the view, and the document. Throws when it is not one. */
+export declare function read(url: string): Read;
+/**
+ * A document in an app as what it says, in Markdown: its text layer (src/doc/text.ts; a spatial app's own, a
+ * diagram's things and connections, a calendar's days), what a screen reader reads on its Display Link. Its title
+ * first, unless its first heading says it already.
+ */
+export declare function markdown(app: string, text: string): Promise<string>;
+/** A link's document as what it says, in Markdown (markdown(app, text)). */
+export declare function text(url: string): Promise<string>;
+/** A document as a .tlo file's text (its app in its head); and a .tlo file's text as the app and the document. */
+export declare const tlo: (app: string, text: string) => string;
+export declare function fromTlo(file: string): {
+    app: string;
+    text: string;
+};
+/** What the second link changed, block by block, and whether they are the same document. */
+export declare function compare(a: string, b: string): {
+    same: boolean;
+    removed: number;
+    added: number;
+    changes: Change[];
+};
+export type { Finding, Measure } from './lint.ts';
+/**
+ * What the eye would have seen in a document, said in words, so nothing need be opened to check it: a diagram's
+ * connection that names no thing, a comma splitting a number into two things, a label too long for its box or
+ * lying over another, a slide's bullets under a chart (not drawn), a headline shrunk or cut, a link too long to
+ * paste. Each finding has its app, where it is ("slide 3"), its block, its kind, its words and what to do; a
+ * document fenced inside another is linted too. [] is a clean document. The measures are the layouts' own.
+ */
+export declare function lint(app: string, text: string, opts?: LinkOptions): Promise<import('./lint.ts').Finding[]>;
+/** The numbers the layouts chose, so words can be set from them: per slide the headline's and the words' sizes, lines and what was cut; per diagram its things and connections, drawn and dropped, and how each label was set; and whether the link fits in a short link (`short: { fits, over }`). */
+export declare function measure(app: string, text: string, opts?: LinkOptions): Promise<import('./lint.ts').Measure>;
+/** Every app: its id, name, what one document is called, its group and a line on what it is for. */
+export declare function apps(): Promise<{
+    id: string;
+    name: string;
+    noun: string;
+    group: string;
+    blurb: string;
+}[]>;
+/** The templates an app starts from: an id, a name, a line, and the document. */
+export declare function templates(app: string): Promise<{
+    id: string;
+    name: string;
+    blurb: string;
+    text: string;
+}[]>;
+/** The files an app makes from a document without a browser (its own formats that need no drawing), by extension. */
+export declare function formats(app: string): Promise<string[]>;
+/**
+ * A document as a file of one of its app's formats: 'md', 'tlo' and 'json' for every app, and the app's own where they
+ * need no browser to draw them (a sheet's csv and xlsx, a calendar's ics, a text's docx…). Throws for a
+ * format the app does not have, or one that needs a browser. `image`, a host's answer for where a picture it keeps
+ * is (a data: URL, which a .docx or an RTF writes in), by its reference (doc/image.ts): a server has no page's host.
+ * `raster`, a host's drawing of SVG as a PNG, for the pictures a file draws where there is no browser (a deck's .pptx).
+ */
+export declare function file(app: string, text: string, ext: string, ctx?: {
+    title?: string;
+    link?: string;
+    image?: (ref: string) => string | null;
+    raster?: (svg: string, w: number, h: number, paper: string | null) => Promise<Uint8Array | null>;
+}): Promise<Uint8Array | string>;
+/** A shape an app reads (a heading, a money column, a Venn, a title slide): its id, what it is called and what it is for. */
+export interface Shape {
+    id: string;
+    name: string;
+    for: string;
+}
+/** A shape's example: the smallest document cut from the app's templates that shows it, its plain link and its JSON (the kernel's document), with what the lint and the measures say of it. */
+export interface Example extends Shape {
+    /** Where it was cut from: "template budget". */
+    from: string;
+    text: string;
+    link: string;
+    json: Doc;
+    lint: import('./lint.ts').Finding[];
+    measure: import('./lint.ts').Measure;
+}
+/** The shapes an app reads, a line each: what to ask `example` for. */
+export declare function shapes(app: string): Promise<Shape[]>;
+/** The smallest document that shows a shape, its JSON, and what the lint and the measures say of it; every shape of the app's without one. Throws for a shape the app does not read, naming those it does. */
+export declare function example(app: string, shape?: string): Promise<Example[]>;
+/** A draft in one call: what the lint finds, what the layouts measured, and the document as JSON (the kernel's). */
+export declare function tryDraft(app: string, text: string): Promise<{
+    lint: import('./lint.ts').Finding[];
+    measure: import('./lint.ts').Measure;
+    json: Doc;
+}>;
