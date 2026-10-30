@@ -239,6 +239,9 @@ func (a *App) view() View {
 		}
 	case (a.hostFailed != "" || (a.host != nil && a.host.Running())) && len(a.cfg.Queue) > 0:
 		v.LinkPress, v.LinkNote = true, "No link – try again" // hosting, but Cloudflare said no
+		if strings.Contains(a.hostFailed, "address already in use") {
+			v.LinkNote = "Port in use – try again" // something else has the site's or MediaMTX's port
+		}
 	default:
 		v.LinkPress = len(a.cfg.Queue) > 0
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:frontend
@@ -64,6 +65,9 @@ func main() {
 		DragAndDrop:      &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: true},
 		Bind:             []any{app},
 		Menu:             app.menu(),
+		// one copy: a second would find the ports taken and host nothing; it shows this one instead
+		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "io.github.ftrain.openhouseparty",
+			OnSecondInstanceLaunch: func(options.SecondInstanceData) { runtime.WindowUnminimise(ctx); runtime.Show(ctx) }},
 		Mac: &mac.Options{
 			About: &mac.AboutInfo{Title: "Open House Party", Message: "Have friends over: movies, chat and games, hosted from this Mac.\n\n" +
 				"MIT licence. It includes ffmpeg (GPL), MediaMTX, cloudflared and more, each under its own " +
