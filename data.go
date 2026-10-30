@@ -4,7 +4,7 @@ package main
 // answers every page of it itself, so the file never leaves the Mac; viewers' pages
 // show those pages in a frame over the video (host_web/data.html), all on the one
 // anyone went to last (Host.SetAt). Tables, sorting, filters, facets and SQL, after
-// Datasette. SQLite is modernc.org/sqlite: Go, compiled in, nothing to install.
+// Datasette. SQLite is ncruces/go-sqlite3, as the party file's (store.go): Go, compiled in, nothing to install.
 //
 // A viewer's SQL can only read this database: the file is opened read-only with
 // query_only on, an authorizer allows reading and nothing else (no ATTACH, so no
@@ -27,7 +27,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"modernc.org/sqlite"
+	"github.com/ncruces/go-sqlite3"
+	"github.com/ncruces/go-sqlite3/driver"
 )
 
 const (
@@ -40,37 +41,26 @@ const (
 	dataSuggest  = 50 * time.Millisecond
 )
 
-func init() {
-	d := &sqlite.Driver{}
-	d.RegisterConnectionHook(func(c sqlite.ExecQuerierContext, _ string) error {
-		r, ok := c.(sqlite.AuthorizerRegisterer)
-		if !ok {
-			return errors.New("this SQLite can't be limited to reading")
-		}
-		return r.RegisterAuthorizer(onlyReading)
-	})
-	sql.Register("sqlite-reading", d)
-}
-
 // pragmas a page (or a viewer's SQL) may read: what a table is made of
 var readPragmas = map[string]bool{"table_info": true, "table_xinfo": true, "foreign_key_list": true, "index_list": true,
 	"index_info": true, "index_xinfo": true}
 
 // onlyReading: SQLite's authorizer, asked about every part of every statement
-func onlyReading(action sqlite.AuthorizerActionCode, arg1, arg2, _, _ string) sqlite.AuthorizerReturnCode {
+func onlyReading(action sqlite3.AuthorizerActionCode, arg1, arg2, _, _ string) sqlite3.AuthorizerReturnCode {
 	switch action {
-	case sqlite.AuthSelect, sqlite.AuthRead, sqlite.AuthRecursive:
-		return sqlite.AuthorizerOK
-	case sqlite.AuthFunction:
+	case sqlite3.AUTH_SELECT, sqlite3.AUTH_READ, sqlite3.AUTH_RECURSIVE:
+		return sqlite3.AUTH_OK
+	case sqlite3.AUTH_FUNCTION:
 		if !strings.EqualFold(arg2, "load_extension") {
-			return sqlite.AuthorizerOK
+			return sqlite3.AUTH_OK
 		}
-	case sqlite.AuthPragma:
-		if readPragmas[strings.ToLower(arg1)] {
-			return sqlite.AuthorizerOK
+	case sqlite3.AUTH_PRAGMA:
+		// what a table is made of; and whether it's read-only (the driver asks), but never a pragma set to a value
+		if readPragmas[strings.ToLower(arg1)] || strings.EqualFold(arg1, "query_only") && arg2 == "" {
+			return sqlite3.AUTH_OK
 		}
 	}
-	return sqlite.AuthorizerDeny
+	return sqlite3.AUTH_DENY
 }
 
 // dataDB: the database up
@@ -80,8 +70,14 @@ type dataDB struct {
 }
 
 func openData(path, title string) (*dataDB, error) {
-	dsn := (&url.URL{Scheme: "file", Path: path}).String() + "?mode=ro&_query_only=1"
-	db, err := sql.Open("sqlite-reading", dsn)
+	dsn := (&url.URL{Scheme: "file", Path: path}).String() + "?mode=ro"
+	// each connection only reads: query_only, then the authorizer (which would refuse even that pragma)
+	db, err := driver.Open(dsn, func(c *sqlite3.Conn) error {
+		if err := c.Exec(`PRAGMA query_only = 1`); err != nil {
+			return err
+		}
+		return c.SetAuthorizer(onlyReading)
+	})
 	if err != nil {
 		return nil, err
 	}

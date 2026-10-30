@@ -11,14 +11,14 @@ import (
 	"strings"
 	"testing"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/ncruces/go-sqlite3/driver"
 )
 
 // films: a small database with a foreign key, written with the usual (writable) driver
 func films(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "Films.db")
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,8 @@ func TestADatabaseUpCanOnlyBeRead(t *testing.T) {
 	} {
 		p := &dataPage{}
 		d.query(context.Background(), p, q)
-		if !strings.HasPrefix(p.Error, "Only reading") { // the authorizer said no, not something else
+		// the authorizer said no, not something else (load_extension isn't even in this SQLite)
+		if !strings.HasPrefix(p.Error, "Only reading") && !strings.Contains(p.Error, "no such function: load_extension") {
 			t.Errorf("%q: %q", q, p.Error)
 		}
 	}
