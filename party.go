@@ -151,7 +151,7 @@ func (a *App) SetSettingsText(text string) string {
 // ask: the Party menu's items ask the window for a passcode (mode "on", "change" or "off"), or show the settings ("settings")
 func (a *App) ask(mode string) {
 	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "encryption", mode)
+		runtime.EventsEmit(a.ctx, "ask", mode)
 	}
 }
 

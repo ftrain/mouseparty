@@ -119,3 +119,17 @@ func mustJSON(t *testing.T, v any) []byte {
 	}
 	return b
 }
+
+// Two pages seed a new document at once: the first is the document, the second is told what it is
+func TestOfficeSeedsOnce(t *testing.T) {
+	r, out := testRoom(ann, bob)
+	o := newOffice("pinboard")(r).(*office)
+	o.Message(r, ann, Msg{"kind": "seed", "text": "Id | Kind\n--- | ---\n"})
+	o.Message(r, bob, Msg{"kind": "seed", "text": "Id | Kind | X\n--- | --- | ---\n"})
+	if o.text != "Id | Kind\n--- | ---\n" {
+		t.Fatal("the second seed won:", o.text)
+	}
+	if len(*out) != 1 || (*out)[0].to != bob.ID || (*out)[0].msg["kind"] != "state" {
+		t.Fatal("Bob wasn't told the document:", *out)
+	}
+}

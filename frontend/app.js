@@ -1,4 +1,5 @@
 // Built from web/window/app.ts by `npm run build` (vite.config.ts): change it there.
+import { ask, lock, sheetOpen } from "./party.js";
 const App = () => window.go.main.App;
 const $ = (id) => document.getElementById(id);
 const ICONS = {
@@ -25,6 +26,7 @@ function tile(el, icon, on, press, note, cls) {
 }
 function render(v) {
 	view = v;
+	lock(v);
 	tile($("play"), v.play, v.playOn, v.playOn, "", v.play === "stop" ? "stop" : "");
 	$("play").setAttribute("aria-label", v.play === "stop" ? "Stop" : "Play");
 	tile($("link"), v.link, v.linkOn, v.linkPress, v.linkNote);
@@ -97,6 +99,7 @@ window.addEventListener("mouseup", () => {
 	dragFrom = null;
 });
 window.addEventListener("keydown", (e) => {
+	if (sheetOpen()) return;
 	if (e.key === "Backspace" || e.key === "Delete") App().Remove();
 	else if (e.key === "ArrowLeft" || e.key === "PageUp") App().TurnPage(-1);
 	else if (e.key === "ArrowRight" || e.key === "PageDown") App().TurnPage(1);
@@ -121,5 +124,6 @@ slider.addEventListener("keydown", (e) => e.stopPropagation());
 window.addEventListener("load", async () => {
 	window.runtime.OnFileDrop((x, y, paths) => App().AddPaths(paths, rowAt(x, y) ?? -1), false);
 	window.runtime.EventsOn("view", render);
+	window.runtime.EventsOn("ask", ask);
 	render(await App().GetView());
 });

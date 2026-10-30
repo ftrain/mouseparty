@@ -89,7 +89,11 @@ const CAMERA = [["path", { d: "M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18
 	cy: "13",
 	r: "3"
 }]];
-const READS = /* @__PURE__ */ new Set(["write", "deck"]);
+const READS = /* @__PURE__ */ new Set([
+	"write",
+	"deck",
+	"sheet"
+]);
 const READABLE = [
 	".docx",
 	".odt",
@@ -134,6 +138,7 @@ const office = (ctx, view) => {
 	let lib = null, mounted = null, stopped = false;
 	let app = view.app, doc = null, seq = 0, pending = [], inflight = null, client = newClient(), n = 0;
 	let seeding = false;
+	let latest = view;
 	const say = (text) => lib && lib.editors.toast(text);
 	const opsOf = (text) => {
 		try {
@@ -280,7 +285,7 @@ const office = (ctx, view) => {
 		where: ["bar"],
 		icon: FILE_UP,
 		label: () => "Bring in a document",
-		hint: () => "A Word, OpenOffice or PowerPoint file, an EPUB, a web page, LaTeX…, added at the end",
+		hint: () => app === "sheet" ? "An Excel or CSV file (or any document with a table): its first table, into this Sheet while it’s empty" : "A Word, OpenOffice or PowerPoint file, an EPUB, a web page, LaTeX…, added at the end",
 		disabled: () => reading,
 		does: () => choose()
 	});
@@ -309,11 +314,21 @@ const office = (ctx, view) => {
 			const K = lib.kernel, now = K.applyAll(doc, pending);
 			let blocks = K.parse(text).blocks;
 			if (!blocks.length) {
-				say(`Nothing in ${file.name} to bring in`);
+				say(app === "sheet" ? `No table in ${file.name}` : `Nothing in ${file.name} to bring in`);
+				return;
+			}
+			const filled = now.blocks.some((b) => b.k === "table" && b.rows.some((row) => row.some((cell) => cell.trim())));
+			if (app === "sheet" && filled) {
+				say("This Sheet has its own table: bring the file into a Document, or a new Sheet");
 				return;
 			}
 			if (app === "deck" && now.blocks.length) blocks = [K.parse("x\n\n---\n\nx").blocks[1], ...blocks];
-			const op = {
+			const op = app === "sheet" ? {
+				op: "splice",
+				at: 0,
+				n: now.blocks.length,
+				blocks
+			} : {
 				op: "splice",
 				at: now.blocks.length,
 				n: 0,
@@ -345,12 +360,12 @@ const office = (ctx, view) => {
 	(async () => {
 		lib = await library(ctx.base);
 		if (stopped) return;
-		load(view);
-		if (view.seq === 0 && !view.text) {
+		load(latest);
+		if (latest.seq === 0 && !latest.text) {
 			const seeded = seed && seed.name === app ? seed.text : null;
 			if (seeded !== null) seed = null;
 			const text = seeded !== null ? seeded : await lib.editors.appOf(app)?.blank?.();
-			if (text) {
+			if (text && latest.seq === 0 && !latest.text) {
 				seeding = true;
 				ctx.send({
 					kind: "seed",
@@ -358,11 +373,13 @@ const office = (ctx, view) => {
 				});
 				return;
 			}
+			load(latest);
 		}
 		await mount();
 	})();
 	return {
 		view(v) {
+			latest = v;
 			if (lib && seeding && v.text) {
 				seeding = false;
 				load(v);
@@ -374,6 +391,12 @@ const office = (ctx, view) => {
 			mount();
 		},
 		message(m) {
+			if (lib && seeding && m.kind === "state") {
+				seeding = false;
+				load(m.state);
+				mount();
+				return;
+			}
 			if (!lib || !mounted) return;
 			if (m.kind === "ops") {
 				if (m.seq <= seq) return;

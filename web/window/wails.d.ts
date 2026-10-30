@@ -23,6 +23,8 @@ export interface View {
     rows: Row[];
     selected: number; // -1: none
     slider: Slider;
+    locked: boolean; // the party is sealed: the window asks for its passcode, and shows nothing else
+    sealed: boolean; // the party is kept encrypted
 }
 
 export interface Row {
@@ -55,10 +57,20 @@ export interface App {
     ShowPage(page: number): Promise<void>;
     TurnPage(step: number): Promise<void>;
     AddPaths(paths: string[], row: number): Promise<void>;
+    // the party file (party.go): each "" when it worked, or why not
+    Unlock(passcode: string): Promise<string>;
+    StartOver(): Promise<string>;
+    SetPasscode(current: string, next: string): Promise<string>;
+    SettingsText(): Promise<string>;
+    SetSettingsText(text: string): Promise<string>;
 }
+
+// what the Party menu asks the window for (party.go's ask)
+export type Ask = 'on' | 'change' | 'off' | 'settings';
 
 // as much of the Wails runtime as the window uses
 export interface Runtime {
     OnFileDrop(callback: (x: number, y: number, paths: string[]) => void, useDropTarget: boolean): void;
     EventsOn(name: 'view', callback: (v: View) => void): () => void;
+    EventsOn(name: 'ask', callback: (mode: Ask) => void): () => void;
 }

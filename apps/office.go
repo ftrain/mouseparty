@@ -103,6 +103,8 @@ func (o *office) Message(r *Room, from Viewer, m Msg) {
 		if ok && o.seq == 0 && o.text == "" && len(text) <= officeMaxText {
 			o.text = text
 			r.Changed()
+		} else { // another page's seed came first: this one starts from what there is
+			r.To(from.ID, Msg{"kind": "state", "state": o.state()})
 		}
 	case "sync": // a page that lost its way (its rebase met a conflict) starts again from the host's
 		r.To(from.ID, Msg{"kind": "state", "state": o.state()})

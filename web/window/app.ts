@@ -1,6 +1,7 @@
 // The window: it draws the View the Go side sends (app.go) and tells it what was
 // pressed. It keeps nothing of its own but a drag in progress and a held slider.
 import type { View } from './wails.d.ts';
+import { ask, lock, sheetOpen } from './party.ts';
 
 const App = () => window.go.main.App;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -28,6 +29,7 @@ function tile(el: HTMLElement, icon: keyof typeof ICONS, on: boolean, press: boo
 
 function render(v: View) {
     view = v;
+    lock(v); // sealed: only the passcode
     tile($('play'), v.play, v.playOn, v.playOn, '', v.play === 'stop' ? 'stop' : '');
     $('play').setAttribute('aria-label', v.play === 'stop' ? 'Stop' : 'Play');
     tile($('link'), v.link, v.linkOn, v.linkPress, v.linkNote);
@@ -103,6 +105,7 @@ window.addEventListener('mouseup', () => {
 
 // keys: Backspace removes the selected one; arrows and Page Up/Down turn a PDF's pages
 window.addEventListener('keydown', (e) => {
+    if (sheetOpen()) return; // typing a passcode, or the settings
     if (e.key === 'Backspace' || e.key === 'Delete') App().Remove();
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') App().TurnPage(-1);
     else if (e.key === 'ArrowRight' || e.key === 'PageDown') App().TurnPage(1);
@@ -131,5 +134,6 @@ slider.addEventListener('keydown', (e) => e.stopPropagation());
 window.addEventListener('load', async () => {
     window.runtime.OnFileDrop((x, y, paths) => App().AddPaths(paths, rowAt(x, y) ?? -1), false);
     window.runtime.EventsOn('view', render);
+    window.runtime.EventsOn('ask', ask); // the Party menu
     render(await App().GetView());
 });

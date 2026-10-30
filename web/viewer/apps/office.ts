@@ -120,8 +120,9 @@ const CAMERA: Editors.IconNode = [
     ],
     ['circle', { cx: '12', cy: '13', r: '3' }],
 ];
-// documents the host reads (pandoc.go's readFormats), into the kinds that take one: its words at the end, or its slides after these
-const READS = new Set(['write', 'deck']);
+// documents the host reads (pandoc.go's readFormats), into the kinds that take one: its words at the end, its slides
+// after these, or its first table as a blank Sheet's
+const READS = new Set(['write', 'deck', 'sheet']);
 const READABLE = [
     '.docx',
     '.odt',
@@ -188,6 +189,7 @@ const office: Start<State, Event, Out> = (ctx, view) => {
         client = newClient(),
         n = 0;
     let seeding = false; // an empty document, given its first text: nothing is drawn until the host says what it is
+    let latest = view; // the host's newest view, which may have come while the library loaded
     const say = (text: string) => lib && lib.editors.toast(text);
     // ops travel as the JSON this page or another wrote, which the host passes on untouched
     const opsOf = (text: string): Kernel.Op[] => {
@@ -318,7 +320,10 @@ const office: Start<State, Event, Out> = (ctx, view) => {
             where: ['bar'],
             icon: FILE_UP,
             label: () => 'Bring in a document',
-            hint: () => 'A Word, OpenOffice or PowerPoint file, an EPUB, a web page, LaTeX…, added at the end',
+            hint: () =>
+                app === 'sheet'
+                    ? 'An Excel or CSV file (or any document with a table): its first table, into this Sheet while it’s empty'
+                    : 'A Word, OpenOffice or PowerPoint file, an EPUB, a web page, LaTeX…, added at the end',
             disabled: () => reading,
             does: () => choose(),
         });
@@ -342,11 +347,17 @@ const office: Start<State, Event, Out> = (ctx, view) => {
                 now = K.applyAll(doc!, pending);
             let blocks = K.parse(text).blocks;
             if (!blocks.length) {
-                say(`Nothing in ${file.name} to bring in`);
+                say(app === 'sheet' ? `No table in ${file.name}` : `Nothing in ${file.name} to bring in`);
+                return;
+            }
+            // a Sheet is one table: a file's goes in only while the Sheet's is still blank, which it then is
+            const filled = now.blocks.some((b) => b.k === 'table' && b.rows.some((row) => row.some((cell) => cell.trim())));
+            if (app === 'sheet' && filled) {
+                say('This Sheet has its own table: bring the file into a Document, or a new Sheet');
                 return;
             }
             if (app === 'deck' && now.blocks.length) blocks = [K.parse('x\n\n---\n\nx').blocks[1], ...blocks]; // the next slide
-            const op: Kernel.Op = { op: 'splice', at: now.blocks.length, n: 0, blocks };
+            const op: Kernel.Op = app === 'sheet' ? { op: 'splice', at: 0, n: now.blocks.length, blocks } : { op: 'splice', at: now.blocks.length, n: 0, blocks };
             if (JSON.stringify([op]).length > 1 << 20 || !applied(now, [op])) {
                 say(`${file.name} is too long to bring in`);
                 return;
@@ -383,24 +394,26 @@ const office: Start<State, Event, Out> = (ctx, view) => {
     (async () => {
         lib = await library(ctx.base);
         if (stopped) return;
-        load(view);
-        if (view.seq === 0 && !view.text) {
+        load(latest);
+        if (latest.seq === 0 && !latest.text) {
             // a new document starts as a copy someone asked for on this page (the reel's "Make it slides"), or
             // as its app's own blank (a pinboard's empty table, which everyone's first things must share)
             const seeded = seed && seed.name === app ? seed.text : null;
             if (seeded !== null) seed = null;
             const text = seeded !== null ? seeded : await lib.editors.appOf(app)?.blank?.();
-            if (text) {
+            if (text && latest.seq === 0 && !latest.text) {
                 seeding = true;
                 ctx.send({ kind: 'seed', text });
                 return; // drawn when the host's view comes back with it (or another page's seed)
             }
+            load(latest); // another page's, that came while the blank was made
         }
         await mount();
     })();
 
     return {
         view(v) {
+            latest = v;
             if (lib && seeding && v.text) {
                 seeding = false;
                 load(v);
@@ -413,6 +426,13 @@ const office: Start<State, Event, Out> = (ctx, view) => {
             mount();
         },
         message(m) {
+            if (lib && seeding && m.kind === 'state') {
+                // our seed came second: start from the one that came first
+                seeding = false;
+                load(m.state);
+                mount();
+                return;
+            }
             if (!lib || !mounted) return;
             if (m.kind === 'ops') {
                 if (m.seq <= seq) return;
