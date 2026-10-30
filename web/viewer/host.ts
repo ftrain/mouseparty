@@ -896,7 +896,7 @@ async function drawPage() {
 }
 
 // ---------- a database, looked through together ----------
-// Its pages, made by the host (data.go; the file stays on the Mac), in a frame
+// Its pages, Datasette's (datasette.go; the file stays on the Mac), in a frame
 // over the video, on whatever page anyone went to last: where someone here goes
 // is sent to everyone ({type: 'doc_at'}).
 let dbFrame: HTMLIFrameElement | null = null,
@@ -922,7 +922,7 @@ function closeDb() {
     dbFrame = dbToken = null;
 }
 
-// what the frame says (data.html): where it went, or Back
+// what the frame says (the script datasette.go adds to its pages): where it went, or Back
 window.addEventListener('message', (e: MessageEvent<{ type?: string; at?: unknown } | null>) => {
     if (!dbFrame || e.source !== dbFrame.contentWindow || e.origin !== location.origin) return;
     if (e.data?.type === 'went' && typeof e.data.at === 'string') send({ type: 'doc_at', token: dbToken, at: e.data.at });

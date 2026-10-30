@@ -73,6 +73,24 @@ jobs:
           path: build/ffmpeg/bin
           key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
 
+      - name: Python for Datasette (cached until scripts/build_python.sh or its packages change)
+        id: python
+        uses: actions/cache/restore@v4
+        with:
+          path: build/python/dist
+          key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_python.sh', 'scripts/python-requirements.txt') }}
+
+      - name: Build Python
+        if: steps.python.outputs.cache-hit != 'true'
+        run: scripts/build_python.sh
+
+      - name: Keep Python for next time
+        if: steps.python.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/python/dist
+          key: ${{ steps.python.outputs.cache-primary-key }}
+
       - name: Build
         run: BUNDLE_FFMPEG=1 scripts/build_mac_app.sh
 

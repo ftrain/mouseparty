@@ -11,6 +11,7 @@ package main
 
 import (
 	"context"
+	crand "crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -97,6 +98,11 @@ func (t *wasmTool) compiled(ctx context.Context) (wazero.Runtime, wazero.Compile
 
 // run: the tool with these arguments, seeing dir as "/" and nothing else
 func (t *wasmTool) run(ctx context.Context, dir string, stdout, stderr io.Writer, args ...string) error {
+	return t.runWith(ctx, wazero.NewFSConfig().WithDirMount(dir, "/"), nil, nil, stdout, stderr, args...)
+}
+
+// runWith: the tool seeing what fsc mounts and nothing else, with env, reading stdin (nil for none), until it ends
+func (t *wasmTool) runWith(ctx context.Context, fsc wazero.FSConfig, env map[string]string, stdin io.Reader, stdout, stderr io.Writer, args ...string) error {
 	rt, mod, err := t.compiled(ctx)
 	if err != nil {
 		return err
@@ -106,7 +112,15 @@ func (t *wasmTool) run(ctx context.Context, dir string, stdout, stderr io.Writer
 		WithArgs(append([]string{t.name}, args...)...).
 		WithStdout(stdout).
 		WithStderr(stderr).
-		WithFSConfig(wazero.NewFSConfig().WithDirMount(dir, "/"))
+		WithFSConfig(fsc).
+		WithSysWalltime().WithSysNanotime().WithSysNanosleep(). // the real clock: Python's timeouts need it
+		WithRandSource(crand.Reader)
+	if stdin != nil {
+		cfg = cfg.WithStdin(stdin)
+	}
+	for k, v := range env {
+		cfg = cfg.WithEnv(k, v)
+	}
 	m, err := rt.InstantiateModule(ctx, mod, cfg)
 	if m != nil {
 		m.Close(context.Background())

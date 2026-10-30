@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ftrain/mouseparty/apps"
@@ -39,7 +40,7 @@ type document struct {
 	Kind  string   `json:"kind"` // "pdf", "db" or "text"
 	Pages int      `json:"pages"`
 	Page  int      `json:"page"`
-	At    string   `json:"at"`   // a database: the page of it everyone is on ("" its first; data.go)
+	At    string   `json:"at"`   // a database: the page of it everyone is on ("" its first; datasette.go)
 	Back  bool     `json:"back"` // and there's one before it to go back to
 	trail []string // the pages before it
 	// another document (text): read by pandoc as it goes up; ready when its words are, at /doc/<token>
@@ -162,33 +163,29 @@ func (h *Host) scheduleJSON() map[string]any {
 // ---------- a PDF read together, a database looked through, another document read ----------
 // While one is up the stream carries a card, and viewers' pages show it over the
 // video: a PDF fetched from /doc/<token> (that file only, for as long as it is up),
-// turned to whatever page the host is on; a database's pages, made here from the
-// file opened read-only (data.go: the file itself never goes), on whichever one
-// anyone went to last (SetAt); another document read by pandoc (pandoc.go) into
+// turned to whatever page the host is on; a database's pages, made by Datasette
+// from the file opened read-only (datasette.go: the file itself never goes), on
+// whichever one anyone went to last (SetAt); another document read by pandoc (pandoc.go) into
 // Tiny Little Office's text, fetched from /doc/<token> as that, its pictures in
 // the picture store, and drawn read-only by the editors.
 
 func (h *Host) SetDocument(d document) {
-	var data *dataDB
-	if d.Kind == "db" {
-		if d.At == "" {
-			d.At = "/" // its first page
-		}
-		var err error
-		if data, err = openData(d.Path, d.Title); err != nil && h.Log != nil {
-			h.Log("Could not open " + d.Title + ": " + err.Error())
-		}
+	if d.Kind == "db" && (d.At == "" || strings.HasPrefix(d.At, "/t/") || strings.HasPrefix(d.At, "/sql")) {
+		d.At = "/" // its first page (or where the viewer before Datasette had it: its pages are gone)
 	}
 	if d.Kind == "text" {
 		d.App = textApp(d.Path)
 	}
 	h.mu.Lock()
-	old := h.data
-	h.doc, h.data = &d, data
-	h.mu.Unlock()
-	if old != nil {
-		old.Close()
+	old := h.datasette
+	h.doc, h.datasette = &d, nil
+	if d.Kind == "db" {
+		if home := pythonHome(); home != "" && h.python != nil {
+			h.datasette = startDatasette(h.python, home, d.Path, d.Title, h.datasetteBase(&d), h.Log)
+		}
 	}
+	h.mu.Unlock()
+	old.stop()
 	h.broadcast(h.docJSON())
 	if d.Kind == "text" {
 		go h.readText(h.doc)
@@ -279,12 +276,10 @@ func (h *Host) SetPage(page int) {
 func (h *Host) ClearDocument() {
 	h.mu.Lock()
 	had := h.doc != nil
-	old := h.data
-	h.doc, h.data = nil, nil
+	old := h.datasette
+	h.doc, h.datasette = nil, nil
 	h.mu.Unlock()
-	if old != nil {
-		old.Close()
-	}
+	old.stop()
 	if had {
 		h.broadcast(h.docJSON())
 	}

@@ -31,6 +31,18 @@ checked against its SHA-256 by `scripts/build_ffmpeg.sh`:
 archives attached beside the app, and `scripts/build_ffmpeg.sh` rebuilds the
 same ffmpeg from them: the configuration it uses is in that script.
 
+**Python, for Datasette** (`scripts/build_python.sh`, run inside the app by wazero: databases looked through
+together, `datasette.go`), everything in it permissively licensed, each text in `python/`:
+
+| | Version | Licence | |
+|---|---|---|---|
+| [CPython](https://www.python.org), built for WASI | 3.15.2 | PSF-2.0 | `python/CPython-LICENSE` |
+| [SQLite](https://sqlite.org), compiled into it | 3.54.1 | Public domain | `python/SQLite-LICENSE` |
+| [zlib](https://zlib.net), compiled into it | 1.3.2 | zlib | `python/zlib-LICENSE` |
+| [wasi-libc](https://github.com/WebAssembly/wasi-libc) (from the WASI SDK 33), its C library | 161b319 | Apache-2.0 WITH LLVM-exception, MIT (musl) | `python/wasi-libc/` |
+| [Datasette](https://datasette.io) | 0.65.5 | Apache-2.0 | `python/packages/datasette-0.65.5/` |
+| What Datasette needs (`scripts/python-requirements.txt`): aiofiles, anyio, asgi-csrf, asgiref, click, click-default-group, flexcache, flexparser, h11, httpcore, httpx, hupper, idna, itsdangerous, janus, Jinja2, MarkupSafe, mergedeep, platformdirs, pluggy, python-multipart, PyYAML, typing_extensions, uvicorn; and certifi | as pinned | MIT, BSD-3-Clause, Apache-2.0, PSF-2.0; certifi MPL-2.0 | `python/packages/` |
+
 **pandoc's source.** Every release also has the source of the pandoc inside
 attached (`scripts/fetch_pandoc.sh --fetch`), as the GPL asks; the build is
 pandoc's own, from its release, checked against its SHA-256.
@@ -71,7 +83,7 @@ with its licence file in `go/<module path>/`. All are MIT, BSD or Apache-2.0.
 | github.com/jackpal/go-nat-pmp | Apache-2.0 |
 | github.com/pdfcpu/pdfcpu | Apache-2.0 |
 | github.com/tetratelabs/wazero, WebAssembly in Go (pandoc: `wasm.go`) | Apache-2.0 |
-| github.com/ncruces/go-sqlite3, SQLite for the party file (`store.go`) and a database up (`data.go`), with ncruces/julianday | MIT |
+| github.com/ncruces/go-sqlite3, SQLite for the party file (`store.go`), with ncruces/julianday | MIT |
 | github.com/ncruces/go-sqlite3-wasm/v6, SQLite itself as WebAssembly translated to Go (SQLite is public domain) | MIT-0 |
 | lukechampine.com/adiantum, the party file's encryption (through go-sqlite3's adiantum VFS) | MIT |
 | golang.org/x/text, x/crypto, x/image, x/net, x/sync, x/sys | BSD-3-Clause |

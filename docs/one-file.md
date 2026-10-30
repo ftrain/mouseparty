@@ -40,7 +40,7 @@ CREATE TABLE pictures (id TEXT PRIMARY KEY, mime TEXT, bytes BLOB, added REAL); 
 
 **Which SQLite.** [ncruces/go-sqlite3](https://github.com/ncruces/go-sqlite3): the real SQLite, built for
 WebAssembly and translated to Go (wasm2go), so there's no cgo, and with encrypting file layers (VFSes) in Go. The
-database looked through together (`data.go`) uses it too, so the app carries one SQLite.
+self-test makes its sample database with it too. A database looked through together is Datasette's (`datasette.go`), with the SQLite in its own WebAssembly Python.
 
 ## Use Encryption
 

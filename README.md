@@ -94,6 +94,10 @@ Terminal to read it.
   CSV, EPUB, web pages, Markdown, LaTeX and the rest of what pandoc reads. While
   one is up, your Mac reads it and friends' pages show it over the video: a
   document, slides or a sheet.
+- **Databases, looked through together:** a SQLite file is shown with
+  [Datasette](https://datasette.io), running inside the app: tables, facets,
+  search and SQL, read-only, the file itself never sent. Wherever anyone goes in
+  it, everyone goes.
 - **Zips:** dropped on the list, a zip is unpacked beside it, as the Finder
   would, and everything in it the app can show is added.
 
@@ -285,7 +289,7 @@ store.go, party.go  the party file: everything kept, in one SQLite file, sealed 
 apps/office.go      documents everyone edits at once (Tiny Little Office's editors, host_web/office/)
 pictures.go         pictures for documents, and frames grabbed from the movie
 wasm.go, pandoc.go  pandoc as WebAssembly: documents brought in
-data.go             a SQLite database up, looked through together
+datasette.go        a SQLite database up, looked through together with Datasette (as WebAssembly)
 host_web/           the viewer page: viewer.html, host.js, host.css, hls.js, pdf.js
 web/                the pages' TypeScript, built into host_web/ and frontend/ (npm run build,
                     scripts/build_web.sh; package.json, vite.config.ts); what's built is checked in

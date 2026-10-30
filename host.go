@@ -161,7 +161,8 @@ type Host struct {
 	clockSent time.Time
 	schedule  []ScheduleRow
 	doc       *document
-	data      *dataDB // the database up, open read-only (data.go)
+	datasette *datasette // the database up, looked through (datasette.go)
+	python    *wasmTool  // what runs it
 	apps      *appHost
 	pics      *pictures
 	showing   *nowShowing
@@ -209,6 +210,9 @@ func (h *Host) start() error {
 	h.pics = newPictures(h.Party)
 	if h.pandoc == nil {
 		h.pandoc, h.reading = newWasmTool("pandoc"), make(chan struct{}, 1)
+		if home := pythonHome(); home != "" {
+			h.python = &wasmTool{name: "python", path: filepath.Join(home, "python.wasm")}
+		}
 	}
 	h.apps = newAppHost(h.chat, env)
 	h.chat.hello = h.greeting
@@ -292,6 +296,7 @@ func (h *Host) Stop() {
 		h.apps.closeAll()
 	}
 	h.pandoc.close()
+	h.python.close()
 	if chat != nil {
 		chat.closeAll()
 	}
@@ -305,10 +310,8 @@ func (h *Host) Stop() {
 	}
 	h.mu.Lock()
 	h.key, h.urls, h.doc = "", map[string]string{}, nil
-	if h.data != nil {
-		h.data.Close()
-		h.data = nil
-	}
+	h.datasette.stop()
+	h.datasette = nil
 	h.mu.Unlock()
 }
 

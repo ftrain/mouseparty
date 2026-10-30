@@ -87,7 +87,7 @@ func (h *Host) startWeb() error {
 	mux.HandleFunc("GET /{key}/office/{path...}", func(w http.ResponseWriter, r *http.Request) { // Tiny Little Office's editors
 		officeFile(w, r, web)
 	})
-	mux.HandleFunc("GET /{key}/data/{token}/{path...}", h.dataPage) // a database up, its pages made here
+	mux.HandleFunc("GET /{key}/data/{token}/{path...}", h.datasettePage) // a database up, its pages Datasette's (datasette.go)
 	mux.HandleFunc("POST /{key}/img", h.postPicture)
 	mux.HandleFunc("GET /{key}/img/{id}", h.getPicture)
 	mux.HandleFunc("POST /{key}/grab", h.grab)

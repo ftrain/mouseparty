@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ncruces/go-sqlite3"
 )
 
 // selftest is `MouseParty --selftest`: host from this Mac (router untouched), check the
@@ -54,14 +56,25 @@ func selftest() int {
 	check("only apps' scripts", func() (string, error) { return statusIs(base+"apps/nope.js", 404) })
 	check("the documents' editors come as JavaScript", func() (string, error) { return typeIs(base+"office/editors.js", "text/javascript") })
 	check("documents are drawn by office.js", func() (string, error) { return typeIs(base+"apps/office.js", "text/javascript") })
-	check("SQLite opens read-only", func() (string, error) {
-		d, err := openData(filepath.Join(os.TempDir(), "mouseparty-selftest-none.db"), "none")
-		if err == nil {
-			d.Close()
-			return "", fmt.Errorf("it made a database that wasn't there")
-		}
-		return "a missing file stays missing", nil
-	})
+	if pythonHome() == "" {
+		fmt.Println("skip  Datasette: this build has no Python (scripts/build_python.sh)")
+	} else if db, err := selftestDB(); err == nil {
+		h.SetDocument(document{Token: "t2", Path: db, Title: "Self-test", Kind: "db"})
+		check("a database up is Datasette's to show", func() (string, error) {
+			resp, err := http.Get(base + "data/t2/selftest/films")
+			if err != nil {
+				return "", err
+			}
+			b, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode != 200 || !strings.Contains(string(b), "Vertigo") || !strings.Contains(string(b), "type: 'went'") {
+				return "", fmt.Errorf("status %d: %.200s", resp.StatusCode, b)
+			}
+			return "its table, and everyone following", nil
+		})
+		h.ClearDocument()
+		os.Remove(db)
+	}
 	if pdf, err := os.CreateTemp("", "mouseparty-*.pdf"); err == nil {
 		pdf.WriteString("%PDF-1.4\n%%EOF\n")
 		pdf.Close()
@@ -104,6 +117,18 @@ func selftest() int {
 	}
 	fmt.Println("self-test FAILED")
 	return 1
+}
+
+// selftestDB: a small database to put up
+func selftestDB() (string, error) {
+	path := filepath.Join(os.TempDir(), "selftest.db")
+	os.Remove(path)
+	c, err := sqlite3.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer c.Close()
+	return path, c.Exec(`CREATE TABLE films (title TEXT, year INT); INSERT INTO films VALUES ('Vertigo', 1958)`)
 }
 
 func statusIs(url string, want int) (string, error) {

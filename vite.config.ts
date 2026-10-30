@@ -5,7 +5,7 @@
  *   --mode viewer  web/viewer -> host_web/: host.js (the page's own script, loaded by viewer.html) and apps/<name>.js,
  *                  one module an app, which host.js imports by URL when one opens (web.go serves apps/ by name);
  *                  what they share (apps/lib.js, and office.js for the reel) is a module of its own beside them, imported,
- *                  never copied into each. The rest of host_web (viewer.html, host.css, data.html, the vendored hls.js,
+ *                  never copied into each. The rest of host_web (viewer.html, host.css, the vendored hls.js,
  *                  pdf.js and office/) is as it is, not built
  *   --mode window  web/window -> frontend/: app.js, the Mac app's window (frontend/index.html loads it)
  *
