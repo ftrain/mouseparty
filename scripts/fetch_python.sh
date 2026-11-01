@@ -16,8 +16,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TAG=      # python-wasm-<version>-<what it was built from>, from the workflow
-SHA256=   # of <TAG>.tar.gz
+TAG=python-wasm-3.15.2-7ad4c5c063b2      # python-wasm-<version>-<what it was built from>, from the workflow
+SHA256=4b1d22ec1c87d48672a21feb1c3509be784339d3b332a64ab44463247799bf17   # of <TAG>.tar.gz
 REPO=ftrain/mouseparty
 OUT=build/python/dist
 
