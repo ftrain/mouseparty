@@ -22,3 +22,6 @@ frontend/wailsjs/
 
 # the pages' build tools (package.json); what they build is checked in
 node_modules/
+
+# Python run from the repo (datasette.py)
+__pycache__/
