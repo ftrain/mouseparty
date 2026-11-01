@@ -1,0 +1,74 @@
+# Test and fuzz on Linux, beside the Mac app's build (mac-app.yml): quicker, and
+# nightly it fuzzes the command graph for longer (docs/testing.md).
+#
+#   every push to main and pull request: scripts/test.sh (the pages, vet, every
+#     test with the fuzzers' seeds and what they've found before, the self-test),
+#     then a minute of each fuzzer
+#   every night, or by hand: each fuzzer for FUZZTIME
+#
+# A fuzzer that finds something fails the run, and the input it failed on is kept
+# as the run's artifact (testdata/fuzz/...): put it in the repo beside the fix,
+# and `go test` runs it from then on.
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: How long each fuzzer runs (Go duration)
+        default: 15m
+
+concurrency:
+  group: test-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4 # the pages' TypeScript (scripts/build_web.sh)
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: ffmpeg and MediaMTX
+        # Ubuntu's ffmpeg has what the tests use (drawtext, libx264, libopus);
+        # MediaMTX is the release mac-app.yml pins
+        env:
+          MEDIAMTX: v1.21.3
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq ffmpeg
+          mkdir -p build/tools
+          curl -fsSL "https://github.com/bluenviron/mediamtx/releases/download/$MEDIAMTX/mediamtx_${MEDIAMTX}_linux_amd64.tar.gz" | tar -xz -C build/tools mediamtx
+          echo "$PWD/build/tools" >> "$GITHUB_PATH"
+
+      - name: Tests (with the fuzzers' seeds) and the self-test
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        run: scripts/test.sh
+
+      - name: Fuzz the command graph
+        env:
+          FUZZTIME: ${{ github.event_name == 'schedule' && '15m' || github.event_name == 'workflow_dispatch' && inputs.fuzztime || '1m' }}
+        run: scripts/fuzz.sh
+
+      - name: Keep what the fuzzers found
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failures
+          path: |
+            testdata/fuzz
+            apps/testdata/fuzz
+          if-no-files-found: ignore
