@@ -11,7 +11,10 @@ package main
 // The script then walks the window at random (files dropped, Play, rows clicked,
 // double-clicked and dragged, keys, the slider), checking after each step that
 // the page shows the view it was last given; then two viewers open every app,
-// talk in the chat, and call each other. Any uncaught error on a page fails it.
+// talk in the chat, and call each other, while four robot viewers (plain
+// sockets) send each app its commands from the graph (apps.Commands) at random,
+// so the pages draw it in states a walk alone wouldn't reach. Any uncaught error
+// on a page fails it.
 //
 // Needs node with Playwright and its Chromium, ffmpeg and MediaMTX; it skips
 // without them, and with -short. Hosts on free ports with a temporary HOME.
@@ -30,6 +33,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ftrain/mouseparty/apps"
 )
 
 // windowShim: the Wails runtime and bindings, as far as the window uses them,
@@ -129,6 +134,7 @@ func TestBrowser(t *testing.T) {
 	})
 	mux.HandleFunc("POST /rpc/{method}", rpc(a))
 	mux.HandleFunc("GET /files", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, files) })
+	mux.HandleFunc("GET /commands", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, apps.Commands) }) // for the robots
 	mux.HandleFunc("GET /viewer", func(w http.ResponseWriter, r *http.Request) { // the link, once there is one
 		link := ""
 		a.wait(func() { link = a.link() })

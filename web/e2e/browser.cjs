@@ -8,7 +8,8 @@
 // 2. Two viewers: every app opened, drawn without an error and closed; a line of
 //    chat from one reaching the other; a call between them, sound both ways.
 //
-// Any uncaught error on any page fails it.
+// Any uncaught error on any page fails it. BROWSER_SHOTS=<dir> keeps a picture
+// of each app as Ann's page shows it, once the robots have played it.
 'use strict';
 const { chromium } = require('playwright');
 
@@ -167,6 +168,69 @@ async function viewer(browser, url, name) {
     return page;
 }
 
+// a robot: a viewer with no page, a socket that says things. It keeps which
+// apps are open (by name, from what the host tells every socket)
+function robot(link, name) {
+    return new Promise((ready, broke) => {
+        const ws = new WebSocket(link.replace(/^http/, 'ws') + 'ws');
+        const bot = { name, ws, open: new Map(), said: 0 };
+        ws.onmessage = (e) => {
+            const m = JSON.parse(e.data);
+            if (m.type === 'hello') {
+                for (const a of m.apps) bot.open.set(a.id, a.name);
+                ws.send(JSON.stringify({ type: 'join', name }));
+                ready(bot);
+            } else if (m.type === 'apps' && m.op === 'open') bot.open.set(m.app.id, m.app.name);
+            else if (m.type === 'apps' && m.op === 'close') bot.open.delete(m.id);
+        };
+        ws.onerror = () => broke(new Error(`${name}'s socket`));
+    });
+}
+
+// a field's value, as apps/commands.go describes it: mostly what the app wants, sometimes not
+const WORDS = ['cat', 'dog', 'the', 'party', 'mouse', 'ZEBRA', '', 'a'.repeat(300), '😀', '<b>x</b>', 'qzx'];
+function value(f) {
+    if (random() < 0.12) return pick([null, true, -1, 1e9, 'x', [], { x: 1 }]);
+    const n = () => Math.floor(f.Lo + random() * (f.Hi - f.Lo + 1));
+    switch (f.Type) {
+        case 'int':
+            return n();
+        case 'num':
+            return f.Lo + random() * (f.Hi - f.Lo);
+        case 'bool':
+            return random() < 0.5;
+        case 'str':
+            return pick(WORDS);
+        case 'strs':
+            return Array.from({ length: Math.floor(random() * 6) }, () => pick(WORDS));
+        case 'points':
+            return Array.from({ length: 2 + Math.floor(random() * 10) }, () => [random(), random()]);
+        case 'tiles':
+            return Array.from({ length: 1 + Math.floor(random() * 4) }, () => ({ r: Math.floor(random() * 15), c: Math.floor(random() * 15), l: pick('etaoinsr') }));
+        case 'ops':
+            return pick(['[]', '[{"op":"splice","at":0,"n":0,"blocks":[{"k":"p","t":"hi"}]}]', 'not json', '[{"op":"nope"}]']);
+    }
+    return null;
+}
+
+// play: each robot sends the app its commands at random, for a while
+async function play(bots, commands, id, name, ms) {
+    const cmds = commands[name] || [];
+    // first the lobby, all of them, then start: a game gets going
+    for (const kind of ['join', 'start']) if (cmds.some((c) => c.Kind === kind)) for (const b of bots) b.ws.send(JSON.stringify({ type: 'app', id, kind }));
+    const end = Date.now() + ms;
+    while (Date.now() < end && cmds.length) {
+        for (const b of bots) {
+            const c = pick(cmds),
+                m = { type: 'app', id, kind: c.Kind };
+            for (const f of c.Fields || []) if (random() < 0.92) m[f.Name] = value(f);
+            b.ws.send(JSON.stringify(m));
+            b.said++;
+        }
+        await sleep(60); // within the host's limit, a page's sixty a second
+    }
+}
+
 async function viewers(browser) {
     let link = '';
     for (let i = 0; i < 60 && !link; i++) {
@@ -177,6 +241,8 @@ async function viewers(browser) {
     const url = link.replace(/^http:\/\/[^:/]+/, 'http://127.0.0.1'); // a secure context, for the microphone
     const ann = await viewer(browser, url, 'Ann'),
         bob = await viewer(browser, url, 'Bob');
+    const commands = await (await fetch(`${base}/commands`)).json();
+    const bots = await Promise.all(['Robo', 'Bolt', 'Gizmo', 'Sprocket'].map((n) => robot(link.replace(/^http:\/\/[^:/]+/, 'http://127.0.0.1'), n)));
 
     // a line of chat, from one to the other
     await bob.fill('#messageInput', 'hello from Bob');
@@ -202,11 +268,17 @@ async function viewers(browser) {
                 .waitForFunction(() => document.querySelector('.win .win-body') && document.querySelector('.win .win-body').childElementCount > 0, null, { timeout: 8000 })
                 .catch(() => fail(`${title} never drew`));
         await sleep(800); // its script running, a view or two
+        // the robots play it, while both pages draw what comes of it
+        const id = [...bots[0].open].find(([, n]) => n)?.[0];
+        if (id !== undefined) await play(bots, commands, id, bots[0].open.get(id), 3000);
+        await sleep(600);
+        if (process.env.BROWSER_SHOTS) await ann.screenshot({ path: `${process.env.BROWSER_SHOTS}/${String(i).padStart(2, '0')}-${title.replace(/\W+/g, '-')}.png` });
         await bob.locator('.win-close').first().click();
         await ann.waitForFunction(() => !document.querySelector('.win'), null, { timeout: 5000 }).catch(() => fail(`${title} never closed`));
         await sleep(1100); // a page opens or closes one app a second
     }
-    console.log(`viewers: ${count} apps opened, drawn and closed; chat went across`);
+    console.log(`viewers: ${count} apps opened, drawn, played by robots (${bots.map((b) => `${b.name} ${b.said}`).join(', ')} messages) and closed; chat went across`);
+    for (const b of bots) b.ws.close();
 
     // a call: both in, sound both ways
     await ann.locator('.plus:visible').first().click();

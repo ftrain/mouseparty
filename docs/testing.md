@@ -113,6 +113,14 @@ times, and without a limit that stalls the search for minutes (the fuzzer report
   picker opened by one, drawn on both pages, and closed by the other; then a
   call between them, with sound both ways (only the call's connections
   counted, not the movie's).
+- **Four robot viewers** (plain sockets from Node, no page) join each app as
+  it opens, start it if it's a game (four is enough for Spies and Werewolf), and
+  for three seconds send it its commands from the graph (`apps.Commands`, served
+  by the test), mostly well-formed and sometimes not, as fast as the host lets a
+  page. The two real pages draw every view and event that comes of it: the apps'
+  scripts in states a walk alone wouldn't reach (games under way, a wall of
+  strokes, documents edited by others). `BROWSER_SHOTS=<dir>` keeps a picture
+  of each app as it stands after.
 
 Any uncaught error on any page fails it. Each run takes a new seed, printed
 when it fails: `BROWSER_SEED=<seed> go test -run TestBrowser -v .` walks the
@@ -122,10 +130,9 @@ same again. It skips without Node and Playwright, ffmpeg and MediaMTX, and with
 
 ## What isn't covered yet
 
-- **The pages' insides, at random.** The browser walk opens every app but
-  doesn't play them from the page: the apps' rules are fuzzed in Go
-  (`FuzzApps`), their scripts only drawn. A next step: `apps.Commands` driven
-  through each app's own controls.
+- **The apps' own controls.** The robots play every app through its socket,
+  and the pages draw it, but nobody clicks the apps' own buttons in the
+  browser. A next step: each app's controls clicked at random.
 - **The sealed party** (`Unlock`, `SetPasscode`, `StartOver`, and the
   window's sheets for them): tested in `store_test.go`, not fuzzed (Argon2 is
   slow by design).
