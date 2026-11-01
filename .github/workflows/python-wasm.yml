@@ -1,0 +1,70 @@
+# Build the Python Datasette runs on (scripts/build_python.sh: CPython, SQLite
+# and zlib for WebAssembly, from pinned sources, and the hash-checked packages),
+# test Datasette on it, and publish it as a release of this repo, named after
+# exactly what it was built from (build_python.sh --tag). Everything else
+# downloads it (scripts/fetch_python.sh) instead of building it.
+#
+# Run it by hand (Actions > Python for WebAssembly > Run workflow) whenever
+# build_python.sh, a version in it, or a package moves; then put the tag and
+# SHA-256 it prints (in the run's summary) into scripts/fetch_python.sh. A tag
+# that's already released isn't built again.
+name: Python for WebAssembly
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write # to publish the release
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: What a build of these sources is called
+        id: tag
+        run: |
+          tag=$(scripts/build_python.sh --tag)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "$tag is already released: nothing to build. Pin it in scripts/fetch_python.sh if it isn't." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build it
+        if: steps.tag.outputs.already != 'true'
+        run: scripts/build_python.sh
+
+      - name: Datasette on it
+        # every Datasette test, none skipped: what's published has been looked through
+        if: steps.tag.outputs.already != 'true'
+        env:
+          NO_SKIPS: 1
+        run: go test -json -run 'Datasette|OnlyFile' . | go run ./scripts/testreport
+
+      - name: Publish it
+        if: steps.tag.outputs.already != 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # the same bytes for the same files: names in order, no owners, no times
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -C build/python -cf - dist | gzip -n > "$TAG.tar.gz"
+          sum=$(sha256sum "$TAG.tar.gz" | cut -d' ' -f1)
+          echo "$sum  $TAG.tar.gz" > "$TAG.tar.gz.sha256"
+          gh release create "$TAG" "$TAG.tar.gz" "$TAG.tar.gz.sha256" --latest=false \
+            --title "Python for WebAssembly: $TAG" \
+            --notes "The Python Mouse Party runs Datasette on: CPython, SQLite and zlib built for WASI from pinned sources by scripts/build_python.sh at ${GITHUB_SHA}, with Datasette and its packages (scripts/python-requirements.txt, hash-checked), tested before publishing. Not the app: scripts/fetch_python.sh downloads it. Built from: $(scripts/build_python.sh --stamp). Its licences are inside (LICENSE-Python) and in licenses/python."
+          {
+            echo "Published **$TAG**. Pin it in scripts/fetch_python.sh:"
+            echo '```'
+            echo "TAG=$TAG"
+            echo "SHA256=$sum"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

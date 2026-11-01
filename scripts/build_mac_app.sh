@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build "Mouse Party.app": the Go app (Wails, pinned, run through `go run`) with what
 # hosting from the Mac needs inside it: MediaMTX and cloudflared, and optionally
-# ffmpeg, and pandoc and Python as WebAssembly (scripts/fetch_pandoc.sh, build_python.sh). Apple Silicon only (macOS 13+, Go's own minimum).
+# ffmpeg, and pandoc and Python as WebAssembly (scripts/fetch_pandoc.sh, fetch_python.sh). Apple Silicon only (macOS 13+, Go's own minimum).
 #
 # MediaMTX and cloudflared are single static Go binaries, copied in as their
 # pinned, checked releases (scripts/fetch_tools.sh), or from MEDIAMTX_BIN /
@@ -63,7 +63,7 @@ for bin in "${TOOLS[@]}"; do
 done
 [ -f media/standby_opus.mp4 ] || scripts/make_standby_card.sh
 scripts/fetch_pandoc.sh   # pandoc as WebAssembly, run in-process (wasm.go): documents brought in
-scripts/build_python.sh   # CPython as WebAssembly, with Datasette (datasette.go): databases looked through
+scripts/fetch_python.sh --or-build   # CPython as WebAssembly, with Datasette (datasette.go): its published build
 scripts/build_web.sh      # the pages, from their TypeScript, into host_web/ and frontend/ (Node 24)
 
 go run "$WAILS" build -platform darwin/arm64 -skipbindings -trimpath -clean

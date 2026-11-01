@@ -65,7 +65,7 @@ jobs:
           path: build/ffmpeg/bin
           key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
 
-      - name: Python for Datasette (cached until scripts/build_python.sh or its packages change)
+      - name: Python for Datasette (its published build, scripts/fetch_python.sh; built here, cached, only while none is)
         id: python
         uses: actions/cache/restore@v4
         with:
@@ -74,7 +74,7 @@ jobs:
 
       - name: Build Python
         if: steps.python.outputs.cache-hit != 'true'
-        run: scripts/build_python.sh
+        run: scripts/fetch_python.sh --or-build
 
       - name: Keep Python for next time
         if: steps.python.outputs.cache-hit != 'true'

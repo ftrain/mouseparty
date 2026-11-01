@@ -51,7 +51,7 @@ jobs:
           scripts/fetch_tools.sh
           echo "$PWD/build/tools" >> "$GITHUB_PATH"
 
-      - name: Python for Datasette (cached until scripts/build_python.sh or its packages change)
+      - name: Python for Datasette (its published build, scripts/fetch_python.sh; built here, cached, only while none is)
         # the same WebAssembly as the Mac's, built here with Linux's WASI SDK, so Datasette's tests run on Linux too
         id: python
         uses: actions/cache/restore@v4
@@ -61,7 +61,7 @@ jobs:
 
       - name: Build Python
         if: steps.python.outputs.cache-hit != 'true'
-        run: scripts/build_python.sh
+        run: scripts/fetch_python.sh --or-build
 
       - name: Keep Python for next time
         if: steps.python.outputs.cache-hit != 'true'

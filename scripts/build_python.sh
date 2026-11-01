@@ -8,6 +8,11 @@
 #                                       library, compiled), site/ (Datasette and the rest), VERSION
 #   scripts/build_python.sh --fetch  only download and check the sources (into build/python/src;
 #                                    each release carries them)
+#   scripts/build_python.sh --tag    the name of a build from these sources (and --stamp, its whole stamp)
+#
+# Mostly it isn't run: scripts/fetch_python.sh downloads the build published from it
+# (the "Python for WebAssembly" workflow), checked against its pinned SHA-256. This is
+# the recipe, run to make a new one when a version here or a package moves.
 #
 # Sources are pinned releases, checked against their SHA-256: CPython, SQLite's
 # amalgamation, zlib, and the WASI SDK (clang for WebAssembly) that builds them, the
@@ -40,6 +45,13 @@ SOURCES=(
     "wasi-sdk-$SDK.0-$SDK_HOST.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$SDK/wasi-sdk-$SDK.0-$SDK_HOST.tar.gz $SDK_SUM"
 )
 
+STAMP="$PY sqlite $SQLITE zlib $ZLIB sdk $SDK $(shasum -a 256 "$0" | cut -c1-12)"   # what CPython is built from
+READY="$STAMP $(cat scripts/python-requirements.txt scripts/python-build-requirements.txt | shasum -a 256 | cut -c1-12)"   # and what's installed in it
+case "${1:-}" in   # what a build from these sources is called, without building (scripts/fetch_python.sh, the release workflow)
+--stamp) echo "$READY"; exit 0 ;;
+--tag) echo "python-wasm-$PY-$(printf %s "$READY" | shasum -a 256 | cut -c1-12)"; exit 0 ;;
+esac
+
 mkdir -p "$SRC"
 for s in "${SOURCES[@]}"; do
     read -r file url sum <<<"$s"
@@ -48,8 +60,6 @@ for s in "${SOURCES[@]}"; do
 done
 [ "${1:-}" = "--fetch" ] && exit 0
 
-STAMP="$PY sqlite $SQLITE zlib $ZLIB sdk $SDK $(shasum -a 256 "$0" | cut -c1-12)"   # what CPython is built from
-READY="$STAMP $(cat scripts/python-requirements.txt scripts/python-build-requirements.txt | shasum -a 256 | cut -c1-12)"   # and what's installed in it
 if [ "$(cat "$OUT/VERSION" 2>/dev/null)" = "$READY" ]; then
     echo "Python $PY is built: $OUT"
     exit 0

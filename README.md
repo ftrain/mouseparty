@@ -224,7 +224,8 @@ script does nothing when its piece is already built:
 | The pages' TypeScript tools, and the pages built | `scripts/build_web.sh` (`package-lock.json`) | `host_web/`, `frontend/` (checked in) |
 | MediaMTX and cloudflared, the release builds | `scripts/fetch_tools.sh` | `build/tools/` |
 | pandoc, its WebAssembly release | `scripts/fetch_pandoc.sh` | `build/pandoc/` |
-| Python with Datasette, as WebAssembly: CPython, SQLite, zlib from source; the packages hash-checked (`scripts/python-requirements.txt`) | `scripts/build_python.sh` (Mac or Linux) | `build/python/dist/` |
+| Python with Datasette, as WebAssembly: downloaded, the build this repo publishes (the "Python for WebAssembly" workflow), checked against its pinned SHA-256 | `scripts/fetch_python.sh` | `build/python/dist/` |
+| ...its recipe: CPython, SQLite, zlib from source; the packages hash-checked (`scripts/python-requirements.txt`), run to make a new release when a version moves | `scripts/build_python.sh` (Mac or Linux) | `build/python/dist/` |
 | ffmpeg, static and cut down: FFmpeg, x264, Opus, FreeType, FriBidi, HarfBuzz, libass from source | `scripts/build_ffmpeg.sh` (Mac) | `build/ffmpeg/bin/` |
 | Tiny Little Office's editors, from a pinned commit | `scripts/vendor_office.sh` (only to move the pin) | `host_web/office/` (checked in) |
 | Go modules, and Wails (through `go run`) | `go.mod`, `go.sum` | Go's module cache |
