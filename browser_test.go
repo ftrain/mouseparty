@@ -7,7 +7,8 @@ package main
 //
 // The window has no Wails here. Stand-ins for window.go and window.runtime
 // (windowShim) send every App call to this test over HTTP, which makes it on
-// the real App, and hand the page the app's View as Wails's "view" event would.
+// the real App, and hand the page the app's View as Wails's "view" event would,
+// and the Party menu's asks as its "ask" event would.
 // The script then walks the window at random (files dropped, Play, rows clicked,
 // double-clicked and dragged, keys, the slider), checking after each step that
 // the page shows the view it was last given; then two viewers open every app,
@@ -31,6 +32,7 @@ import (
 	"os/exec"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,16 +48,22 @@ const call = (method) => async (...args) => {
     return r.json();
 };
 window.go = { main: { App: new Proxy({}, { get: (_, method) => call(method) }) } };
-const viewers = [];
+const viewers = [], asks = [];
 let drop = null;
 window.runtime = {
     OnFileDrop(callback) { drop = callback; },
-    EventsOn(name, callback) { if (name === 'view') viewers.push(callback); return () => {}; },
+    EventsOn(name, callback) { (name === 'view' ? viewers : asks).push(callback); return () => {}; },
 };
+window.__ask = (mode) => asks.forEach((f) => f(mode)); // the Party menu
 // Wails sends the view after every change; here it's asked for, five times a second
 window.__view = null;
 setInterval(async () => {
-    const v = await call('GetView')();
+    let v;
+    try {
+        v = await call('GetView')();
+    } catch (e) {
+        return; // the app between quitting and opening again
+    }
     window.__view = v;
     for (const f of viewers) f(v);
 }, 200);
@@ -111,14 +119,24 @@ func TestBrowser(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", t.TempDir()) // never the real party file
-	a := NewApp(standby)
-	a.hostSetup = func(h *Host) {
-		h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
+	// the app, as the Mac starts it: again after a restart, from the same party file (sealed, by then)
+	start := func() *App {
+		a := NewApp(standby)
+		a.hostSetup = func(h *Host) {
+			h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
+		}
+		go a.run()
+		go a.watchFiles()
+		a.wait(func() {
+			if !a.locked {
+				a.cfg.Countdown = 1
+			}
+		})
+		return a
 	}
-	go a.run()
-	go a.watchFiles()
-	defer a.shutdown(nil)
-	a.wait(func() { a.cfg.Countdown = 1 })
+	var current atomic.Pointer[App]
+	current.Store(start())
+	defer func() { current.Load().shutdown(nil) }()
 
 	window, _ := fs.Sub(os.DirFS("."), "frontend")
 	mux := http.NewServeMux()
@@ -132,11 +150,16 @@ func TestBrowser(t *testing.T) {
 		w.Header().Set("Content-Type", "text/javascript")
 		io.WriteString(w, windowShim)
 	})
-	mux.HandleFunc("POST /rpc/{method}", rpc(a))
+	mux.HandleFunc("POST /rpc/{method}", func(w http.ResponseWriter, r *http.Request) { rpc(current.Load())(w, r) })
+	mux.HandleFunc("POST /restart", func(w http.ResponseWriter, r *http.Request) { // the app quit and opened again
+		current.Load().shutdown(nil)
+		current.Store(start())
+		writeJSON(w, true)
+	})
 	mux.HandleFunc("GET /files", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, files) })
 	mux.HandleFunc("GET /commands", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, apps.Commands) }) // for the robots
-	mux.HandleFunc("GET /viewer", func(w http.ResponseWriter, r *http.Request) { // the link, once there is one
-		link := ""
+	mux.HandleFunc("GET /viewer", func(w http.ResponseWriter, r *http.Request) {                                  // the link, once there is one
+		link, a := "", current.Load()
 		a.wait(func() { link = a.link() })
 		writeJSON(w, link)
 	})

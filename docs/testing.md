@@ -109,10 +109,14 @@ times, and without a limit that stalls the search for minutes (the fuzzer report
   the link, rows clicked, double-clicked and dragged, Backspace and the arrows,
   the slider. After each step the page must show the view it was last given:
   the rows, their marks, the selection, the big button, the slider, the hint.
-- **Two viewers**: a line of chat from one reaching the other; every app in the
-  picker opened by one, drawn on both pages, and closed by the other; then a
-  call between them, with sound both ways (only the call's connections
-  counted, not the movie's).
+- **Two viewers**, Ann at a desk and Bob on a phone (upright, then turned on its
+  side halfway, so each phone layout is drawn): a line of chat from one reaching
+  the other; every app in the picker opened by Ann, drawn on both pages (on the
+  phone, its tab chosen), and closed; then a call between them, with sound both
+  ways (only the call's connections counted, not the movie's).
+- **Ann at each app's own controls**, while it's open: its buttons and cells
+  clicked, words typed into its fields, strokes drawn on its canvases, at random,
+  in whatever state the robots have it in.
 - **Four robot viewers** (plain sockets from Node, no page) join each app as
   it opens, start it if it's a game (four is enough for Spies and Werewolf), and
   for three seconds send it its commands from the graph (`apps.Commands`, served
@@ -121,6 +125,12 @@ times, and without a limit that stalls the search for minutes (the fuzzer report
   scripts in states a walk alone wouldn't reach (games under way, a wall of
   strokes, documents edited by others). `BROWSER_SHOTS=<dir>` keeps a picture
   of each app as it stands after.
+- **The party file, through the window's own sheets** (the Party menu's asks
+  sent as Wails would): Settings refused while playing and as broken JSON, then
+  saved and read back; Use Encryption with two passcodes that differ, then the
+  same twice; Change Passcode with a wrong one, then the right one; the app
+  quit and started again from the same party file, locked, refusing the old
+  passcode and opening with the new, with the whole list; then unsealed.
 
 Any uncaught error on any page fails it. Each run takes a new seed, printed
 when it fails: `BROWSER_SEED=<seed> go test -run TestBrowser -v .` walks the
@@ -130,11 +140,9 @@ same again. It skips without Node and Playwright, ffmpeg and MediaMTX, and with
 
 ## What isn't covered yet
 
-- **The apps' own controls.** The robots play every app through its socket,
-  and the pages draw it, but nobody clicks the apps' own buttons in the
-  browser. A next step: each app's controls clicked at random.
-- **The sealed party** (`Unlock`, `SetPasscode`, `StartOver`, and the
-  window's sheets for them): tested in `store_test.go`, not fuzzed (Argon2 is
-  slow by design).
-- **Safari and Firefox, and phones.** The browser walk is Chromium's, at one
-  size; the phone layouts (tabs, upright and on its side) aren't walked.
+- **Start Over** (a forgotten passcode): in `store_test.go`, not the browser.
+- **Wrong passcodes, fuzzed**: Argon2 is slow by design, so the walk tries one
+  of each, not many.
+- **Safari and Firefox.** The walk is Chromium's. Playwright drives Firefox
+  and WebKit (Safari's engine) the same way: installing them is the step
+  (`npx playwright install firefox webkit`), then a browser name for the walk.

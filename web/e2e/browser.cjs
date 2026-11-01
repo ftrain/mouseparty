@@ -5,8 +5,13 @@
 // 1. The window, walked at random: files dropped, Play, the link, rows clicked,
 //    double-clicked and dragged, Backspace and the arrows, the slider; after
 //    each step, the page must show the view it was last given.
-// 2. Two viewers: every app opened, drawn without an error and closed; a line of
-//    chat from one reaching the other; a call between them, sound both ways.
+// 2. Two viewers, Ann at a desk and Bob on a phone (upright, then on its side):
+//    every app opened, drawn without an error and closed, played meanwhile by four
+//    robot sockets and by Ann at its own controls; a line of chat from one reaching
+//    the other; a call between them, sound both ways.
+// 3. The party file through the window's own sheets: Settings (refused while
+//    playing, and as broken JSON, then saved), sealed with a passcode, the
+//    passcode changed, the app restarted locked and opened with it, unsealed.
 //
 // Any uncaught error on any page fails it. BROWSER_SHOTS=<dir> keeps a picture
 // of each app as Ann's page shows it, once the robots have played it.
@@ -146,8 +151,8 @@ async function walkWindow(browser) {
     return page;
 }
 
-async function viewer(browser, url, name) {
-    const context = await browser.newContext({ permissions: ['microphone'] });
+async function viewer(browser, url, name, device = {}) {
+    const context = await browser.newContext({ permissions: ['microphone'], ...device });
     await context.addInitScript(() => {
         // every connection, to read its stats
         const PC = window.RTCPeerConnection;
@@ -161,6 +166,8 @@ async function viewer(browser, url, name) {
     });
     const page = await context.newPage();
     watch(page, name);
+    page.on('dialog', (d) => d.dismiss().catch(() => {})); // a link's address asked for, say: no
+    page.on('filechooser', () => {}); // a document to bring in: none
     await page.goto(url);
     await page.fill('#usernameInput', name);
     await page.press('#usernameInput', 'Enter');
@@ -231,6 +238,46 @@ async function play(bots, commands, id, name, ms) {
     }
 }
 
+// poke: someone at the page, using the open app's own controls at random:
+// buttons and cells clicked, words typed into its fields, strokes drawn on its canvases
+async function poke(page, n) {
+    for (let i = 0; i < n; i++) {
+        const targets = await page.evaluate(() => {
+            const out = [];
+            for (const body of document.querySelectorAll('.win .win-body'))
+                for (const el of body.querySelectorAll('button, input, textarea, select, canvas, [contenteditable="true"], .cell')) {
+                    const b = el.getBoundingClientRect();
+                    if (b.width < 3 || b.height < 3 || b.bottom < 0 || b.right < 0 || b.top > innerHeight || b.left > innerWidth) continue;
+                    if (document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)?.closest('.win-body') !== body) continue; // under something else
+                    out.push({ tag: el.tagName.toLowerCase(), type: el.type || '', editable: el.isContentEditable, x: b.x, y: b.y, w: b.width, h: b.height });
+                }
+            return out;
+        });
+        if (!targets.length) return;
+        const t = pick(targets),
+            at = () => ({ x: t.x + 2 + random() * (t.w - 4), y: t.y + 2 + random() * (t.h - 4) });
+        const p = at();
+        if (t.tag === 'canvas') {
+            const q = at();
+            await page.mouse.move(p.x, p.y);
+            await page.mouse.down();
+            await page.mouse.move(q.x, q.y, { steps: 6 });
+            await page.mouse.up();
+        } else if (t.tag === 'textarea' || t.editable || (t.tag === 'input' && !['button', 'checkbox', 'radio', 'range', 'file', 'submit', 'color'].includes(t.type))) {
+            await page.mouse.click(p.x, p.y);
+            await page.keyboard.type(pick(WORDS).slice(0, 24));
+            if (random() < 0.6) await page.keyboard.press('Enter');
+        } else await page.mouse.click(p.x, p.y);
+        await sleep(100 + random() * 200);
+    }
+}
+
+// show: on a phone, the app's tab (its window is the screen's, one at a time)
+async function show(page, title) {
+    const chip = page.locator('#appTabs .app-chip', { hasText: title.replace(/ \d\+$/, '') }).first();
+    if ((await chip.count()) && !(await chip.getAttribute('class')).includes(' on')) await chip.click();
+}
+
 async function viewers(browser) {
     let link = '';
     for (let i = 0; i < 60 && !link; i++) {
@@ -240,7 +287,7 @@ async function viewers(browser) {
     if (!link) fail('no link to give the viewers');
     const url = link.replace(/^http:\/\/[^:/]+/, 'http://127.0.0.1'); // a secure context, for the microphone
     const ann = await viewer(browser, url, 'Ann'),
-        bob = await viewer(browser, url, 'Bob');
+        bob = await viewer(browser, url, 'Bob', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }); // a phone, upright
     const commands = await (await fetch(`${base}/commands`)).json();
     const bots = await Promise.all(['Robo', 'Bolt', 'Gizmo', 'Sprocket'].map((n) => robot(link.replace(/^http:\/\/[^:/]+/, 'http://127.0.0.1'), n)));
 
@@ -259,6 +306,7 @@ async function viewers(browser) {
     })();
     if (count < 10) fail(`the picker offers ${count} apps`);
     for (let i = 0; i < count; i++) {
+        if (i === Math.floor(count / 2)) await bob.setViewportSize({ width: 844, height: 390 }); // the phone on its side
         await ann.locator('.plus:visible').first().click();
         await ann.waitForSelector('.picker-app', { state: 'visible' });
         const title = (await ann.locator('.picker-app').nth(i).innerText()).trim();
@@ -267,23 +315,33 @@ async function viewers(browser) {
             await page
                 .waitForFunction(() => document.querySelector('.win .win-body') && document.querySelector('.win .win-body').childElementCount > 0, null, { timeout: 8000 })
                 .catch(() => fail(`${title} never drew`));
+        await show(bob, title);
         await sleep(800); // its script running, a view or two
-        // the robots play it, while both pages draw what comes of it
+        // the robots play it, and Ann uses its controls, while both pages draw what comes of it
         const id = [...bots[0].open].find(([, n]) => n)?.[0];
-        if (id !== undefined) await play(bots, commands, id, bots[0].open.get(id), 3000);
+        await Promise.all([id !== undefined && play(bots, commands, id, bots[0].open.get(id), 3000), poke(ann, 14)]);
         await sleep(600);
         if (process.env.BROWSER_SHOTS) await ann.screenshot({ path: `${process.env.BROWSER_SHOTS}/${String(i).padStart(2, '0')}-${title.replace(/\W+/g, '-')}.png` });
-        await bob.locator('.win-close').first().click();
-        await ann.waitForFunction(() => !document.querySelector('.win'), null, { timeout: 5000 }).catch(() => fail(`${title} never closed`));
+        // close what's open: Ann's clicks may have opened another (the reel opens Graffiti), and an editor's
+        // dialog may be up over its window, which Escape puts away, as a person would
+        await ann.keyboard.press('Escape');
+        for (let n = 0; n < 4; n++) {
+            await sleep(1100); // a page opens or closes one app a second
+            if (!(await ann.locator('.win-close').count())) break;
+            await ann.locator('.win-close').first().click({ timeout: 5000 });
+        }
+        await ann.waitForFunction(() => !document.querySelector('.win'), null, { timeout: 5000 }).catch(() => fail(`${title}: its windows never closed`));
         await sleep(1100); // a page opens or closes one app a second
     }
-    console.log(`viewers: ${count} apps opened, drawn, played by robots (${bots.map((b) => `${b.name} ${b.said}`).join(', ')} messages) and closed; chat went across`);
+    console.log(`viewers: ${count} apps opened, drawn, played by robots and poked at by Ann (${bots.map((b) => `${b.name} ${b.said}`).join(', ')} messages) and closed; chat went across`);
     for (const b of bots) b.ws.close();
 
     // a call: both in, sound both ways
     await ann.locator('.plus:visible').first().click();
     await ann.waitForSelector('.picker-app', { state: 'visible' });
     await ann.locator('.picker-app', { hasText: 'Call' }).click();
+    await bob.waitForSelector('#appTabs .app-chip');
+    await show(bob, 'Call');
     for (const page of [ann, bob]) {
         await page.getByRole('button', { name: 'Join the call' }).click({ timeout: 8000 });
     }
@@ -311,11 +369,92 @@ async function viewers(browser) {
     }
 }
 
+// ---------- the party file, through the window's own sheets (party.ts) ----------
+
+const until = async (page, what, fn, arg, ms = 10000) => page.waitForFunction(fn, arg, { timeout: ms }).catch(() => fail(`the window: never ${what}`));
+const sheetUp = (page, title) => until(page, `the "${title}" sheet`, (t) => !document.getElementById('sheet').hidden && document.querySelector('#sheet h1')?.textContent === t, title);
+const sheetGone = (page, after) => until(page, `closed the sheet after ${after}`, () => document.getElementById('sheet').hidden, null, 20000);
+const sheetSays = (page, what, words) => until(page, `said "${words}" for ${what}`, (w) => (document.querySelector('#sheet .sheet-error')?.textContent || '').includes(w), words, 20000);
+async function fillSheet(page, values) {
+    for (const [name, value] of Object.entries(values)) await page.fill(`#sheet [name="${name}"]`, value);
+    await page.click('#sheet .go');
+}
+const viewIs = (page, what, fn) => until(page, what, fn, null, 30000);
+
+async function party(page) {
+    const rows = await page.evaluate(() => window.__view.rows.length);
+    // Settings: not while playing; not JSON that won't read; then saved
+    const wasPlaying = await page.evaluate(() => window.__view.play === 'stop');
+    if (wasPlaying) {
+        await page.evaluate(() => window.__ask('settings'));
+        await sheetUp(page, 'Settings');
+        await page.click('#sheet .go');
+        await sheetSays(page, 'saving while playing', 'Stop first');
+        await page.keyboard.press('Escape');
+        await sheetGone(page, 'Escape');
+        await page.click('#play');
+        await viewIs(page, 'stopped', () => window.__view.play === 'play' && window.__view.playOn);
+    }
+    await page.evaluate(() => window.__ask('settings'));
+    await sheetUp(page, 'Settings');
+    const text = await page.inputValue('#sheet [name="text"]');
+    await fillSheet(page, { text: '{ "countdown": ' });
+    await sheetSays(page, 'broken JSON', "isn't JSON");
+    const settings = JSON.parse(text);
+    settings.countdown = 2;
+    await fillSheet(page, { text: JSON.stringify(settings, null, 2) });
+    await sheetGone(page, 'saving the settings');
+    await page.evaluate(() => window.__ask('settings'));
+    await sheetUp(page, 'Settings');
+    if (JSON.parse(await page.inputValue('#sheet [name="text"]')).countdown !== 2) fail('the settings saved, and read back otherwise');
+    await page.keyboard.press('Escape');
+    await sheetGone(page, 'Escape');
+
+    // Use Encryption: two passcodes that differ, then the same twice
+    await page.evaluate(() => window.__ask('on'));
+    await sheetUp(page, 'Use Encryption');
+    await fillSheet(page, { next: 'pa55', again: 'pass' });
+    await sheetSays(page, 'two passcodes', "aren't the same");
+    await fillSheet(page, { next: 'pa55', again: 'pa55' });
+    await sheetGone(page, 'sealing');
+    await viewIs(page, 'sealed', () => window.__view.sealed);
+
+    // Change Passcode: the wrong one now, then the right one
+    await page.evaluate(() => window.__ask('change'));
+    await sheetUp(page, 'Change Passcode');
+    await fillSheet(page, { current: 'nope', next: 'word2', again: 'word2' });
+    await until(page, 'refused a wrong passcode', () => (document.querySelector('#sheet .sheet-error')?.textContent || '') !== '', null, 20000);
+    await fillSheet(page, { current: 'pa55', next: 'word2', again: 'word2' });
+    await sheetGone(page, 'changing the passcode');
+
+    // the app quits and opens again: locked, until its passcode
+    await fetch(`${base}/restart`, { method: 'POST' });
+    await viewIs(page, 'locked after a restart', () => window.__view && window.__view.locked);
+    await sheetUp(page, 'Mouse Party');
+    await fillSheet(page, { passcode: 'pa55' });
+    await until(page, 'refused the old passcode', () => (document.querySelector('#sheet .sheet-error')?.textContent || '') !== '', null, 20000);
+    await fillSheet(page, { passcode: 'word2' });
+    await sheetGone(page, 'unlocking');
+    await viewIs(page, 'open again', () => !window.__view.locked && window.__view.sealed);
+    const after = await page.evaluate(() => window.__view.rows.length);
+    if (after !== rows) fail(`the list had ${rows} rows sealed, and ${after} opened again`);
+
+    // Stop Using Encryption
+    await page.evaluate(() => window.__ask('off'));
+    await sheetUp(page, 'Stop Using Encryption');
+    await fillSheet(page, { current: 'word2' });
+    await sheetGone(page, 'unsealing');
+    await viewIs(page, 'unsealed', () => !window.__view.sealed);
+    await windowMatches(page, 'the party file sealed, reopened and unsealed');
+    console.log(`party: settings saved (refused ${wasPlaying ? 'while playing, and ' : ''}as broken JSON); sealed, passcode changed, restarted locked, opened with ${rows} rows, unsealed`);
+}
+
 (async () => {
     const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'] });
     try {
-        await walkWindow(browser);
+        const win = await walkWindow(browser);
         await viewers(browser);
+        await party(win);
     } finally {
         await browser.close();
     }

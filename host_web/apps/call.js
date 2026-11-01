@@ -74,7 +74,7 @@ const call = (ctx, first) => {
 	}
 	function close(line) {
 		const pc = line.pc;
-		if (line.hangUp) fetch(line.hangUp, { method: "DELETE" }).finally(() => pc && pc.close());
+		if (line.hangUp) fetch(line.hangUp, { method: "DELETE" }).catch(() => {}).finally(() => pc && pc.close());
 		else if (pc) pc.close();
 	}
 	const me = () => view.people.find((p) => p.id === ctx.me().id);

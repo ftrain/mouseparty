@@ -66,8 +66,10 @@ function show(opts: {
         go.disabled = false;
         if (why) {
             error.textContent = why;
+            // back in the sheet: the button lost the focus when it was disabled, and with it Escape (and typing)
             const first = Object.values(inputs)[0];
             if (first instanceof HTMLInputElement) first.select();
+            else (first ?? go).focus();
         } else close();
     });
     form.addEventListener('keydown', (e) => {

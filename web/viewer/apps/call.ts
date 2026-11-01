@@ -108,7 +108,10 @@ const call: Start<View, never, Out> = (ctx, first) => {
     function close(line: Line) {
         // hung up first: closed first, MediaMTX may end it before the hang-up arrives
         const pc = line.pc;
-        if (line.hangUp) fetch(line.hangUp, { method: 'DELETE' }).finally(() => pc && pc.close());
+        if (line.hangUp)
+            fetch(line.hangUp, { method: 'DELETE' })
+                .catch(() => {}) // the host gone: nothing to hang up
+                .finally(() => pc && pc.close());
         else if (pc) pc.close();
     }
 

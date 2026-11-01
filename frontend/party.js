@@ -60,6 +60,7 @@ function show(opts) {
 			error.textContent = why;
 			const first = Object.values(inputs)[0];
 			if (first instanceof HTMLInputElement) first.select();
+			else (first ?? go).focus();
 		} else close();
 	});
 	form.addEventListener("keydown", (e) => {
