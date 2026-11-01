@@ -51,6 +51,25 @@ jobs:
           scripts/fetch_tools.sh
           echo "$PWD/build/tools" >> "$GITHUB_PATH"
 
+      - name: Python for Datasette (cached until scripts/build_python.sh or its packages change)
+        # the same WebAssembly as the Mac's, built here with Linux's WASI SDK, so Datasette's tests run on Linux too
+        id: python
+        uses: actions/cache/restore@v4
+        with:
+          path: build/python/dist
+          key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_python.sh', 'scripts/python-requirements.txt', 'scripts/python-build-requirements.txt') }}
+
+      - name: Build Python
+        if: steps.python.outputs.cache-hit != 'true'
+        run: scripts/build_python.sh
+
+      - name: Keep Python for next time
+        if: steps.python.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/python/dist
+          key: ${{ steps.python.outputs.cache-primary-key }}
+
       - name: Playwright and Chromium, for the pages in a browser (browser_test.go)
         # global, beside the pages' own pinned tools rather than in them: nothing of it is the app's
         env:

@@ -10,10 +10,13 @@
 #                                    each release carries them)
 #
 # Sources are pinned releases, checked against their SHA-256: CPython, SQLite's
-# amalgamation, zlib, and the WASI SDK (clang for WebAssembly) that builds them. The
-# Python packages are pinned in scripts/python-requirements.txt. CPython's
-# Platforms/WASI builds a native Python first, which this uses to compile the
-# standard library and to install the packages. Needs Xcode's command-line tools.
+# amalgamation, zlib, and the WASI SDK (clang for WebAssembly) that builds them, the
+# one for this machine. The Python packages are pinned, each with its file's hash,
+# in scripts/python-requirements.txt. CPython's Platforms/WASI builds a native
+# Python first, which this uses to compile the standard library and to install the
+# packages. What it makes is WebAssembly, the same whichever machine built it: an
+# Apple Silicon Mac (Xcode's command-line tools) or Linux on x86-64 or ARM (a C
+# compiler, make and python3), as the Linux tests' CI does.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD/build/python
@@ -24,11 +27,17 @@ PY=3.15.2
 SQLITE=3540100
 ZLIB=1.3.2
 SDK=33
+case "$(uname -s)-$(uname -m)" in   # the WASI SDK runs here, so it's this machine's (WASI SDK publishes no sums: these are the files as downloaded)
+Darwin-arm64) SDK_HOST=arm64-macos SDK_SUM=85c997a2665ead91673b5bb88b7d0df3fc8900df3bfa244f720d478187bbdc78 ;;
+Linux-x86_64) SDK_HOST=x86_64-linux SDK_SUM=0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce ;;
+Linux-aarch64 | Linux-arm64) SDK_HOST=arm64-linux SDK_SUM=4f98ee738c7abb45c81a94d1461fc53cc569d1cd01498951c8184d841a027844 ;;
+*) echo "No WASI SDK pinned for $(uname -s) $(uname -m)"; exit 1 ;;
+esac
 SOURCES=(
     "Python-$PY.tar.xz https://www.python.org/ftp/python/$PY/Python-$PY.tar.xz 8b5536d280142ecf6cdfe15d12a21ba1c65e300bbf7b28a8d0cdb849575797de"
     "sqlite-amalgamation-$SQLITE.zip https://www.sqlite.org/2026/sqlite-amalgamation-$SQLITE.zip 0a9c8e34352dad46006aa82836d5383bff9dc6bc9ce5a60553c05aa30e6ad1f9"
     "zlib-$ZLIB.tar.gz https://github.com/madler/zlib/releases/download/v$ZLIB/zlib-$ZLIB.tar.gz bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
-    "wasi-sdk-$SDK.0-arm64-macos.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$SDK/wasi-sdk-$SDK.0-arm64-macos.tar.gz 85c997a2665ead91673b5bb88b7d0df3fc8900df3bfa244f720d478187bbdc78"
+    "wasi-sdk-$SDK.0-$SDK_HOST.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$SDK/wasi-sdk-$SDK.0-$SDK_HOST.tar.gz $SDK_SUM"
 )
 
 mkdir -p "$SRC"
@@ -40,15 +49,15 @@ done
 [ "${1:-}" = "--fetch" ] && exit 0
 
 STAMP="$PY sqlite $SQLITE zlib $ZLIB sdk $SDK $(shasum -a 256 "$0" | cut -c1-12)"   # what CPython is built from
-READY="$STAMP $(shasum -a 256 scripts/python-requirements.txt | cut -c1-12)"     # and what's installed in it
+READY="$STAMP $(cat scripts/python-requirements.txt scripts/python-build-requirements.txt | shasum -a 256 | cut -c1-12)"   # and what's installed in it
 if [ "$(cat "$OUT/VERSION" 2>/dev/null)" = "$READY" ]; then
     echo "Python $PY is built: $OUT"
     exit 0
 fi
 
 # the WASI SDK: clang, and a C library for WebAssembly
-WASI_SDK=$ROOT/wasi-sdk-$SDK.0-arm64-macos
-[ -d "$WASI_SDK" ] || tar -xzf "$SRC/wasi-sdk-$SDK.0-arm64-macos.tar.gz" -C "$ROOT"
+WASI_SDK=$ROOT/wasi-sdk-$SDK.0-$SDK_HOST
+[ -d "$WASI_SDK" ] || tar -xzf "$SRC/wasi-sdk-$SDK.0-$SDK_HOST.tar.gz" -C "$ROOT"
 xattr -dr com.apple.quarantine "$WASI_SDK" 2>/dev/null || true
 CC="$WASI_SDK/bin/clang --target=wasm32-wasip1 --sysroot=$WASI_SDK/share/wasi-sysroot"
 
@@ -91,7 +100,9 @@ for m in _sqlite3 zlib; do
 done
 echo "$STAMP" > "$ROOT/cpython.stamp"
 fi
-BUILD_PY=$(ls "$CP"/cross-build/*-apple-darwin*/python.exe | head -1)   # the native Python CPython built first
+# the native Python CPython built first: python.exe on a Mac, python on Linux
+BUILD_PY=$(ls "$CP"/cross-build/*/python.exe "$CP"/cross-build/*/python 2>/dev/null | grep -v /wasm32- | head -1)
+[ -x "$BUILD_PY" ] || { echo "no native Python in $CP/cross-build"; exit 1; }
 
 # what ships: python.wasm, the standard library (less what can't run here or isn't wanted) compiled, and the packages
 rm -rf "$OUT" && mkdir -p "$OUT/lib"
@@ -103,7 +114,11 @@ find "$LIB" -name '__pycache__' -prune -exec rm -rf {} +
 mkdir -p "$LIB/lib-dynload"
 cp "$HOST"/build/lib.wasi-wasm32-*/_sysconfigdata*.py "$LIB/" 2>/dev/null || cp "$HOST"/build/lib.*/_sysconfigdata*.py "$LIB/"
 "$BUILD_PY" -m pip --version >/dev/null 2>&1 || "$BUILD_PY" -m ensurepip >/dev/null
-"$BUILD_PY" -m pip install --quiet --no-compile --no-deps --target "$OUT/site" -r scripts/python-requirements.txt
+# every file checked against its hash; markupsafe's and pyyaml's from their source, with setuptools (hash-checked
+# too) already in the native Python, so building them fetches nothing (no build isolation)
+"$BUILD_PY" -m pip install --quiet --require-hashes -r scripts/python-build-requirements.txt
+"$BUILD_PY" -m pip install --quiet --no-compile --no-deps --require-hashes --no-binary markupsafe,pyyaml \
+    --no-build-isolation --target "$OUT/site" -r scripts/python-requirements.txt
 find "$OUT/site" \( -name '*.so' -o -name '*.dylib' \) -delete   # native speedups: their pure-Python twins run instead
 rm -rf "$OUT/site/bin"
 "$BUILD_PY" -m compileall -q -j0 "$LIB" "$OUT/site" >/dev/null

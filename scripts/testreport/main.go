@@ -47,12 +47,9 @@ func main() {
 		case "output":
 			output[key] = append(output[key], e.Output)
 		case "fail":
-			if e.Test == "" {
-				fmt.Printf("FAIL\t%s\t%.1fs\n", e.Package, e.Elapsed)
-				if len(output[key]) > 0 && !hasTests(failed, e.Package) {
-					fmt.Print(strings.Join(output[key], "")) // a build failure, a panic outside a test
-				}
-			} else if !strings.Contains(e.Test, "/") || !hasTests(failed, e.Package+" "+strings.Split(e.Test, "/")[0]) {
+			if e.Test == "" { // the package: its own output is a build error, or a panic outside any test
+				fmt.Printf("FAIL\t%s\t%.1fs\n%s", e.Package, e.Elapsed, strings.Join(output[key], ""))
+			} else {
 				failed = append(failed, key)
 				fmt.Printf("--- FAIL: %s (%s)\n%s", e.Test, e.Package, strings.Join(output[key], ""))
 			}
@@ -67,9 +64,7 @@ func main() {
 			}
 		}
 		if e.Action == "pass" || e.Action == "fail" || e.Action == "skip" {
-			if e.Test != "" && e.Action != "fail" {
-				delete(output, key)
-			}
+			delete(output, key) // done with: only failures and skips are told
 		}
 	}
 	sort.Strings(skipped)
@@ -92,15 +87,6 @@ func main() {
 		fmt.Printf("\n%d skipped where everything should run (NO_SKIPS; ALLOW_SKIPS=%q)\n", unexpected, os.Getenv("ALLOW_SKIPS"))
 		os.Exit(1)
 	}
-}
-
-func hasTests(list []string, prefix string) bool {
-	for _, k := range list {
-		if strings.HasPrefix(k, prefix) {
-			return true
-		}
-	}
-	return false
 }
 
 // reason: what the test said as it skipped, its last line saying anything
