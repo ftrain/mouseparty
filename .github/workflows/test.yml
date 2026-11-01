@@ -2,9 +2,9 @@
 # nightly it fuzzes the command graph for longer (docs/testing.md).
 #
 #   every push to main and pull request: scripts/test.sh (the pages, vet, every
-#     test with the fuzzers' seeds and what they've found before, the self-test),
-#     then a minute of each fuzzer
-#   every night, or by hand: each fuzzer for FUZZTIME
+#     test with the fuzzers' seeds and what they've found before, the pages in
+#     headless Chromium, the self-test), then a minute of each fuzzer
+#   every night, or by hand: each fuzzer, and the pages walked with new seeds, for FUZZTIME
 #
 # A fuzzer that finds something fails the run, and the input it failed on is kept
 # as the run's artifact (testdata/fuzz/...): put it in the repo beside the fix,
@@ -54,7 +54,16 @@ jobs:
           curl -fsSL "https://github.com/bluenviron/mediamtx/releases/download/$MEDIAMTX/mediamtx_${MEDIAMTX}_linux_amd64.tar.gz" | tar -xz -C build/tools mediamtx
           echo "$PWD/build/tools" >> "$GITHUB_PATH"
 
-      - name: Tests (with the fuzzers' seeds) and the self-test
+      - name: Playwright and Chromium, for the pages in a browser (browser_test.go)
+        # global, beside the pages' own pinned tools rather than in them: nothing of it is the app's
+        env:
+          PLAYWRIGHT: 1.63.0
+        run: |
+          npm install -g "playwright@$PLAYWRIGHT"
+          npx -y "playwright@$PLAYWRIGHT" install --with-deps chromium
+          echo "NODE_PATH=$(npm root -g)" >> "$GITHUB_ENV"
+
+      - name: Tests (with the fuzzers' seeds, and the pages in a browser) and the self-test
         if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         run: scripts/test.sh
 
@@ -71,4 +80,5 @@ jobs:
           path: |
             testdata/fuzz
             apps/testdata/fuzz
+          # a failing browser walk prints its BROWSER_SEED in the log
           if-no-files-found: ignore

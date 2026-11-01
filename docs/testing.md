@@ -24,6 +24,8 @@ So the tests are in layers, from quick and exact to slow and real.
    MediaMTX; `--selftest` hosts and publishes; `FuzzWindow` walks the window's
    graph against them. On free ports with a temporary `HOME`, never the router
    (see CLAUDE.md: tests that skip that have stopped a live session).
+5. **The pages in a browser.** `TestBrowser` (`browser_test.go`,
+   `web/e2e/browser.cjs`): the only test that runs the pages' JavaScript.
 
 ## The command graph
 
@@ -81,24 +83,48 @@ failing one to the fewest steps.
   every input that ever failed (kept in `testdata/fuzz/`, `apps/testdata/fuzz/`).
 - `scripts/fuzz.sh` searches further: two minutes each (`FUZZTIME=30m`;
   `FUZZWINDOWTIME` for the window's), or one (`scripts/fuzz.sh FuzzApps`).
-- CI (`.github/workflows/test.yml`): `scripts/test.sh` and a minute of each
-  fuzzer on every push and pull request; a quarter of an hour of each every
-  night. A failure keeps its input as the run's artifact: commit it to
+- CI (`.github/workflows/test.yml`): `scripts/test.sh` (with the browser
+  walk) and a minute of each fuzzer on every push and pull request; a quarter
+  of an hour of each, and of browser walks, every night. A failure keeps its input as the run's artifact: commit it to
   `testdata/fuzz/` with the fix.
 
 `-fuzzminimizetime` matters: shrinking a new input replays it thousands of
 times, and without a limit that stalls the search for minutes (the fuzzer reports
 0 runs a second meanwhile). `scripts/fuzz.sh` sets it.
 
+## The pages in a browser
+
+`TestBrowser` hosts the real `App` and opens the pages in headless Chromium
+(Playwright, with a fake microphone):
+
+- **The window** (`frontend/`), with no Wails: stand-ins for `window.go` and
+  `window.runtime` send each call to the test over HTTP, which makes it on the
+  real `App` (by reflection, as Wails binds it), and hand the page the `View`
+  as Wails's `view` event would. It's walked at random: files dropped, Play,
+  the link, rows clicked, double-clicked and dragged, Backspace and the arrows,
+  the slider. After each step the page must show the view it was last given:
+  the rows, their marks, the selection, the big button, the slider, the hint.
+- **Two viewers**: a line of chat from one reaching the other; every app in the
+  picker opened by one, drawn on both pages, and closed by the other; then a
+  call between them, with sound both ways (only the call's connections
+  counted, not the movie's).
+
+Any uncaught error on any page fails it. Each run takes a new seed, printed
+when it fails: `BROWSER_SEED=<seed> go test -run TestBrowser -v .` walks the
+same again. It skips without Node and Playwright, ffmpeg and MediaMTX, and with
+`-short`. `scripts/fuzz.sh` walks it again with new seeds for its time
+(`FUZZBROWSERTIME`), as CI does nightly.
+
 ## What isn't covered yet
 
-- **The pages in a browser.** The viewer page and the window are checked by
-  `tsc` and built, but not run in the tests. Headless Chromium can (Playwright,
-  with fake camera and microphone: `--use-fake-device-for-media-stream`); a
-  call between two pages through MediaMTX has been checked that way by hand. A
-  next step: the window's page fed random `View`s, and two viewer pages walking
-  `socketGraph` from the browser side.
-- **The sealed party** (`Unlock`, `SetPasscode`, `StartOver`): tested in
-  `store_test.go`, not fuzzed (Argon2 is slow by design).
+- **The pages' insides, at random.** The browser walk opens every app but
+  doesn't play them from the page: the apps' rules are fuzzed in Go
+  (`FuzzApps`), their scripts only drawn. A next step: `apps.Commands` driven
+  through each app's own controls.
+- **The sealed party** (`Unlock`, `SetPasscode`, `StartOver`, and the
+  window's sheets for them): tested in `store_test.go`, not fuzzed (Argon2 is
+  slow by design).
 - **Datasette**: its tests skip without the WebAssembly Python
   (`scripts/build_python.sh`), as they do in CI on Linux.
+- **Safari and Firefox, and phones.** The browser walk is Chromium's, at one
+  size; the phone layouts (tabs, upright and on its side) aren't walked.

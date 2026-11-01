@@ -8,6 +8,11 @@
 #   FUZZTIME=30m scripts/fuzz.sh
 #   scripts/fuzz.sh FuzzApps   just that one
 #
+# Then the pages in a browser (browser_test.go, web/e2e/browser.cjs), walked
+# again with a new seed each time for FUZZBROWSERTIME (FUZZTIME if not set),
+# when node has Playwright. A failing seed is printed: BROWSER_SEED=<it> go test
+# -run TestBrowser -v . walks it again.
+#
 # FuzzWindow hosts for real (ffmpeg and MediaMTX, free ports, a temporary HOME,
 # never the router): a walk takes seconds, where the others do thousands a
 # second, so it runs one walk at a time (they share the clock with ffmpeg) for
@@ -33,5 +38,21 @@ if want FuzzWindow; then
         run . FuzzWindow "${FUZZWINDOWTIME:-$FUZZTIME}" -parallel 1
     else
         echo "== FuzzWindow: skipped, needs ffmpeg and mediamtx"
+    fi
+fi
+if want Browser; then
+    if node -e "require.resolve('playwright')" 2>/dev/null && command -v mediamtx >/dev/null && command -v ffmpeg >/dev/null; then
+        budget="${FUZZBROWSERTIME:-$FUZZTIME}"
+        end=$(( $(date +%s) + $(go run ./scripts/seconds "$budget") ))
+        walks=0
+        while [ "$(date +%s)" -lt "$end" ]; do
+            seed=$(( RANDOM * 32768 + RANDOM ))
+            echo "== the pages in a browser, seed $seed"
+            BROWSER_SEED=$seed go test . -run '^TestBrowser$' -count=1 || { echo "BROWSER_SEED=$seed go test -run TestBrowser -v . walks it again"; exit 1; }
+            walks=$((walks + 1))
+        done
+        echo "== the pages in a browser: $walks walks"
+    else
+        echo "== the pages in a browser: skipped, needs node with Playwright, ffmpeg and mediamtx"
     fi
 fi
