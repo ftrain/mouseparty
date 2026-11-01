@@ -62,6 +62,19 @@ function rowAt(x, y) {
 	const row = document.elementFromPoint(x, y)?.closest(".row");
 	return row ? Number(row.dataset.index) : null;
 }
+function insertAt(y) {
+	const i = [...$("list").querySelectorAll(".row")].findIndex((r) => y < r.getBoundingClientRect().top + r.offsetHeight / 2);
+	return i < 0 ? -1 : i;
+}
+function showInsert(at) {
+	$("list").querySelectorAll(".insert-before, .insert-after").forEach((r) => r.classList.remove("insert-before", "insert-after"));
+	const rows = $("list").querySelectorAll(".row");
+	if (at === null || !rows.length) return;
+	if (at < 0) rows[rows.length - 1].classList.add("insert-after");
+	else rows[at].classList.add("insert-before");
+}
+window.addEventListener("dragover", (e) => showInsert(insertAt(e.clientY)));
+window.addEventListener("dragleave", (e) => e.relatedTarget === null && showInsert(null));
 $("play").addEventListener("click", () => view?.playOn && App().PlayClicked());
 $("link").addEventListener("click", () => view?.linkPress && App().LinkClicked());
 let lastDown = {
@@ -122,7 +135,10 @@ slider.addEventListener("change", () => {
 });
 slider.addEventListener("keydown", (e) => e.stopPropagation());
 window.addEventListener("load", async () => {
-	window.runtime.OnFileDrop((x, y, paths) => App().AddPaths(paths, rowAt(x, y) ?? -1), false);
+	window.runtime.OnFileDrop((x, y, paths) => {
+		showInsert(null);
+		App().AddPaths(paths, rowAt(x, y) ?? -1, insertAt(y));
+	}, false);
 	window.runtime.EventsOn("view", render);
 	window.runtime.EventsOn("ask", ask);
 	render(await App().GetView());

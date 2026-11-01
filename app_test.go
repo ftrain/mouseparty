@@ -54,7 +54,7 @@ func TestPlayThroughTheList(t *testing.T) {
 	if v := a.GetView(); v.PlayOn || v.LinkPress || len(v.Rows) != 0 {
 		t.Fatalf("empty, yet %+v", v)
 	}
-	a.AddPaths(clips, -1)
+	a.AddPaths(clips, -1, -1)
 	until("making the link", 10, func(v View) bool { return v.Link == "spinner" && len(v.Rows) == 3 && !v.PlayOn })
 	v := until("link ready", 20, func(v View) bool { return v.LinkPress && v.PlayOn })
 	if v.LinkNote != "Wi-Fi only" || v.Rows[0].Title != "Clip 1" || v.Rows[0].Length != "0:00:04" {

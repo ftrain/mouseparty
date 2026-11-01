@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -192,16 +193,16 @@ func (a *App) GetView() View {
 	return v
 }
 
-func (a *App) PlayClicked()                 { a.do(a.playClicked) }
-func (a *App) LinkClicked()                 { a.do(a.linkClicked) }
-func (a *App) Select(i int)                 { a.do(func() { a.selectRow(i) }) }
-func (a *App) Move(from, to int)            { a.do(func() { a.move(from, to) }) }
-func (a *App) PlayRow(i int)                { a.do(func() { a.playRow(i) }) }
-func (a *App) Remove()                      { a.do(a.remove) }
-func (a *App) Seek(seconds float64)         { a.do(func() { a.seek(seconds) }) }
-func (a *App) ShowPage(page int)            { a.do(func() { a.showPage(page) }) }
-func (a *App) TurnPage(step int)            { a.do(func() { a.turnPage(step) }) }
-func (a *App) AddPaths(p []string, row int) { go a.addPaths(p, row) }
+func (a *App) PlayClicked()                     { a.do(a.playClicked) }
+func (a *App) LinkClicked()                     { a.do(a.linkClicked) }
+func (a *App) Select(i int)                     { a.do(func() { a.selectRow(i) }) }
+func (a *App) Move(from, to int)                { a.do(func() { a.move(from, to) }) }
+func (a *App) PlayRow(i int)                    { a.do(func() { a.playRow(i) }) }
+func (a *App) Remove()                          { a.do(a.remove) }
+func (a *App) Seek(seconds float64)             { a.do(func() { a.seek(seconds) }) }
+func (a *App) ShowPage(page int)                { a.do(func() { a.showPage(page) }) }
+func (a *App) TurnPage(step int)                { a.do(func() { a.turnPage(step) }) }
+func (a *App) AddPaths(p []string, row, at int) { go a.addPaths(p, row, at) }
 
 // openFile: a file or folder dropped on the Dock icon (main.go's OnFileOpen), one call each; those that come
 // together are added together, in the order they came, as a drop on the list is
@@ -215,7 +216,7 @@ func (a *App) openFile(path string) {
 			paths := a.opening
 			a.opening, a.openSoon = nil, nil
 			a.openMu.Unlock()
-			a.addPaths(paths, -1)
+			a.addPaths(paths, -1, -1)
 		})
 	}
 }
@@ -404,9 +405,10 @@ func (a *App) move(i, j int) {
 }
 
 // addPaths: files or folders dropped from Finder (a folder adds what's in it, in
-// name order), looked at off the app's goroutine. A subtitle file dropped onto a
-// movie (row, or the selected one) becomes its subtitles.
-func (a *App) addPaths(paths []string, row int) {
+// name order), looked at off the app's goroutine, and put in the list at at (-1:
+// the end), where they were dropped. A subtitle file dropped onto a movie (row, or
+// the selected one) becomes its subtitles.
+func (a *App) addPaths(paths []string, row, at int) {
 	locked := false
 	a.wait(func() { locked = a.locked })
 	if locked { // the list isn't known until the party is open
@@ -499,8 +501,16 @@ func (a *App) addPaths(paths []string, row int) {
 		if len(items) == 0 {
 			return
 		}
-		a.cfg.Queue = append(a.cfg.Queue, items...)
-		a.save()
+		if at < 0 || at > len(a.cfg.Queue) { // the list may have changed while they were looked at
+			at = len(a.cfg.Queue)
+		}
+		a.editQueue(func(q []*Item) []*Item { return slices.Insert(q, at, items...) }, nil)
+		if a.selected >= at { // the selection stays on its row
+			a.selected += len(items)
+		}
+		if a.restoreSel >= at {
+			a.restoreSel += len(items)
+		}
 		if a.host == nil || !a.host.Running() {
 			a.hostStart()
 		}

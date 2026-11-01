@@ -115,7 +115,7 @@ func TestDroppedDocumentsAndZip(t *testing.T) {
 	}
 	go a.run()
 	defer a.shutdown(nil)
-	a.AddPaths([]string{zipPath, rtf, filepath.Join(dir, "nothing.exe")}, -1)
+	a.AddPaths([]string{zipPath, rtf, filepath.Join(dir, "nothing.exe")}, -1, -1)
 	var kinds []string
 	for end := time.Now().Add(10 * time.Second); time.Now().Before(end) && len(kinds) < 3; time.Sleep(50 * time.Millisecond) {
 		kinds = nil
@@ -166,5 +166,47 @@ func TestDockDrop(t *testing.T) {
 	}
 	if strings.Join(got, " ") != "b.rtf a.md c.csv" {
 		t.Fatal(got)
+	}
+}
+
+// Dropped between two rows: they go there, not at the end, and the selection stays on its row
+func TestDroppedWhereDropped(t *testing.T) {
+	if findTool("mediamtx") == "" {
+		t.Skip("needs mediamtx (adding starts hosting)")
+	}
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	file := func(name string) string {
+		p := filepath.Join(dir, name)
+		os.WriteFile(p, []byte(`{\rtf1 `+name+`}`), 0o644)
+		return p
+	}
+	a := NewApp(standby)
+	a.hostSetup = func(h *Host) {
+		h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
+	}
+	go a.run()
+	defer a.shutdown(nil)
+	order := func() string {
+		var names []string
+		a.wait(func() {
+			for _, it := range a.cfg.Queue {
+				names = append(names, strings.TrimSuffix(filepath.Base(it.Path), ".rtf"))
+			}
+		})
+		return strings.Join(names, " ")
+	}
+	a.addPaths([]string{file("a.rtf"), file("d.rtf")}, -1, -1)
+	a.wait(func() { a.selectRow(1) })
+	a.addPaths([]string{file("b.rtf"), file("c.rtf")}, -1, 1)
+	a.addPaths([]string{file("first.rtf")}, -1, 0)
+	a.addPaths([]string{file("last.rtf")}, -1, 99) // past the end: the list changed since
+	if got := order(); got != "first a b c d last" {
+		t.Fatal(got)
+	}
+	var sel int
+	a.wait(func() { sel = a.selected })
+	if sel != 4 {
+		t.Fatal("selection moved off d:", sel)
 	}
 }

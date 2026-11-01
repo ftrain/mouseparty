@@ -154,7 +154,7 @@ func TestAppLocked(t *testing.T) {
 	if v := a.GetView(); !v.Locked || len(v.Rows) != 0 || a.party != nil {
 		t.Fatalf("not locked: %+v", v)
 	}
-	a.AddPaths([]string{"/Movies/Vertigo.mkv"}, 0)
+	a.AddPaths([]string{"/Movies/Vertigo.mkv"}, 0, -1)
 	if msg := a.Unlock("open"); msg != errPasscode.Error() {
 		t.Fatal("a wrong passcode:", msg)
 	}

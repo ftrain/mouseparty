@@ -56,7 +56,7 @@ export interface App {
     Seek(seconds: number): Promise<void>;
     ShowPage(page: number): Promise<void>;
     TurnPage(step: number): Promise<void>;
-    AddPaths(paths: string[], row: number): Promise<void>;
+    AddPaths(paths: string[], row: number, at: number): Promise<void>;
     // the party file (party.go): each "" when it worked, or why not
     Unlock(passcode: string): Promise<string>;
     StartOver(): Promise<string>;
