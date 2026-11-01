@@ -654,26 +654,39 @@ func windowWalk(t *testing.T, data []byte) {
 	a.wait(func() { a.cfg.Countdown = 1 })
 	c := &choices{b: data}
 	kinds := []string{"clip", "clip2", "song", "pdf", "junk", "gone"}
+	// look: the state and the view, together, from the app's goroutine. Checks
+	// run here, after: a test that fails on the app's goroutine would end it,
+	// and leave the test waiting for it for ever.
+	look := func() (state string, v View) {
+		a.wait(func() { state, v = a.state(), a.view() })
+		return
+	}
+	// still: the view as it is when nothing happens (the playhead moves with the clock)
+	still := func(v View) string {
+		v.Slider.Value, v.Slider.Label = 0, ""
+		b, _ := json.Marshal(v)
+		return string(b)
+	}
 	step := func(name string, fn func(), acts []string, to map[string][]string) {
 		t.Helper()
-		a.wait(func() {
-			before, bv := a.state(), a.view()
+		var before, after string
+		var bv, av View
+		a.wait(func() { // the command between two looks, on the app's goroutine: nothing else happens meanwhile
+			before, bv = a.state(), a.view()
 			fn()
-			after, av := a.state(), a.view()
-			seenEdges.Store(before+" --"+name+"--> "+after, true)
-			checkView(t, name, after, av)
-			if !slices.Contains(acts, before) {
-				b1, _ := json.Marshal(bv)
-				b2, _ := json.Marshal(av)
-				if before != after || !bytes.Equal(b1, b2) {
-					t.Fatalf("%s did something in %s, where it does nothing:\n%s\n%s", name, before, b1, b2)
-				}
-				return
-			}
-			if to != nil && !slices.Contains(to[before], after) && !(after == before && slices.Contains(to[before], "same")) {
-				t.Fatalf("%s took %s to %s; the graph says %v", name, before, after, to[before])
-			}
+			after, av = a.state(), a.view()
 		})
+		seenEdges.Store(before+" --"+name+"--> "+after, true)
+		checkView(t, name, after, av)
+		if !slices.Contains(acts, before) {
+			if before != after || still(bv) != still(av) {
+				t.Fatalf("%s did something in %s, where it does nothing:\n%s\n%s", name, before, still(bv), still(av))
+			}
+			return
+		}
+		if to != nil && !slices.Contains(to[before], after) && !(after == before && slices.Contains(to[before], "same")) {
+			t.Fatalf("%s took %s to %s; the graph says %v", name, before, after, to[before])
+		}
 	}
 	command := func(name string) windowCommand {
 		for _, c := range windowGraph {
@@ -723,7 +736,8 @@ func windowWalk(t *testing.T, data []byte) {
 			name, fn = "LinkClicked", a.linkClicked
 		case 11:
 			a.SetSettingsText(settingsTexts[c.n(len(settingsTexts))])
-			a.wait(func() { checkView(t, "SetSettingsText", a.state(), a.view()) })
+			state, v := look()
+			checkView(t, "SetSettingsText", state, v)
 			continue
 		case 12: // a drive unplugged, or plugged back in
 			if c.n(2) == 0 {
@@ -734,7 +748,8 @@ func windowWalk(t *testing.T, data []byte) {
 			continue
 		default: // time passes: the app goes on by itself
 			time.Sleep(time.Duration(1+c.n(8)) * 250 * time.Millisecond)
-			a.wait(func() { checkView(t, "waiting", a.state(), a.view()) })
+			state, v := look()
+			checkView(t, "waiting", state, v)
 			continue
 		}
 		cmd := command(name)
