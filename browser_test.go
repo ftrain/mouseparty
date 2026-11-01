@@ -119,6 +119,11 @@ func TestBrowser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if os.Getenv("PLAYWRIGHT_BROWSERS_PATH") == "" { // Playwright's browsers are under the real HOME
+		if cache, err := os.UserCacheDir(); err == nil {
+			t.Setenv("PLAYWRIGHT_BROWSERS_PATH", filepath.Join(cache, "ms-playwright"))
+		}
+	}
 	t.Setenv("HOME", t.TempDir()) // never the real party file
 	// the app, as the Mac starts it: again after a restart, from the same party file (sealed, by then)
 	start := func() *App {

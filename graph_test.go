@@ -557,12 +557,12 @@ func makeWindowFiles() (map[string]string, error) {
 		}
 		ff := findTool("ffmpeg")
 		p := func(name string) string { return filepath.Join(w.dir, name) }
-		w.paths = map[string]string{"clip": p("First.Clip.2026.mkv"), "clip2": p("Second.Clip.mkv"), "song": p("Song.flac"),
+		w.paths = map[string]string{"clip": p("First.Clip.2026.mkv"), "clip2": p("Second.Clip.mkv"), "song": p("Song.mka"),
 			"pdf": p("Reading.pdf"), "junk": p("tool.exe"), "gone": p("Gone.Clip.mkv")}
 		for _, c := range [][]string{
 			{"-f", "lavfi", "-i", "testsrc=s=320x240:r=30:d=3", "-f", "lavfi", "-i", "sine=f=440:d=3", "-c:v", "libx264", "-c:a", "libopus", w.paths["clip"]},
-			{"-f", "lavfi", "-i", "testsrc2=s=320x240:r=30:d=2", "-f", "lavfi", "-i", "sine=f=660:d=2", "-c:v", "libx264", "-c:a", "libopus", w.paths["clip2"]},
-			{"-f", "lavfi", "-i", "sine=f=330:d=2", w.paths["song"]},
+			{"-f", "lavfi", "-i", "testsrc=s=320x240:r=30:d=2", "-f", "lavfi", "-i", "sine=f=660:d=2", "-c:v", "libx264", "-c:a", "libopus", w.paths["clip2"]},
+			{"-f", "lavfi", "-i", "sine=f=330:d=2", "-c:a", "libopus", "-f", "matroska", w.paths["song"]},
 		} {
 			if out, err := exec.Command(ff, append([]string{"-v", "error", "-y"}, c...)...).CombinedOutput(); err != nil {
 				w.err = fmt.Errorf("%v: %s", err, out)
@@ -712,7 +712,7 @@ func windowWalk(t *testing.T, data []byte) {
 			for range 1 + c.n(3) {
 				paths = append(paths, files[kinds[c.n(len(kinds))]])
 			}
-			a.addPaths(paths, -1)
+			a.addPaths(paths, -1, row())
 			continue
 		case 2:
 			name, fn = "PlayClicked", a.playClicked

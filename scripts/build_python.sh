@@ -111,7 +111,8 @@ done
 echo "$STAMP" > "$ROOT/cpython.stamp"
 fi
 # the native Python CPython built first: python.exe on a Mac, python on Linux
-BUILD_PY=$(ls "$CP"/cross-build/*/python.exe "$CP"/cross-build/*/python 2>/dev/null | grep -v /wasm32- | head -1)
+# (ls fails on the one that isn't there: with pipefail, that would end the script, silently)
+BUILD_PY=$(ls "$CP"/cross-build/*/python.exe "$CP"/cross-build/*/python 2>/dev/null | grep -v /wasm32- | head -1 || true)
 [ -x "$BUILD_PY" ] || { echo "no native Python in $CP/cross-build"; exit 1; }
 
 # what ships: python.wasm, the standard library (less what can't run here or isn't wanted) compiled, and the packages
