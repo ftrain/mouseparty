@@ -75,6 +75,7 @@ type Kind struct {
 var Kinds = []Kind{
 	{"graffiti", "Graffiti", "spray-can", true, "full", 1, func(*Room) Activity { return &graffiti{} }},
 	{"room", "Room", "door-open", false, "big", 1, func(*Room) Activity { return &room{avatars: map[int]*avatar{}} }},
+	{"call", "Call", "phone", false, "small", 1, newCall},
 	{"bingo", "Bingo", "grid-3x3", false, "small", 1, newBingo},
 	{"wordgrid", "Word Grid", "dices", false, "big", 1, newWordGrid},
 	{"tiles", "Tiles", "spell-check", false, "big", 1, newTiles},

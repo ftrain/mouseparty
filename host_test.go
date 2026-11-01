@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -124,5 +125,51 @@ exec sleep 60
 	h.mu.Unlock()
 	if a.link() != "" {
 		t.Fatalf("handed out %q", a.link())
+	}
+}
+
+// A call's voices: sent by their secret name to its MediaMTX path, heard by the
+// public one; MediaMTX's session URLs come back as the site's own; nothing else gets through
+func TestCallVoicesReachTheirPaths(t *testing.T) {
+	var got []string
+	mtx := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Method+" "+r.URL.Path)
+		if r.Method == "POST" {
+			w.Header().Set("Location", r.URL.Path+"/sess1")
+			w.Header().Set("Set-Cookie", "x=y")
+			w.WriteHeader(201)
+		}
+	}))
+	defer mtx.Close()
+	port := mtx.Listener.Addr().(*net.TCPAddr).Port
+	h := &Host{key: "k3y", urls: map[string]string{}, ports: map[string]int{"webrtc": port}}
+	mux := http.NewServeMux()
+	send := h.webrtcProxy("whip", func(r *http.Request) (string, string, bool) {
+		v, ok := apps.CallName(r.PathValue("secret"))
+		return "call-" + v, "call/send/" + r.PathValue("secret"), ok
+	})
+	mux.Handle("POST /{key}/call/send/{secret}", send)
+	mux.Handle("DELETE /{key}/call/send/{secret}/{session}", send)
+	srv := httptest.NewServer(h.onlyWithKey(mux))
+	defer srv.Close()
+
+	secret := strings.Repeat("ab", 16)
+	voice, _ := apps.CallName(secret)
+	resp, err := http.Post(srv.URL+"/k3y/call/send/"+secret, "application/sdp", strings.NewReader("v=0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 201 || resp.Header.Get("Location") != "/k3y/call/send/"+secret+"/sess1" || resp.Header.Get("Set-Cookie") != "" {
+		t.Fatal(resp.StatusCode, resp.Header)
+	}
+	req, _ := http.NewRequest("DELETE", srv.URL+resp.Header.Get("Location"), nil)
+	http.DefaultClient.Do(req)
+	resp, _ = http.Post(srv.URL+"/k3y/call/send/live", "application/sdp", strings.NewReader("v=0"))
+	if resp.StatusCode != 404 {
+		t.Fatal("sent to the movie's path:", resp.StatusCode)
+	}
+	want := []string{"POST /call-" + voice + "/whip", "DELETE /call-" + voice + "/whip/sess1"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatal(got)
 	}
 }

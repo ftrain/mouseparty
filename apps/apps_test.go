@@ -1,6 +1,7 @@
 package apps
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -436,5 +437,46 @@ func TestKeepersOutlastTheSession(t *testing.T) {
 	b.Stop()
 	if shelf.Len() != 2 {
 		t.Fatal(shelf)
+	}
+}
+
+// Call: each one in it has a secret only they see, and a public voice made from it
+func TestCall(t *testing.T) {
+	r, _ := testRoom(ann, bob, cat)
+	c := newCall(r).(*call)
+	c.Message(r, Viewer{4, ""}, Msg{"kind": "join"}) // no name, no call
+	c.Message(r, ann, Msg{"kind": "join"})
+	c.Message(r, bob, Msg{"kind": "join"})
+	c.Message(r, bob, Msg{"kind": "live"})
+	c.Message(r, ann, Msg{"kind": "mute", "muted": true})
+	type view struct {
+		People []caller
+		Secret string
+	}
+	see := func(v Viewer) view {
+		m := c.View(v).(map[string]any)
+		s, _ := m["secret"].(string)
+		return view{m["people"].([]caller), s}
+	}
+	a, b, k := see(ann), see(bob), see(cat)
+	if len(a.People) != 2 || a.People[0].Name != "Ann" || !a.People[0].Muted || !a.People[1].Live || a.People[0].Live {
+		t.Fatal(a.People)
+	}
+	if !IsCallName(a.Secret) || !IsCallName(b.Secret) || a.Secret == b.Secret || k.Secret != "" {
+		t.Fatal("secrets:", a.Secret, b.Secret, k.Secret)
+	}
+	if v, _ := CallName(a.Secret); v != a.People[0].Voice || v == a.Secret {
+		t.Fatal("ann's voice isn't made from her secret")
+	}
+	if j, _ := json.Marshal(c.View(cat)); !strings.Contains(string(j), `"voice"`) || strings.Contains(string(j), a.Secret) {
+		t.Fatal("a secret is shown to someone else")
+	}
+	c.Left(r, ann)
+	c.Message(r, bob, Msg{"kind": "leave"})
+	if len(see(cat).People) != 0 {
+		t.Fatal(see(cat).People)
+	}
+	if _, ok := CallName("../live"); ok || IsCallName("ABCDEF0123456789ABCDEF0123456789") {
+		t.Fatal("a name that isn't one")
 	}
 }

@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -75,10 +76,26 @@ func (h *Host) startWeb() error {
 		w.Header().Set("Content-Type", "text/javascript")
 		w.Write(b)
 	})
-	whep := h.whepProxy()
+	whep := h.webrtcProxy("whep", func(*http.Request) (string, string, bool) { return "live", "whep", true })
 	mux.Handle("POST /{key}/whep", whep)
 	mux.Handle("PATCH /{key}/whep/{session}", whep)
 	mux.Handle("DELETE /{key}/whep/{session}", whep)
+	// a call (apps/call.go): a voice sent by its secret name, heard by its public one
+	send := h.webrtcProxy("whip", func(r *http.Request) (string, string, bool) {
+		secret := r.PathValue("secret")
+		voice, ok := apps.CallName(secret)
+		return "call-" + voice, "call/send/" + secret, ok
+	})
+	mux.Handle("POST /{key}/call/send/{secret}", send)
+	mux.Handle("PATCH /{key}/call/send/{secret}/{session}", send)
+	mux.Handle("DELETE /{key}/call/send/{secret}/{session}", send)
+	hear := h.webrtcProxy("whep", func(r *http.Request) (string, string, bool) {
+		voice := r.PathValue("voice")
+		return "call-" + voice, "call/hear/" + voice, apps.IsCallName(voice)
+	})
+	mux.Handle("POST /{key}/call/hear/{voice}", hear)
+	mux.Handle("PATCH /{key}/call/hear/{voice}/{session}", hear)
+	mux.Handle("DELETE /{key}/call/hear/{voice}/{session}", hear)
 	mux.Handle("GET /{key}/hls/{tail...}", h.hlsProxy())
 	mux.HandleFunc("GET /{key}/ws", func(w http.ResponseWriter, r *http.Request) { h.chat.handle(w, r) })
 	mux.HandleFunc("GET /{key}/status", h.status)
@@ -138,15 +155,21 @@ func keep(resp *http.Response, names ...string) {
 	}
 }
 
-// whepProxy: the WebRTC handshake, passed to MediaMTX (which only listens on loopback)
-func (h *Host) whepProxy() http.Handler {
-	return &httputil.ReverseProxy{
+// webrtcProxy: a WebRTC handshake, passed to MediaMTX (which only listens on
+// loopback): kind is "whep" (watching, listening) or "whip" (sending); where
+// says, for a request, the MediaMTX path and what stands for <path>/<kind> in
+// the session's own URLs, or false for nothing there
+type webrtcWhere struct{}
+
+func (h *Host) webrtcProxy(kind string, where func(r *http.Request) (path, public string, ok bool)) http.Handler {
+	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
+			path, _, _ := where(r.In)
 			tail := ""
 			if s := r.In.PathValue("session"); s != "" {
 				tail = "/" + s
 			}
-			r.Out.URL, _ = url.Parse(fmt.Sprintf("http://127.0.0.1:%d/live/whep%s", h.ports["webrtc"], tail))
+			r.Out.URL, _ = url.Parse(fmt.Sprintf("http://127.0.0.1:%d/%s/%s%s", h.ports["webrtc"], path, kind, tail))
 			r.Out.Host = ""
 			out := http.Header{}
 			for _, k := range []string{"Content-Type", "If-Match"} {
@@ -160,11 +183,21 @@ func (h *Host) whepProxy() http.Handler {
 			loc := resp.Header.Get("Location")
 			keep(resp, "Content-Type", "Etag", "Link", "Accept-Patch")
 			if loc != "" {
-				resp.Header.Set("Location", strings.Replace(loc, "/live/whep", "/"+h.Key()+"/whep", 1))
+				w := resp.Request.Context().Value(webrtcWhere{}).([2]string) // the path, and what stands for it
+				path, public := w[0], w[1]
+				resp.Header.Set("Location", strings.Replace(loc, "/"+path+"/"+kind, "/"+h.Key()+"/"+public, 1))
 			}
 			return nil
 		},
 	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, public, ok := where(r)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), webrtcWhere{}, [2]string{path, public})))
+	})
 }
 
 // hlsProxy: the fallback stream, passed to MediaMTX. MediaMTX keeps HLS viewers

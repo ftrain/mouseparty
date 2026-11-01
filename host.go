@@ -122,6 +122,11 @@ paths:
     source: publisher
     alwaysAvailable: yes
     alwaysAvailableFile: %s
+  # a voice in a call (apps/call.go), sent and heard through the viewer site;
+  # once one is sending, nobody else can send in its place
+  "~^call-[0-9a-f]{32}$":
+    source: publisher
+    overridePublisher: no
 `, ports["api"], ports["rtsp"], ports["hls"], ports["webrtc"], ice, ice, h, s)
 }
 
