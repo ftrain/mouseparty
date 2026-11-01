@@ -205,25 +205,39 @@ so a "sound is off" prompt covers the video until they turn it up.
 
 ## Building
 
-Needs a Mac with Apple Silicon, Xcode's command-line tools and Go
-(`brew install go`).
+Needs Go, Node 24 and curl. The app itself needs an Apple Silicon Mac (with
+Xcode's command-line tools); everything else, and every test, also runs on
+Linux.
 
 ```bash
-brew install mediamtx cloudflared meson ninja cmake pkg-config
-scripts/build_ffmpeg.sh                    # Mouse Party's own ffmpeg, once (about 10 minutes)
+scripts/setup.sh                           # everything, pinned and checked; says what's ready and what isn't
+scripts/test.sh                            # the pages, vet, every test, the self-test
 BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # -> dist/Mouse Party.app and dist/MouseParty-macos-arm64.zip
 ```
 
+Nothing is a git submodule. Each piece from outside comes in through a
+script that pins its version and checks every file's SHA-256, and each
+script does nothing when its piece is already built:
+
+| Piece | Script | Into |
+|---|---|---|
+| The pages' TypeScript tools, and the pages built | `scripts/build_web.sh` (`package-lock.json`) | `host_web/`, `frontend/` (checked in) |
+| MediaMTX and cloudflared, the release builds | `scripts/fetch_tools.sh` | `build/tools/` |
+| pandoc, its WebAssembly release | `scripts/fetch_pandoc.sh` | `build/pandoc/` |
+| Python with Datasette, as WebAssembly: CPython, SQLite, zlib from source; the packages hash-checked (`scripts/python-requirements.txt`) | `scripts/build_python.sh` (Mac or Linux) | `build/python/dist/` |
+| ffmpeg, static and cut down: FFmpeg, x264, Opus, FreeType, FriBidi, HarfBuzz, libass from source | `scripts/build_ffmpeg.sh` (Mac) | `build/ffmpeg/bin/` |
+| Tiny Little Office's editors, from a pinned commit | `scripts/vendor_office.sh` (only to move the pin) | `host_web/office/` (checked in) |
+| Go modules, and Wails (through `go run`) | `go.mod`, `go.sum` | Go's module cache |
+
 - **The app** is Go with a [Wails](https://wails.io) window. The build runs a
-  pinned Wails through `go run`, so there's nothing else to install. The window
-  is plain HTML, CSS and JavaScript (`frontend/`) with no build step.
-- **ffmpeg:** `scripts/build_ffmpeg.sh` builds a static ffmpeg from pinned,
-  checksummed sources (FFmpeg, x264, Opus, FreeType, FriBidi, HarfBuzz, libass),
-  cut down to what Mouse Party uses. It reads anything (every decoder and container)
-  but writes only H.264 and Opus over RTSP, PNG covers and WebVTT subtitles,
-  with only the filters the app uses: 20 MB instead of 60-plus. Homebrew's
-  ffmpeg works for trying things, but it has no `drawtext`, so the cards fail
-  with it. There's no ffprobe: the app reads files with ffmpeg alone.
+  pinned Wails through `go run`, so there's nothing else to install. The pages'
+  scripts are TypeScript (`web/`), built into `frontend/` and `host_web/` and
+  checked in, so Go alone builds and runs the app from a clone.
+- **ffmpeg:** the app's own reads anything (every decoder and container) but
+  writes only H.264 and Opus over RTSP, PNG covers and WebVTT subtitles, with
+  only the filters the app uses: 20 MB instead of 60-plus. Homebrew's ffmpeg
+  has no `drawtext`, so the cards fail with it; Linux's (`apt install ffmpeg`)
+  is fine for the tests. There's no ffprobe: the app reads files with ffmpeg alone.
 - **Running from source:** `go run github.com/wailsapp/wails/v2/cmd/wails@v2.17.0 dev -skipbindings`.
   It starts hosting whatever is in your party file's list (`~/Library/Application Support/Mouse Party/party.sqlite`).
 - **Signed builds:** `SIGN_IDENTITY="Developer ID Application: …"
@@ -234,29 +248,29 @@ BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # -> dist/Mouse Party.app and dist/Mo
 ### Tests
 
 ```bash
-scripts/test.sh
+scripts/test.sh     # every test, and the self-test
+scripts/fuzz.sh     # the fuzzers, searching further (FUZZTIME=30m)
 ```
 
-Vets everything and runs the tests. They cover:
-- a play-through: two short clips through the whole app on free ports, from
-  Play to the end of the list, with a seek
-- the chat's protocol, the session key check, and Cloudflare saying no
-- router port forwarding, against fake NAT-PMP and UPnP routers
-- subtitles and languages, and reading files with ffmpeg, checked against ffprobe
+`docs/testing.md` is how it's tested: rules one at a time; the Go and
+TypeScript contracts; every command the system takes as a graph
+(`docs/commands.md`), walked by fuzzers; the real thing, hosting through
+ffmpeg and MediaMTX on free ports; and the pages in headless Chromium. Then
+the app's self-test (`MouseParty --selftest`) hosts on free ports, touching
+neither the router nor a session that's running, and publishes a countdown.
 
-Then it runs the app's self-test (`MouseParty --selftest`). That hosts on free
-ports, touching neither the router nor a session that's running, checks the
-page, the stand-by stream and the WebRTC handshake, and publishes a short
-countdown.
+`scripts/test.sh` lists every test that skipped and why (a missing piece
+skips its tests); with `NO_SKIPS=1`, as CI sets, a skip fails it.
 
 ### GitHub
 
-`.github/workflows/mac-app.yml` runs on every push to `main` and every pull
-request, on an Apple Silicon runner:
-1. builds ffmpeg (cached until its script changes)
-2. builds the app and runs the tests
-3. runs the self-test inside the built app
-4. keeps the zip as the run's artifact
+- `.github/workflows/test.yml`, on Linux, on every push to `main` and every
+  pull request: the tests (with Datasette and the browser), then a minute of
+  each fuzzer; nightly, a quarter of an hour of each.
+- `.github/workflows/mac-app.yml`, on an Apple Silicon runner, on every push to
+  `main` and every pull request: builds ffmpeg and the Python (each cached
+  until its script changes), builds the app, runs the tests and the self-test
+  inside the built app, and keeps the zip as the run's artifact.
 
 A `v*` tag also makes a release:
 
@@ -264,7 +278,7 @@ A `v*` tag also makes a release:
 git tag v2.0.0 && git push origin v2.0.0
 ```
 
-The release carries the app and the exact sources of its ffmpeg.
+The release carries the app and the exact sources of its ffmpeg and pandoc.
 
 ## Project structure
 

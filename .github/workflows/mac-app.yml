@@ -40,19 +40,11 @@ jobs:
           cache: npm
 
       - name: MediaMTX and cloudflared
-        # Pinned release binaries, not Homebrew: the runner's Homebrew is
-        # behind (it gave MediaMTX 1.20.1, which can't read the Opus stand-by
-        # card), and these are the versions the app was tested with
-        env:
-          MEDIAMTX: v1.21.3
-          CLOUDFLARED: 2026.10.3
+        # their pinned, checked releases (scripts/fetch_tools.sh), as every build and test
+        # uses: not Homebrew's, which was behind (its MediaMTX 1.20.1 can't read the stand-by card)
         run: |
-          mkdir -p build/tools   # not vendor/: to Go that means vendored modules
-          curl -fsSL "https://github.com/bluenviron/mediamtx/releases/download/$MEDIAMTX/mediamtx_${MEDIAMTX}_darwin_arm64.tar.gz" | tar -xz -C build/tools mediamtx
-          curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/$CLOUDFLARED/cloudflared-darwin-arm64.tgz" | tar -xz -C build/tools
-          build/tools/mediamtx --version && build/tools/cloudflared --version
-          echo "MEDIAMTX_BIN=$PWD/build/tools/mediamtx" >> "$GITHUB_ENV"
-          echo "CLOUDFLARED_BIN=$PWD/build/tools/cloudflared" >> "$GITHUB_ENV"
+          scripts/fetch_tools.sh
+          echo "$PWD/build/tools" >> "$GITHUB_PATH"
 
       - name: ffmpeg, cut down (cached until scripts/build_ffmpeg.sh changes)
         id: ffmpeg
@@ -100,7 +92,10 @@ jobs:
         run: git diff --exit-code -- host_web frontend && test -z "$(git status --porcelain -- host_web frontend)"
 
       - name: Tests
-        run: PATH="$PWD/build/tools:$PATH" scripts/test.sh
+        env:
+          NO_SKIPS: 1 # a test that skips is a layer gone missing (scripts/testreport); the browser's are Linux's (test.yml)
+          ALLOW_SKIPS: ^(TestPreviewAudioCard|TestBrowser)$
+        run: scripts/test.sh
 
       - name: Self-test the built app
         # hosts from this runner (no router involved), checks the page, the

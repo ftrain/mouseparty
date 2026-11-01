@@ -12,7 +12,7 @@ import (
 func TestPreviewAudioCard(t *testing.T) {
 	dir := os.Getenv("MOUSEPARTY_PREVIEW")
 	if dir == "" {
-		t.Skip()
+		t.Skip("a tool, not a test: MOUSEPARTY_PREVIEW=<dir> makes a preview")
 	}
 	graph, files := audioCard(SoundInfo{Title: "So What", Artist: "Miles Davis"}, "song", 2, "0:a:0", nil)
 	defer removeAll(files)

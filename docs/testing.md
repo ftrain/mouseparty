@@ -81,6 +81,11 @@ failing one to the fewest steps.
 
 - `go test ./...` (and `scripts/test.sh`) runs each fuzzer's seeds, and
   every input that ever failed (kept in `testdata/fuzz/`, `apps/testdata/fuzz/`).
+- A missing piece skips its tests (no MediaMTX, no Datasette Python, no
+  Playwright), and a skip passes quietly in plain `go test`. So
+  `scripts/test.sh` lists every skip and why (`scripts/testreport`), and with
+  `NO_SKIPS=1`, as both workflows set, a skip fails the run unless it matches
+  `ALLOW_SKIPS`. `scripts/setup.sh` gets every piece.
 - `scripts/fuzz.sh` searches further: two minutes each (`FUZZTIME=30m`;
   `FUZZWINDOWTIME` for the window's), or one (`scripts/fuzz.sh FuzzApps`).
 - CI (`.github/workflows/test.yml`): `scripts/test.sh` (with the browser
@@ -124,7 +129,5 @@ same again. It skips without Node and Playwright, ffmpeg and MediaMTX, and with
 - **The sealed party** (`Unlock`, `SetPasscode`, `StartOver`, and the
   window's sheets for them): tested in `store_test.go`, not fuzzed (Argon2 is
   slow by design).
-- **Datasette**: its tests skip without the WebAssembly Python
-  (`scripts/build_python.sh`), as they do in CI on Linux.
 - **Safari and Firefox, and phones.** The browser walk is Chromium's, at one
   size; the phone layouts (tabs, upright and on its side) aren't walked.

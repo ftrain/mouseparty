@@ -20,6 +20,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ -x build/ffmpeg/bin/ffmpeg ]; then export PATH="$PWD/build/ffmpeg/bin:$PATH"; fi
+scripts/fetch_tools.sh   # MediaMTX, pinned
+export PATH="$PWD/build/tools:$PATH"
 FUZZTIME="${FUZZTIME:-2m}"
 
 run() { # package, fuzzer, how long, anything more for go test

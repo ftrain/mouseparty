@@ -3,9 +3,10 @@
 # hosting from the Mac needs inside it: MediaMTX and cloudflared, and optionally
 # ffmpeg, and pandoc and Python as WebAssembly (scripts/fetch_pandoc.sh, build_python.sh). Apple Silicon only (macOS 13+, Go's own minimum).
 #
-# MediaMTX and cloudflared are single static Go binaries, so they are copied in
-# from Homebrew (brew install mediamtx cloudflared), or from MEDIAMTX_BIN /
-# CLOUDFLARED_BIN. Without cloudflared the app still hosts, with a direct link only.
+# MediaMTX and cloudflared are single static Go binaries, copied in as their
+# pinned, checked releases (scripts/fetch_tools.sh), or from MEDIAMTX_BIN /
+# CLOUDFLARED_BIN to try another; CLOUDFLARED_BIN=none builds without it (the app
+# still hosts, with a direct link only).
 #
 #   scripts/build_mac_app.sh                   uses this Mac's ffmpeg (Homebrew) at runtime
 #   BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   ships Mouse Party's own cut-down ffmpeg inside the app
@@ -45,10 +46,11 @@ TOOLS+=("$FFMPEG_DIR/ffmpeg")
 fi
 
 # Hosting: MediaMTX (required) and cloudflared (optional), both static
-MEDIAMTX_BIN=${MEDIAMTX_BIN:-$(command -v mediamtx || true)}
-[ -x "$MEDIAMTX_BIN" ] || { echo "No mediamtx: brew install mediamtx, or set MEDIAMTX_BIN"; exit 1; }
+if [ -z "${MEDIAMTX_BIN:-}" ] || [ -z "${CLOUDFLARED_BIN:-}" ]; then scripts/fetch_tools.sh; fi
+MEDIAMTX_BIN=${MEDIAMTX_BIN:-build/tools/mediamtx}
+[ -x "$MEDIAMTX_BIN" ] || { echo "No mediamtx at $MEDIAMTX_BIN"; exit 1; }
 TOOLS+=("$(realpath "$MEDIAMTX_BIN")")
-CLOUDFLARED_BIN=${CLOUDFLARED_BIN:-$(command -v cloudflared || true)}
+CLOUDFLARED_BIN=${CLOUDFLARED_BIN:-build/tools/cloudflared}
 if [ -x "$CLOUDFLARED_BIN" ]; then
     TOOLS+=("$(realpath "$CLOUDFLARED_BIN")")
 else
