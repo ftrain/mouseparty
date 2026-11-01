@@ -418,6 +418,7 @@ func socketWalk(t *testing.T, data []byte) {
 		}
 	}()
 	c := &choices{b: data}
+	var slept time.Duration
 	for step := 0; step < 200 && !c.done(); step++ {
 		switch op := c.n(20); {
 		case op == 0 && len(pages) < 5:
@@ -430,8 +431,11 @@ func socketWalk(t *testing.T, data []byte) {
 		case op == 2 && len(pages) > 0: // not JSON, or a binary frame
 			pages[c.n(len(pages))].ws.WriteMessage([]int{websocket.TextMessage, websocket.BinaryMessage}[c.n(2)],
 				[][]byte{[]byte("{"), []byte(`"x"`), []byte(`[1,2]`), []byte(`{"type":7}`), {0xff, 0xfe}, []byte(`null`)}[c.n(6)])
-		case op == 3:
-			time.Sleep(time.Duration(c.n(4)) * 300 * time.Millisecond) // past the once-a-second limits
+		case op == 3: // past the once-a-second limits; three seconds a walk at most, or a walk of waits is a hang
+			if d := time.Duration(c.n(4)) * 300 * time.Millisecond; slept+d <= 3*time.Second {
+				time.Sleep(d)
+				slept += d
+			}
 		default:
 			if len(pages) == 0 {
 				p := dial()
