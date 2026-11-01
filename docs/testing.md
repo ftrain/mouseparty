@@ -130,7 +130,10 @@ times, and without a limit that stalls the search for minutes (the fuzzer report
   saved and read back; Use Encryption with two passcodes that differ, then the
   same twice; Change Passcode with a wrong one, then the right one; the app
   quit and started again from the same party file, locked, refusing the old
-  passcode and opening with the new, with the whole list; then unsealed.
+  passcode and opening with the new, with the whole list; then unsealed. Then
+  sealed again, restarted, and the passcode "forgotten": Forgot the passcode?,
+  Back, Forgot again, Start Over, and a new empty party, the locked one set
+  aside beside it (the test checks the file is there).
 
 Any uncaught error on any page fails it. Each run takes a new seed, printed
 when it fails: `BROWSER_SEED=<seed> go test -run TestBrowser -v .` walks the
@@ -140,7 +143,6 @@ same again. It skips without Node and Playwright, ffmpeg and MediaMTX, and with
 
 ## What isn't covered yet
 
-- **Start Over** (a forgotten passcode): in `store_test.go`, not the browser.
 - **Wrong passcodes, fuzzed**: Argon2 is slow by design, so the walk tries one
   of each, not many.
 - **Safari and Firefox.** The walk is Chromium's. Playwright drives Firefox

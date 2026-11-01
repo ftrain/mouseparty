@@ -30,6 +30,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -188,5 +189,9 @@ func TestBrowser(t *testing.T) {
 	<-done
 	if err := cmd.Wait(); err != nil {
 		t.Fatalf("the browser walk failed (%v): BROWSER_SEED=%s go test -run TestBrowser -v . walks it again", err, seed)
+	}
+	// it started over at the end: the locked party was set aside beside the new one, not deleted
+	if aside, _ := filepath.Glob(filepath.Join(filepath.Dir(partyPath()), "party (locked *).sqlite")); len(aside) != 1 {
+		t.Fatalf("after starting over, %d locked parties set aside (want 1)", len(aside))
 	}
 }

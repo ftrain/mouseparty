@@ -11,7 +11,8 @@
 //    the other; a call between them, sound both ways.
 // 3. The party file through the window's own sheets: Settings (refused while
 //    playing, and as broken JSON, then saved), sealed with a passcode, the
-//    passcode changed, the app restarted locked and opened with it, unsealed.
+//    passcode changed, the app restarted locked and opened with it, unsealed;
+//    then sealed again and the passcode forgotten: Start Over.
 //
 // Any uncaught error on any page fails it. BROWSER_SHOTS=<dir> keeps a picture
 // of each app as Ann's page shows it, once the robots have played it.
@@ -446,7 +447,29 @@ async function party(page) {
     await sheetGone(page, 'unsealing');
     await viewIs(page, 'unsealed', () => !window.__view.sealed);
     await windowMatches(page, 'the party file sealed, reopened and unsealed');
-    console.log(`party: settings saved (refused ${wasPlaying ? 'while playing, and ' : ''}as broken JSON); sealed, passcode changed, restarted locked, opened with ${rows} rows, unsealed`);
+
+    // the passcode forgotten: sealed again, restarted, and started over (the locked file set aside, never deleted)
+    await page.evaluate(() => window.__ask('on'));
+    await sheetUp(page, 'Use Encryption');
+    await fillSheet(page, { next: 'forgotten', again: 'forgotten' });
+    await sheetGone(page, 'sealing again');
+    await viewIs(page, 'sealed again', () => window.__view.sealed);
+    await fetch(`${base}/restart`, { method: 'POST' });
+    await viewIs(page, 'locked again', () => window.__view && window.__view.locked);
+    await sheetUp(page, 'Mouse Party');
+    await page.click('#sheet button.quiet'); // Forgot the passcode?
+    await sheetUp(page, 'Start a New Party?');
+    await page.click('#sheet button.quiet'); // Back
+    await sheetUp(page, 'Mouse Party');
+    await page.click('#sheet button.quiet');
+    await sheetUp(page, 'Start a New Party?');
+    await page.click('#sheet .go');
+    await sheetGone(page, 'starting over');
+    await viewIs(page, 'a new party', () => !window.__view.locked && !window.__view.sealed && window.__view.rows.length === 0);
+    await windowMatches(page, 'starting over');
+    console.log(
+        `party: settings saved (refused ${wasPlaying ? 'while playing, and ' : ''}as broken JSON); sealed, passcode changed, restarted locked, opened with ${rows} rows, unsealed; sealed again, forgotten, started over`,
+    );
 }
 
 (async () => {
