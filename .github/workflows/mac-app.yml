@@ -93,8 +93,8 @@ jobs:
 
       - name: Tests
         env:
-          NO_SKIPS: 1 # a test that skips is a layer gone missing (scripts/testreport); the browser's are Linux's (test.yml)
-          ALLOW_SKIPS: ^(TestPreviewAudioCard|TestBrowser)$
+          NO_SKIPS: 1 # a test that skips is a layer gone missing (scripts/testreport); the browser's and ffprobe's are Linux's (test.yml)
+          ALLOW_SKIPS: ^(TestPreviewAudioCard|TestBrowser|TestInspectAgreesWithFFprobe)$
         run: scripts/test.sh
 
       - name: Self-test the built app

@@ -10,7 +10,7 @@
 #
 #   scripts/build_mac_app.sh                   uses this Mac's ffmpeg (Homebrew) at runtime
 #   BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   ships Mouse Party's own cut-down ffmpeg inside the app
-#   SIGN_IDENTITY="Developer ID Application: ..." NOTARY_PROFILE=openhouseparty \
+#   SIGN_IDENTITY="Developer ID Application: ..." NOTARY_PROFILE=mouseparty \
 #       BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   for other Macs: signed + notarized
 #
 # NOTARY_PROFILE is a keychain profile from `xcrun notarytool store-credentials`.

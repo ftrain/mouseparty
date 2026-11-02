@@ -1,7 +1,7 @@
 # Mouse Party
 
 A macOS app for having friends over online: watching movies (and listening to music, reading PDFs and looking through SQLite databases) together, with chat and games, hosted entirely from the host's
-own Mac, and leaving nothing behind when it quits. It was called TubeYap, then Mouse Party, until October 2026 (the repo was ftrain/tubeyap, then ftrain/mouseparty). There is no server: the Mac
+own Mac, and leaving nothing behind when it quits. It was called TubeYap until October 2026, then for a few days Open House Party (the repo was ftrain/tubeyap, then ftrain/openhouseparty; it's ftrain/mouseparty now). There is no server: the Mac
 runs MediaMTX and a small Go web server, and friends connect to it directly (or
 through a Cloudflare quick tunnel). Go, with a Wails v2 window; well-known libraries over anything hand-written.
 
