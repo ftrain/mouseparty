@@ -24,7 +24,7 @@ concurrency:                   # a newer push to the same branch replaces a buil
 
 jobs:
   build:
-    runs-on: macos-14          # Apple Silicon; the app is arm64 only
+    runs-on: macos-15          # Apple Silicon; the app is arm64 only
     permissions:
       contents: write          # to create the release
     steps:

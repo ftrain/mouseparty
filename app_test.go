@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+// Every test's HOME is its own data folder (dataDir): on Linux, XDG_CONFIG_HOME
+// (set on GitHub's runners) would put them all in one, each seeing the others' lists
+func TestMain(m *testing.M) {
+	os.Unsetenv("XDG_CONFIG_HOME")
+	os.Exit(m.Run())
+}
+
 // The whole app without its window: host on free ports (no router, no tunnel),
 // add three short clips and lose the third (greyed out), Play, and watch it count
 // down, seek, switch to the second mid-seek, skip the third and stop at the end.
