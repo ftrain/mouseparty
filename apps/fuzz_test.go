@@ -426,7 +426,7 @@ func TestCommandsAreTheScripts(t *testing.T) {
 		}
 		var want []string
 		src := ts(k.Script())
-		if out := regexp.MustCompile(`(?s)type Out = .*?;\n`).FindString(src); out != "" {
+		if out := regexp.MustCompile(`(?s)type Out =\s.*?;\n`).FindString(src); out != "" {
 			want = kindsIn(out)
 			if strings.Contains(out, "LobbyMsg") {
 				want = append(want, lobby...)

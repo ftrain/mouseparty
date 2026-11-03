@@ -67,6 +67,9 @@ type Chat struct {
 	app        func(from apps.Viewer, m map[string]any) // a message for an app open (apphost.go)
 	appControl func(from apps.Viewer, m map[string]any) // a page opening or closing an app
 	docAt      func(token, at string, back bool)        // a page went to another page of the database up, or back
+	docPage    func(name, token string, page int)       // a viewer rested on a page of the document up (pace.go)
+	docPages   func(token string, pages int)            // a viewer laid it out as this many
+	docPace    func(name, token string, seconds int)    // a viewer set everyone's pace
 	joined     func(v apps.Viewer)                      // a socket opened, or its viewer took a name
 	left       func(v apps.Viewer)                      // a socket closed
 	mu         sync.Mutex
@@ -198,7 +201,8 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	var last, lastControl, lastAt time.Time
+	var last, lastControl, lastAt, lastPage, lastPages, lastPace time.Time
+	viewing := "" // the page this viewer was last said to be viewing (its document's token, and its number)
 	appWindow, appCount := time.Now(), 0
 	for {
 		kind, data, err := ws.ReadMessage()
@@ -258,6 +262,34 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 			if time.Since(lastAt) > 250*time.Millisecond && c.docAt != nil && len(at) <= docAtMax && (back || strings.HasPrefix(at, "/")) {
 				lastAt = time.Now()
 				c.docAt(token, at, back)
+			}
+		case "doc_page":
+			token, _ := m["token"].(string)
+			page, ok := m["page"].(float64)
+			at := fmt.Sprint(token, " ", page)
+			if ok && page == float64(int(page)) && at != viewing && time.Since(lastPage) > time.Second && c.docPage != nil {
+				lastPage, viewing = time.Now(), at
+				c.mu.Lock()
+				name := conn.name
+				c.mu.Unlock()
+				c.docPage(name, token, int(page))
+			}
+		case "doc_pages":
+			token, _ := m["token"].(string)
+			pages, ok := m["pages"].(float64)
+			if ok && pages == float64(int(pages)) && time.Since(lastPages) > time.Second && c.docPages != nil {
+				lastPages = time.Now()
+				c.docPages(token, int(pages))
+			}
+		case "doc_pace":
+			token, _ := m["token"].(string)
+			pace, ok := m["pace"].(float64)
+			if ok && pace == float64(int(pace)) && time.Since(lastPace) > time.Second && c.docPace != nil {
+				lastPace = time.Now()
+				c.mu.Lock()
+				name := conn.name
+				c.mu.Unlock()
+				c.docPace(name, token, int(pace))
 			}
 		case "app":
 			if time.Since(appWindow) > time.Second {

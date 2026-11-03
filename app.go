@@ -307,10 +307,10 @@ func (a *App) view() View {
 }
 
 func (a *App) slider(state string) Slider {
-	if state == "doc" && a.current.kind() != "pdf" { // a database or another document: no slider; viewers look through it
+	if state == "doc" && !a.current.paged() { // a database, or a document not laid out yet: no slider; viewers look through it
 		return Slider{Max: 1}
 	}
-	if state == "doc" { // a PDF: the slider is its pages
+	if state == "doc" { // a PDF or another document: the slider is its pages
 		d := a.current
 		return Slider{On: d.Pages > 1, Min: 1, Max: float64(max(2, d.Pages)), Value: float64(d.Page),
 			Label: fmt.Sprintf("%d / %d", d.Page, d.Pages), Pages: true}
@@ -722,6 +722,7 @@ func (a *App) finished(code int) {
 	if a.host != nil && a.host.Running() {
 		a.host.ClearSubtitles()
 		a.host.SetShowing("", "")
+		a.host.SetPlaying("", "", false)
 		a.host.ClearDocument()
 	}
 	if a.docDone { // turned past a PDF's last page: it stopped because it's finished
@@ -772,10 +773,13 @@ func (a *App) turnPage(step int) {
 		return
 	}
 	d := a.current
-	if d.kind() != "pdf" && step < 0 {
+	if !d.paged() && step < 0 {
 		return
 	}
-	if d.kind() != "pdf" || d.Page+step > d.Pages { // past a PDF's last page, or on from a database or another document
+	if d.Page+step < 1 {
+		return
+	}
+	if !d.paged() || d.Page+step > d.Pages { // past a PDF's last page, or on from a database or another document
 		a.log("Finished " + filepath.Base(d.Path) + ".")
 		a.docDone = true
 		a.player.Stop()
@@ -785,13 +789,34 @@ func (a *App) turnPage(step int) {
 }
 
 func (a *App) showPage(page int) {
-	if a.state() != "doc" || a.current.kind() != "pdf" {
+	if a.state() != "doc" || !a.current.paged() {
 		return
 	}
 	d := a.current
 	d.Page = max(1, min(d.Pages, page))
 	a.host.SetPage(d.Page)
 	a.save() // a PDF opens again where it was left
+}
+
+// pacedTurn: the pace turns everyone's page; at the last it stops there (only the host moves on to what follows)
+func (a *App) pacedTurn() {
+	if a.state() != "doc" || !a.current.paged() {
+		return
+	}
+	if d := a.current; d.Page >= d.Pages {
+		a.host.EndPace()
+	} else {
+		a.showPage(d.Page + 1)
+	}
+}
+
+// docPages: viewers laid out the document up as this many pages; it has a slider now, and keeps the count
+func (a *App) docPages(pages int) {
+	if a.state() == "doc" && a.current.kind() == "text" && a.current.Pages != pages {
+		a.current.Pages = pages
+		a.current.Page = max(1, min(a.current.Page, pages))
+		a.save()
+	}
 }
 
 // docAt: viewers went to another page of the database up; it opens there next time
@@ -951,6 +976,7 @@ func (a *App) offerSubtitles(it *Item) {
 		} else {
 			a.host.SetShowing("", "")
 		}
+		a.host.SetPlaying(it.Path, displayTitle(it.Path), it.isDoc()) // Stickies: on pages (a database is one page), or moments
 	}
 	if it.isDoc() || subsSettings(it).Mode != "viewers" {
 		return
@@ -1067,6 +1093,8 @@ func (a *App) hostStart() {
 	h.MapPorts = a.cfg.OpenRouterPorts
 	h.Party = a.party
 	h.DocAt = func(at string) { a.do(func() { a.docAt(at) }) }
+	h.DocPages = func(pages int) { a.do(func() { a.docPages(pages) }) }
+	h.Paced = func() { a.do(a.pacedTurn) }
 	if a.hostSetup != nil {
 		a.hostSetup(h)
 	}
@@ -1151,7 +1179,7 @@ func (a *App) schedule() []ScheduleRow {
 			s := int64(*start + 0.5)
 			r.Start = &s
 		}
-		if it.kind() == "pdf" {
+		if it.kind() == "pdf" || it.kind() == "text" && it.Pages > 0 {
 			pages := it.Pages
 			r.Pages = &pages
 		}

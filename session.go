@@ -42,6 +42,7 @@ type document struct {
 	Page  int      `json:"page"`
 	At    string   `json:"at"`   // a database: the page of it everyone is on ("" its first; datasette.go)
 	Back  bool     `json:"back"` // and there's one before it to go back to
+	Pace  int      `json:"pace"` // seconds a page, everyone's (0: off; pace.go), as it's sent
 	trail []string // the pages before it
 	// another document (text): read by pandoc as it goes up; ready when its words are, at /doc/<token>
 	App   string `json:"app,omitempty"` // the editor it's drawn by: write, deck or sheet
@@ -187,6 +188,7 @@ func (h *Host) SetDocument(d document) {
 	h.mu.Unlock()
 	old.stop()
 	h.broadcast(h.docJSON())
+	h.repace()
 	if d.Kind == "text" {
 		go h.readText(h.doc)
 	}
@@ -270,6 +272,7 @@ func (h *Host) SetPage(page int) {
 	h.mu.Unlock()
 	if changed {
 		h.broadcast(h.docJSON())
+		h.repace() // a whole interval on this page before the pace turns it
 	}
 }
 
@@ -280,6 +283,7 @@ func (h *Host) ClearDocument() {
 	h.doc, h.datasette = nil, nil
 	h.mu.Unlock()
 	old.stop()
+	h.repace()
 	if had {
 		h.broadcast(h.docJSON())
 	}
@@ -292,6 +296,7 @@ func (h *Host) docJSON() map[string]any {
 		return map[string]any{"type": "doc", "doc": nil}
 	}
 	d := *h.doc
+	d.Pace = h.pace
 	return map[string]any{"type": "doc", "doc": d}
 }
 

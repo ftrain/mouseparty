@@ -312,6 +312,7 @@ function show(m, live) {
 	if (m.type === "system") {
 		el.className = "msg system";
 		el.textContent = m.text;
+		pageLink(m, el);
 	} else {
 		el.className = "msg";
 		const time = (/* @__PURE__ */ new Date(m.at * 1e3)).toLocaleTimeString([], {
@@ -697,6 +698,8 @@ setInterval(() => {
 const docEl = byId("doc");
 const docScroll = byId("docScroll");
 const docZoom = byId("docZoom");
+const docSlider = byId("docSlider");
+const docFollow = byId("docFollow");
 let doc = null;
 let pdf = null;
 let pdfTask = null;
@@ -707,10 +710,125 @@ let renderTask = null;
 let drawing = false;
 let drawAgain = false;
 let drawnPage = null;
+let following = true;
+let myPage = 1;
+let restTimer;
+const REST_MS = 1200;
+const PACES = [
+	0,
+	300,
+	180,
+	120,
+	90,
+	60,
+	45,
+	30,
+	20,
+	15,
+	10,
+	5
+];
+const pageWord = (d) => d.app === "deck" ? "slide" : "page";
+function paceWords(seconds, word) {
+	if (!seconds) return "pace: off";
+	if (seconds === 60) return `a ${word} a minute`;
+	if (seconds >= 120 && seconds % 60 === 0) return `a ${word} every ${seconds / 60} min`;
+	return `a ${word} every ${seconds} s`;
+}
+const shownPage = () => !doc ? 1 : Math.max(1, Math.min(doc.pages || 1, following ? doc.page : myPage));
+function showBar() {
+	if (!doc || doc.kind === "db") return;
+	const word = pageWord(doc);
+	const paged = doc.pages > 0;
+	docSlider.hidden = !paged || doc.pages < 2;
+	docSlider.min = "1";
+	docSlider.max = String(Math.max(2, doc.pages));
+	if (document.activeElement !== docSlider || following) docSlider.value = String(shownPage());
+	byId("docPage").textContent = paged ? `${shownPage()} / ${doc.pages}` : "";
+	docFollow.hidden = following || !paged;
+	docFollow.textContent = `follow · ${doc.page}`;
+	docFollow.title = `Back to the ${word} everyone is on, ${doc.page}`;
+	byId("docPace").hidden = !paged;
+	byId("docPaceText").textContent = paceWords(doc.pace || 0, word);
+	const i = PACES.indexOf(doc.pace || 0);
+	byId("docSlower").disabled = i <= 0;
+	byId("docFaster").disabled = i === PACES.length - 1;
+}
+function drawShown() {
+	showBar();
+	if (doc?.kind === "text") drawTextPage();
+	else drawPage();
+}
+function goToPage(page, say) {
+	if (!doc || !(doc.pages > 0)) return;
+	myPage = Math.max(1, Math.min(doc.pages, page));
+	following = myPage === doc.page;
+	drawShown();
+	clearTimeout(restTimer);
+	if (say) {
+		const token = doc.token, at = myPage;
+		restTimer = setTimeout(() => {
+			if (doc?.token === token && shownPage() === at) send({
+				type: "doc_page",
+				token,
+				page: at
+			});
+		}, REST_MS);
+	}
+}
+docSlider.addEventListener("input", () => goToPage(Number(docSlider.value), true));
+docFollow.addEventListener("click", () => {
+	following = true;
+	clearTimeout(restTimer);
+	drawShown();
+});
+function changePace(step) {
+	if (!doc) return;
+	const i = PACES.indexOf(doc.pace || 0);
+	const next = PACES[Math.max(0, Math.min(PACES.length - 1, (i < 0 ? 0 : i) + step))];
+	if (next !== (doc.pace || 0)) send({
+		type: "doc_pace",
+		token: doc.token,
+		pace: next
+	});
+}
+byId("docSlower").addEventListener("click", () => changePace(-1));
+byId("docFaster").addEventListener("click", () => changePace(1));
+document.addEventListener("keydown", (e) => {
+	if (!doc || docEl.hidden || doc.kind === "db" || !(doc.pages > 0) || e.metaKey || e.ctrlKey || e.altKey) return;
+	const t = e.target;
+	if (t && t !== docSlider && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+	if (t && t.closest && t.closest(".win")) return;
+	const step = e.key === "ArrowRight" || e.key === "PageDown" ? 1 : e.key === "ArrowLeft" || e.key === "PageUp" ? -1 : 0;
+	if (!step || t === docSlider) return;
+	e.preventDefault();
+	goToPage(shownPage() + step, true);
+});
+function pageLink(m, el) {
+	if (!m.doc || !m.page) return;
+	const a = Object.assign(document.createElement("button"), {
+		className: "go-page",
+		textContent: "go there"
+	});
+	a.addEventListener("click", () => {
+		if (doc?.token === m.doc) goToPage(m.page, false);
+	});
+	a.hidden = doc?.token !== m.doc;
+	a.dataset.doc = m.doc;
+	el.append(" ", a);
+}
+function pageLinksFor() {
+	for (const a of box.querySelectorAll(".go-page")) a.hidden = a.dataset.doc !== doc?.token;
+}
 async function setDoc(d) {
 	if (ended) return;
 	const was = doc;
 	doc = d || null;
+	if (!doc || was?.token !== doc.token) {
+		following = true;
+		clearTimeout(restTimer);
+	}
+	pageLinksFor();
 	docEl.hidden = !doc;
 	app.classList.toggle("reading", !!doc);
 	showSoundButton();
@@ -723,13 +841,13 @@ async function setDoc(d) {
 		closePdf();
 		return showDb(doc);
 	}
+	showBar();
 	if (doc.kind === "text") {
 		closePdf();
-		return showText(doc);
+		return showText(doc, was);
 	}
-	byId("docPage").textContent = `${doc.page} / ${doc.pages}`;
 	if (pdfToken === doc.token) {
-		if (!was || was.page !== doc.page) drawPage();
+		if (!was || shownPage() !== drawnPage) drawPage();
 		return;
 	}
 	closePdf();
@@ -758,7 +876,7 @@ function closePdf() {
 	if (renderTask) renderTask.cancel();
 	if (pdfTask) pdfTask.destroy();
 	pdf = pdfTask = pdfToken = drawnPage = null;
-	docScroll.textContent = "";
+	if (doc?.kind !== "text") docScroll.textContent = "";
 }
 async function drawPage() {
 	if (!pdf || !doc) return;
@@ -768,7 +886,7 @@ async function drawPage() {
 		return;
 	}
 	drawing = true;
-	const loaded = pdf, number = Math.min(doc.page, pdf.numPages);
+	const loaded = pdf, number = Math.min(shownPage(), pdf.numPages);
 	try {
 		const page = await loaded.getPage(number);
 		const size = page.getViewport({ scale: 1 });
@@ -802,15 +920,26 @@ async function drawPage() {
 }
 let dbFrame = null;
 let dbToken = null;
-const dbTell = () => dbFrame?.contentWindow?.postMessage({
-	type: "go",
-	at: doc?.at || "/",
-	back: !!doc?.back
-}, location.origin);
+let dbHere = "/";
+let dbLeft = null;
+const dbTell = () => {
+	let at = doc?.at || "/";
+	if (dbLeft !== null) {
+		if (at === dbLeft) at = dbHere;
+		else dbLeft = null;
+	}
+	dbFrame?.contentWindow?.postMessage({
+		type: "go",
+		at,
+		back: !!doc?.back || dbLeft !== null
+	}, location.origin);
+};
 function showDb(d) {
 	if (dbToken === d.token) return dbTell();
 	closeDb();
 	dbToken = d.token;
+	dbHere = d.at || "/";
+	dbLeft = null;
 	dbFrame = document.createElement("iframe");
 	dbFrame.className = "doc-data";
 	dbFrame.title = d.title;
@@ -824,28 +953,38 @@ function closeDb() {
 }
 window.addEventListener("message", (e) => {
 	if (!dbFrame || e.source !== dbFrame.contentWindow || e.origin !== location.origin) return;
-	if (e.data?.type === "went" && typeof e.data.at === "string") send({
-		type: "doc_at",
-		token: dbToken,
-		at: e.data.at
-	});
+	if (e.data?.type === "went" && typeof e.data.at === "string") {
+		const was = doc?.at || "/";
+		if (e.data.at !== was) [dbHere, dbLeft] = [e.data.at, was];
+		send({
+			type: "doc_at",
+			token: dbToken,
+			at: e.data.at
+		});
+	}
 	if (e.data?.type === "back") send({
 		type: "doc_at",
 		token: dbToken,
 		back: true
 	});
 });
-let textEl = null;
+let textPages = null;
+let pageSvg = null;
 let textKey = "";
-async function showText(d) {
+async function showText(d, was) {
 	const key = `${d.token}|${d.ready ? 1 : 0}|${d.error || ""}`;
-	if (key === textKey) return;
+	if (key === textKey) {
+		if (textPages && d.pages !== textPages.length) send({
+			type: "doc_pages",
+			token: d.token,
+			pages: textPages.length
+		});
+		if (!was || shownPage() !== drawnPage) drawTextPage();
+		return;
+	}
 	closeText();
 	textKey = key;
-	const el = textEl = document.createElement("div");
-	el.className = "doc-text";
-	docEl.append(el);
-	const note = (words) => el.replaceChildren(Object.assign(document.createElement("p"), {
+	const note = (words) => docScroll.replaceChildren(Object.assign(document.createElement("p"), {
 		className: "doc-text-note",
 		textContent: words
 	}));
@@ -860,35 +999,60 @@ async function showText(d) {
 			/* @vite-ignore */
 			`${BASE}/apps/office.js`
 )).library(BASE);
-		if (textEl !== el) return;
-		el.textContent = "";
-		await lib.editors.mount(app, text, el, () => {}, {
-			readOnly: true,
-			fill: true
+		if (textKey !== key) return;
+		const def = lib.editors.appOf(app);
+		if (!def) throw new Error(`no ${app}`);
+		const pages = def.view(text);
+		if (!pages.length) throw new Error("no pages");
+		textPages = pages;
+		pageSvg = lib.editors.pageSvg;
+		if (doc && doc.token === d.token && doc.pages !== pages.length) send({
+			type: "doc_pages",
+			token: d.token,
+			pages: pages.length
 		});
+		drawTextPage();
 	} catch (e) {
 		console.log("document:", e);
-		if (textEl === el) note(`Couldn’t open ${d.title}`);
+		if (textKey === key) note(`Couldn’t open ${d.title}`);
 	}
 }
+function drawTextPage() {
+	if (!textPages || !doc || doc.kind !== "text") return;
+	const number = Math.min(shownPage(), textPages.length);
+	const page = textPages[number - 1];
+	const w = docScroll.clientWidth, h = docScroll.clientHeight;
+	const scale = fitWidth ? w / page.w : Math.min(w / page.w, h / page.h);
+	const holder = document.createElement("div");
+	holder.innerHTML = pageSvg(page);
+	const svg = holder.querySelector("svg");
+	if (!svg) return;
+	svg.setAttribute("width", String(Math.floor(page.w * scale)));
+	svg.setAttribute("height", String(Math.floor(page.h * scale)));
+	svg.classList.add("doc-page");
+	docScroll.replaceChildren(svg);
+	if (drawnPage !== number) docScroll.scrollTop = 0;
+	drawnPage = number;
+}
 function closeText() {
-	textEl?.remove();
-	textEl = null;
+	textPages = null;
 	textKey = "";
+	drawnPage = null;
+	if (doc?.kind !== "pdf") docScroll.textContent = "";
 }
 function toggleFit() {
 	fitWidth = !fitWidth;
 	docEl.classList.toggle("fit-width", fitWidth);
 	docZoom.textContent = fitWidth ? "whole page" : "fit width";
 	docZoom.title = fitWidth ? "Show the whole page (or double-click it)" : "Fit the width (or double-click the page)";
-	drawPage();
+	drawShown();
 }
 docZoom.addEventListener("click", toggleFit);
 docScroll.addEventListener("dblclick", toggleFit);
 let redrawTimer;
 new ResizeObserver(() => {
 	clearTimeout(redrawTimer);
-	redrawTimer = setTimeout(drawPage, 150);
+	redrawTimer = setTimeout(drawShown, 150);
 }).observe(docScroll);
 if (myName) showChatInput();
 connectChat();
@@ -929,7 +1093,7 @@ const icon = (name) => typeof lucide === "function" ? lucide(name) : "";
 const compact = () => app.dataset.mode !== "side";
 function firstPlace(size) {
 	const step = .035 * ([...wins.values()].filter((w) => !w.info.glass).length % 5);
-	if (size === "full") return {
+	if (size === "full" || size === "bare") return {
 		x: 0,
 		y: 0,
 		w: 1,
@@ -968,7 +1132,7 @@ async function openApp(info) {
 	let w = wins.get(info.id);
 	if (!w) {
 		const el = document.createElement("div");
-		el.className = "win" + (info.glass ? " glass" : "") + (["office", "reel"].includes(info.script) ? " office" : "");
+		el.className = "win" + (info.glass ? " glass" : "") + (info.size === "bare" ? " bare" : "") + (["office", "reel"].includes(info.script) ? " office" : "");
 		el.innerHTML = "<div class=\"win-bar\"><span class=\"win-icon\"></span><span class=\"win-title\"></span><input class=\"win-glass\" type=\"range\" min=\"2\" max=\"100\" title=\"See-through or solid (for you)\" aria-label=\"How solid this window is\"><button class=\"win-btn win-min\" title=\"Hide it (for you)\">–</button><button class=\"win-btn win-close\" title=\"Close it for everyone\">✕</button></div><div class=\"win-body\"></div>" + [
 			"nw",
 			"ne",
@@ -1052,7 +1216,15 @@ async function openApp(info) {
 				type: "app_open",
 				name
 			});
-		}
+		},
+		close: () => send({
+			type: "app_close",
+			id: info.id
+		}),
+		now: () => ({
+			position: clock && !doc ? clock.position + (performance.now() - clock.at) / 1e3 : null,
+			page: !doc ? null : doc.kind === "db" ? 1 : shownPage()
+		})
 	};
 	w.inst = start(ctx, info.view) || {};
 }

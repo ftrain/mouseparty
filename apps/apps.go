@@ -66,7 +66,7 @@ type Kind struct {
 	Title string
 	Icon  string // a Lucide icon's name, for the viewers' app picker (host_web/apps/icons.js)
 	Glass bool   // see-through, drawn on the picture itself (and lined up with it), not on a page of its own
-	Size  string // how big its window first opens: "full" (the whole video), "big" or "small" (a corner)
+	Size  string // how big its window first opens: "full" (the whole video), "big" or "small" (a corner); "bare": the whole video, and no window at all (its script has its own close)
 	Min   int    // players it needs: 1 if one will do (its lobby's minimum, for the picker to say)
 	New   func(r *Room) Activity
 }
@@ -74,6 +74,7 @@ type Kind struct {
 // Kinds: every app, in the order the picker shows them
 var Kinds = []Kind{
 	{"graffiti", "Graffiti", "spray-can", true, "full", 1, func(*Room) Activity { return &graffiti{} }},
+	{"stickies", "Stickies", "sticky-note", true, "bare", 1, newStickies},
 	{"room", "Room", "door-open", false, "big", 1, func(*Room) Activity { return &room{avatars: map[int]*avatar{}} }},
 	{"call", "Call", "phone", false, "small", 1, newCall},
 	{"bingo", "Bingo", "grid-3x3", false, "small", 1, newBingo},
@@ -121,6 +122,7 @@ type Movie interface {
 	Position() (float64, bool)                   // seconds into it; false when no movie is playing
 	Frame() ([]byte, Picture, error)             // the frame showing now, a PNG, and what it is (no Ref: not kept)
 	Keep(b []byte, mime string) (Picture, error) // a picture an app made, kept as the pages' are
+	Playing() Playing                            // what's on: a movie, a song or a document (Stickies)
 }
 
 // Picture is one the host keeps: Ref is what a document holds ("asset:…"),

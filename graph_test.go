@@ -101,6 +101,9 @@ var windowElsewhere = map[string]string{
 	"SettingsText": "a question: SetSettingsText is walked",
 }
 
+// socketDoc: the document up in a socket walk
+const socketDoc = "1700000000000"
+
 // socketCommand: what a viewer's page says on its socket (chat.go), and its fields
 type socketCommand struct {
 	Type   string
@@ -114,6 +117,9 @@ var socketGraph = []socketCommand{
 	{"app_open", []apps.Field{{Name: "name", Type: "app"}}, "open an app for everyone"},
 	{"app_close", []apps.Field{{Name: "id", Type: "appid"}}, "close one for everyone"},
 	{"doc_at", []apps.Field{{Name: "token", Type: "str", Max: 20}, {Name: "at", Type: "str", Max: 80}, {Name: "back", Type: "bool"}}, "a page of the database up"},
+	{"doc_page", []apps.Field{{Name: "token", Type: "doctoken"}, {Name: "page", Type: "int", Lo: -1, Hi: 12}}, "resting on a page of the document up: chat says so"},
+	{"doc_pages", []apps.Field{{Name: "token", Type: "doctoken"}, {Name: "pages", Type: "int", Lo: -1, Hi: 12}}, "the document up, laid out as so many pages"},
+	{"doc_pace", []apps.Field{{Name: "token", Type: "doctoken"}, {Name: "pace", Type: "int", Lo: 0, Hi: 300}}, "everyone's pace: a page every so many seconds"},
 	{"app", []apps.Field{{Name: "id", Type: "appid"}}, "a message for an app: its kind and fields are apps.Commands"},
 }
 
@@ -329,6 +335,16 @@ func socketValue(c *choices, f apps.Field, ids []float64) any {
 			return "nope"
 		}
 		return apps.Kinds[c.n(len(apps.Kinds))].Name
+	case "int":
+		if c.n(3) == 0 && f.Hi >= 5 {
+			return float64(paces[c.n(len(paces))])
+		}
+		return f.Lo + float64(c.n(int(f.Hi-f.Lo)+1))
+	case "doctoken":
+		if c.n(6) == 0 {
+			return "nope"
+		}
+		return socketDoc
 	case "appid":
 		if len(ids) == 0 || c.n(6) == 0 {
 			return float64(c.n(20))
@@ -398,6 +414,9 @@ func socketWalk(t *testing.T, data []byte) {
 	h.chat.hello = h.greeting
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
+	h.doc = &document{Token: socketDoc, Kind: "text", App: "deck", Title: "Slides", Page: 1, Pages: 3} // pages laid out, viewed and paced
+	h.chat.docPage, h.chat.docPages, h.chat.docPace = h.Viewing, h.SetPages, h.SetPace
+	defer func() { h.ClearDocument() }()
 	srv := httptest.NewServer(http.HandlerFunc(h.chat.handle))
 	defer srv.Close()
 	defer h.apps.closeAll()

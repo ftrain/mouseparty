@@ -7,13 +7,22 @@
 # here (num_sql_threads 0), time-limited by SQLite's progress handler.
 #
 #   python -c <this> <database> <title> <base url>
-import asyncio, base64, json, os, selectors, sys, time
+import asyncio, base64, json, os, selectors, sys, time, types
 
 os.geteuid = getattr(os, "geteuid", lambda: 0)  # platformdirs asks; WASI has no users
 MARK = b"\x00MP "
 
 db, title, base = sys.argv[1:4]
+from datasette import hookimpl
 from datasette.app import Datasette
+from datasette.plugins import pm
+
+# SQLite's temporary files (a GROUP BY or ORDER BY too big for memory spills to one, as Datasette's
+# facets do on any sizeable table) can't be made here, where nothing is writable: they'd fail
+# "unable to open database file". Kept in memory instead.
+memory_temp = types.ModuleType("mouseparty_memory_temp")
+memory_temp.prepare_connection = hookimpl(lambda conn: conn.execute("PRAGMA temp_store = memory"))
+pm.register(memory_temp)
 
 ds = Datasette(
     immutables=[db],  # opened immutable: SQLite reads it and never writes, locks or journals

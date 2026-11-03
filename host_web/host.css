@@ -100,6 +100,10 @@ button { font-family: var(--font); }
 .win.glass { background: none; -webkit-backdrop-filter: none; backdrop-filter: none; border: 1px dashed rgb(255 255 255 / 0.4); box-shadow: none; }
 .win.glass .win-bar { background: rgb(0 0 0 / 0.45); }
 .win.glass .win-glass { display: none; }
+/* bare (Stickies): no window at all, only what its script puts on the picture, which takes the clicks it wants */
+.win.bare { border: none; background: none; box-shadow: none; pointer-events: none; }
+.win.bare .win-bar, .win.bare .win-grip { display: none; }
+.win.bare .win-body { pointer-events: none; background: none; }
 @media (hover: none) { .win-grip { opacity: 1; } .win-glass { opacity: 1; } }
 .app:not([data-mode="side"]) .win-grip { display: none; }
 .app:not([data-mode="side"]) .win-bar { cursor: default; }
@@ -110,13 +114,23 @@ button { font-family: var(--font); }
 .doc-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; }
 .doc.data .doc-scroll, .doc.data .doc-bar { display: none; }      /* a database: Datasette's frame instead */
 .doc-data { flex: 1; min-height: 0; border: 0; background: #fff; }
-.doc-scroll canvas { display: block; margin: auto; background: #fff; box-shadow: 0 0 24px rgba(0, 0, 0, 0.6); }
-.doc.fit-width .doc-scroll canvas { margin: 0 auto; }
+.doc-scroll canvas, .doc-scroll .doc-page { display: block; flex: none; margin: auto; background: #fff; box-shadow: 0 0 24px rgba(0, 0, 0, 0.6); }
+.doc.fit-width .doc-scroll canvas, .doc.fit-width .doc-scroll .doc-page { margin: 0 auto; }
 .doc-bar {
-    position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 10px;
+    flex: none; margin: 8px 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     padding: 4px 6px 4px 12px; font-size: 13px; color: var(--text);
     background: rgba(0, 0, 0, 0.7); border: 1px solid var(--line); border-radius: 4px;
 }
+.doc-slider { flex: 1 1 160px; min-width: 100px; accent-color: var(--green); }
+.doc-slider[hidden] { display: none; }
+.doc-page { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.doc-pace { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--text); }
+.doc-pace[hidden], .doc-bar button[hidden] { display: none; }
+.doc-zoom:disabled { opacity: 0.35; cursor: default; }
+.go-page {
+    background: none; border: none; padding: 0; color: var(--green); font: inherit; text-decoration: underline; cursor: pointer;
+}
+.go-page[hidden] { display: none; }
 .doc-zoom {
     background: none; border: 1px solid var(--line); border-radius: 3px; color: var(--green);
     font-size: 12px; padding: 3px 8px; cursor: pointer;
@@ -432,7 +446,4 @@ button { font-family: var(--font); }
     .guide-zone { order: 5; flex-basis: 100%; }      /* its own line under the title */
 }
 /* another document (host.ts showText): drawn by Tiny Little Office's editors, read-only, in the PDF's place */
-.doc.text .doc-scroll, .doc.text .doc-bar { display: none; }
-.doc-text { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
-.doc-text > .to-editor { flex: 1 1 auto; min-height: 0; }
 .doc-text-note { margin: auto; color: #ccc; font: 15px ui-monospace, Menlo, monospace; }

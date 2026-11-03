@@ -25,11 +25,20 @@
                 <button class="sound-button" id="soundButton">🔇 Sound is off &mdash; click to turn it on</button>
                 <button class="sound-dismiss" id="soundDismiss" title="Keep it off" aria-label="Dismiss, keep the sound off">✕</button>
             </div>
-            <!-- A PDF the host is reading with everyone, drawn here by pdf.js on the host's page; or a database's pages, Datasette's (datasette.go) -->
+            <!-- A PDF or another document the host is reading with everyone, drawn here a page at a time (pdf.js, or Tiny Little Office's pages); or a database's pages, Datasette's (datasette.go) -->
             <div class="doc" id="doc" hidden>
                 <div class="doc-scroll" id="docScroll"><canvas id="docCanvas"></canvas></div>
                 <div class="doc-bar">
-                    <span id="docPage"></span>
+                    <!-- this viewer's own page; resting on one tells chat, with a link there (pace.go) -->
+                    <input type="range" class="doc-slider" id="docSlider" min="1" max="2" step="1" aria-label="Page" hidden>
+                    <span class="doc-page" id="docPage"></span>
+                    <button class="doc-zoom" id="docFollow" hidden>follow</button>
+                    <!-- everyone's pace: anyone makes it faster or slower, for all -->
+                    <span class="doc-pace" id="docPace" hidden>
+                        <button class="doc-zoom" id="docSlower" title="Slower, for everyone" aria-label="Slower">−</button>
+                        <span id="docPaceText"></span>
+                        <button class="doc-zoom" id="docFaster" title="Faster, for everyone" aria-label="Faster">+</button>
+                    </span>
                     <button class="doc-zoom" id="docZoom" title="Fit the width (or double-click the page)">fit width</button>
                 </div>
             </div>

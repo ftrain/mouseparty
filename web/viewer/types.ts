@@ -8,6 +8,8 @@ export interface ChatLine {
     type: 'msg' | 'system';
     name?: string; // a msg's
     text: string;
+    doc?: string; // someone is viewing a page of a document (pace.go Viewing): its token,
+    page?: number; // and the page, which anyone can go to
     at: number; // epoch seconds
 }
 
@@ -36,7 +38,7 @@ export interface ScheduleRow {
     title: string;
     duration: number;
     start: number | null;
-    pages: number | null; // a PDF
+    pages: number | null; // a PDF, or another document laid out
     data?: boolean; // a database
     cc: boolean;
 }
@@ -51,8 +53,9 @@ export interface Doc {
     token: string;
     title: string;
     kind: 'pdf' | 'db' | 'text';
-    pages: number;
-    page: number;
+    pages: number; // a PDF's, or another document's once a page has laid it out (0 before: it sends doc_pages)
+    page: number; // the page everyone is on: the host's, and the pace's (pace.go)
+    pace: number; // seconds a page, everyone's (0: off)
     at: string; // a database: the page of it everyone is on
     back: boolean; // and there's one before it
     // another document (session.go): read by pandoc as it goes up, then fetched from /doc/<token> as the editors' text
@@ -73,7 +76,7 @@ export interface AppInfo {
     title: string;
     icon: string;
     glass: boolean;
-    size: 'full' | 'big' | 'small';
+    size: 'full' | 'big' | 'small' | 'bare'; // bare: the whole picture, and no window at all (Stickies)
     by: string;
     view: unknown; // the app's View(v): its script knows its shape
 }
@@ -127,6 +130,9 @@ export type ToHost =
     | { type: 'app_open'; name: string }
     | { type: 'app_close'; id: number }
     | { type: 'doc_at'; token: string | null; at?: string; back?: true }
+    | { type: 'doc_page'; token: string; page: number }
+    | { type: 'doc_pages'; token: string; pages: number }
+    | { type: 'doc_pace'; token: string; pace: number }
     | ({ type: 'app'; id: number } & AppMsg);
 
 // a message to an app's Go half: its Message reads kind and the rest (apps/lib.go Msg)
@@ -158,6 +164,14 @@ export interface Ctx<Out extends Said = AppMsg> {
     videoBox(): Box;
     base: string; // the session's path: pictures (img/), the documents' editors (office/)
     open(name: string): void; // another app, for everyone
+    close(): void; // this app, for everyone (a bare one has no ✕ of its own)
+    now(): Now; // where this viewer is in what's playing
+}
+
+// where a viewer is in what's playing: seconds into a movie or a song, or the page of a document they see (their own)
+export interface Now {
+    position: number | null; // a movie or a song, playing
+    page: number | null; // a document up (a database: 1)
 }
 
 // a box in the window, in its pixels

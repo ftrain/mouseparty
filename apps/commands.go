@@ -38,6 +38,12 @@ var (
 // Commands: every app's, by its name
 var Commands = map[string][]Command{
 	"graffiti": {strokeCommand},
+	"stickies": {
+		{"add", []Field{{Name: "text", Type: "str", Max: stickyText}, {Name: "c", Type: "int", Hi: stickyColors - 1}, {Name: "x", Type: "num", Hi: 1}, {Name: "y", Type: "num", Hi: 1}, {Name: "at", Type: "num", Hi: 7200}, {Name: "page", Type: "int", Lo: 1, Hi: 30}}},
+		{"move", []Field{{Name: "sid", Type: "int", Lo: 1, Hi: 30}, {Name: "x", Type: "num", Hi: 1}, {Name: "y", Type: "num", Hi: 1}}},
+		{"color", []Field{{Name: "sid", Type: "int", Lo: 1, Hi: 30}, {Name: "c", Type: "int", Hi: stickyColors - 1}}},
+		{"remove", []Field{{Name: "sid", Type: "int", Lo: 1, Hi: 30}}},
+	},
 	"room":     {{"go", []Field{{Name: "x", Type: "num", Hi: 1}, {Name: "y", Type: "num", Hi: 1}}}},
 	"call":     {{Kind: "join"}, {Kind: "live"}, {Kind: "leave"}, {"mute", []Field{{Name: "muted", Type: "bool"}}}},
 	"bingo":    {{Kind: "card"}},

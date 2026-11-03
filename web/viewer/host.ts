@@ -340,6 +340,7 @@ function show(m: ChatLine, live: boolean) {
     if (m.type === 'system') {
         el.className = 'msg system';
         el.textContent = m.text;
+        pageLink(m, el);
     } else {
         el.className = 'msg';
         const time = new Date(m.at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -784,15 +785,22 @@ setInterval(() => {
     if (!guide.hidden) renderGuide();
 }, 15000);
 
-// ---------- a PDF, read together ----------
-// While the host has a PDF up it covers the video (a "reading" card meanwhile):
-// the document itself, drawn by pdf.js (fetched the first time one comes up)
-// at this screen's size, so it stays sharp, on whatever page the host is on.
-// Whole page or fit width is each viewer's own choice.
+// ---------- a document, read together, each at their own pace ----------
+// While the host has a PDF or another document up it covers the video (a "reading"
+// card meanwhile), a page at a time: a PDF drawn by pdf.js (fetched the first time
+// one comes up) at this screen's size, so it stays sharp; another document laid
+// out as pages by Tiny Little Office (the same pages on every screen). There's a
+// page everyone is on (the host's, and the pace's: pace.go), which this page
+// follows until its slider (or ← →) goes elsewhere; resting there, chat says
+// which page this viewer is viewing, with a link for anyone to go there too, and
+// "follow" comes back to everyone's. The pace is everyone's: faster and slower
+// change it for all. Whole page or fit width is each viewer's own choice.
 const docEl = byId('doc');
 const docScroll = byId('docScroll');
 const docZoom = byId('docZoom');
-let doc: Doc | null = null; // {token, title, pages, page}, from the host
+const docSlider = byId<HTMLInputElement>('docSlider');
+const docFollow = byId<HTMLButtonElement>('docFollow');
+let doc: Doc | null = null; // {token, title, pages, page, pace}, from the host
 let pdf: PdfDocument | null = null; // pdf.js's copy of it
 let pdfTask: PdfLoading | null = null; // its loading, which is what lets it go again
 let pdfToken: string | null = null; // the doc that is loaded, or loading
@@ -802,11 +810,116 @@ let renderTask: { cancel(): void } | null = null,
     drawing = false,
     drawAgain = false,
     drawnPage: number | null = null;
+let following = true; // on everyone's page; else on mine
+let myPage = 1;
+let restTimer: ReturnType<typeof setTimeout> | undefined;
+const REST_MS = 1200; // resting this long on a page says so in chat
+
+// the paces (pace.go paces), seconds a page: off, then slowest to fastest
+const PACES = [0, 300, 180, 120, 90, 60, 45, 30, 20, 15, 10, 5];
+const pageWord = (d: Doc) => (d.app === 'deck' ? 'slide' : 'page');
+function paceWords(seconds: number, word: string) {
+    if (!seconds) return 'pace: off';
+    if (seconds === 60) return `a ${word} a minute`;
+    if (seconds >= 120 && seconds % 60 === 0) return `a ${word} every ${seconds / 60} min`;
+    return `a ${word} every ${seconds} s`;
+}
+
+// the page this viewer sees
+const shownPage = () => (!doc ? 1 : Math.max(1, Math.min(doc.pages || 1, following ? doc.page : myPage)));
+
+// the bar: the slider, where this is, everyone's page, the pace
+function showBar() {
+    if (!doc || doc.kind === 'db') return;
+    const word = pageWord(doc);
+    const paged = doc.pages > 0;
+    docSlider.hidden = !paged || doc.pages < 2;
+    docSlider.min = '1';
+    docSlider.max = String(Math.max(2, doc.pages));
+    if (document.activeElement !== docSlider || following) docSlider.value = String(shownPage());
+    byId('docPage').textContent = paged ? `${shownPage()} / ${doc.pages}` : '';
+    docFollow.hidden = following || !paged;
+    docFollow.textContent = `follow · ${doc.page}`;
+    docFollow.title = `Back to the ${word} everyone is on, ${doc.page}`;
+    byId('docPace').hidden = !paged;
+    byId('docPaceText').textContent = paceWords(doc.pace || 0, word);
+    const i = PACES.indexOf(doc.pace || 0);
+    byId<HTMLButtonElement>('docSlower').disabled = i <= 0;
+    byId<HTMLButtonElement>('docFaster').disabled = i === PACES.length - 1;
+}
+
+function drawShown() {
+    showBar();
+    if (doc?.kind === 'text') drawTextPage();
+    else drawPage();
+}
+
+// go to a page of my own (the slider, the arrow keys, a link in chat); back on everyone's, follow it again
+function goToPage(page: number, say: boolean) {
+    if (!doc || !(doc.pages > 0)) return;
+    myPage = Math.max(1, Math.min(doc.pages, page));
+    following = myPage === doc.page;
+    drawShown();
+    clearTimeout(restTimer);
+    if (say) {
+        const token = doc.token,
+            at = myPage;
+        restTimer = setTimeout(() => {
+            if (doc?.token === token && shownPage() === at) send({ type: 'doc_page', token, page: at });
+        }, REST_MS);
+    }
+}
+
+docSlider.addEventListener('input', () => goToPage(Number(docSlider.value), true));
+docFollow.addEventListener('click', () => {
+    following = true;
+    clearTimeout(restTimer);
+    drawShown();
+});
+function changePace(step: number) {
+    if (!doc) return;
+    const i = PACES.indexOf(doc.pace || 0);
+    const next = PACES[Math.max(0, Math.min(PACES.length - 1, (i < 0 ? 0 : i) + step))]!;
+    if (next !== (doc.pace || 0)) send({ type: 'doc_pace', token: doc.token, pace: next });
+}
+byId('docSlower').addEventListener('click', () => changePace(-1));
+byId('docFaster').addEventListener('click', () => changePace(1));
+document.addEventListener('keydown', (e) => {
+    if (!doc || docEl.hidden || doc.kind === 'db' || !(doc.pages > 0) || e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target as HTMLElement | null;
+    if (t && t !== docSlider && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (t && t.closest && t.closest('.win')) return; // an app's own keys
+    const step = e.key === 'ArrowRight' || e.key === 'PageDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'PageUp' ? -1 : 0;
+    if (!step || t === docSlider) return; // the slider moves itself (and says so: input)
+    e.preventDefault();
+    goToPage(shownPage() + step, true);
+});
+
+// a line in chat saying who is viewing which page: a link there, while that document is up
+function pageLink(m: ChatLine, el: HTMLElement) {
+    if (!m.doc || !m.page) return;
+    const a = Object.assign(document.createElement('button'), { className: 'go-page', textContent: 'go there' });
+    a.addEventListener('click', () => {
+        if (doc?.token === m.doc) goToPage(m.page!, false);
+    });
+    a.hidden = doc?.token !== m.doc;
+    a.dataset.doc = m.doc;
+    el.append(' ', a);
+}
+// the links to a document no longer up go
+function pageLinksFor() {
+    for (const a of box.querySelectorAll<HTMLElement>('.go-page')) a.hidden = a.dataset.doc !== doc?.token;
+}
 
 async function setDoc(d: Doc | null | undefined) {
     if (ended) return;
     const was = doc;
     doc = d || null;
+    if (!doc || was?.token !== doc.token) {
+        following = true; // a new document: everyone's page
+        clearTimeout(restTimer);
+    }
+    pageLinksFor();
     docEl.hidden = !doc;
     app.classList.toggle('reading', !!doc);
     showSoundButton();
@@ -819,13 +932,13 @@ async function setDoc(d: Doc | null | undefined) {
         closePdf();
         return showDb(doc);
     }
+    showBar();
     if (doc.kind === 'text') {
         closePdf();
-        return showText(doc);
+        return showText(doc, was);
     }
-    byId('docPage').textContent = `${doc.page} / ${doc.pages}`;
     if (pdfToken === doc.token) {
-        if (!was || was.page !== doc.page) drawPage();
+        if (!was || shownPage() !== drawnPage) drawPage();
         return;
     }
     closePdf();
@@ -850,7 +963,7 @@ function closePdf() {
     if (renderTask) renderTask.cancel();
     if (pdfTask) pdfTask.destroy();
     pdf = pdfTask = pdfToken = drawnPage = null;
-    docScroll.textContent = '';
+    if (doc?.kind !== 'text') docScroll.textContent = '';
 }
 
 // Into a new canvas, swapped in when done, so turning a page never flashes blank
@@ -863,7 +976,7 @@ async function drawPage() {
     }
     drawing = true;
     const loaded = pdf,
-        number = Math.min(doc.page, pdf.numPages);
+        number = Math.min(shownPage(), pdf.numPages);
     try {
         const page = await loaded.getPage(number);
         const size = page.getViewport({ scale: 1 });
@@ -900,15 +1013,28 @@ async function drawPage() {
 // over the video, on whatever page anyone went to last: where someone here goes
 // is sent to everyone ({type: 'doc_at'}).
 let dbFrame: HTMLIFrameElement | null = null,
-    dbToken: string | null = null;
+    dbToken: string | null = null,
+    dbHere = '/', // where the frame here last said it went,
+    dbLeft: string | null = null; // and where everyone was then, until the host has heard of it
 
-// tell the frame where everyone is, and whether there's a page before it
-const dbTell = () => dbFrame?.contentWindow?.postMessage({ type: 'go', at: doc?.at || '/', back: !!doc?.back }, location.origin);
+// tell the frame where everyone is, and whether there's a page before it. Until the host has heard where
+// the frame here went, what this page has (its load, a poll that crossed it) is where it left: it stays put,
+// rather than going back there and pulling everyone back with it
+const dbTell = () => {
+    let at = doc?.at || '/';
+    if (dbLeft !== null) {
+        if (at === dbLeft) at = dbHere;
+        else dbLeft = null;
+    }
+    dbFrame?.contentWindow?.postMessage({ type: 'go', at, back: !!doc?.back || dbLeft !== null }, location.origin);
+};
 
 function showDb(d: Doc) {
     if (dbToken === d.token) return dbTell();
     closeDb();
     dbToken = d.token;
+    dbHere = d.at || '/';
+    dbLeft = null;
     dbFrame = document.createElement('iframe');
     dbFrame.className = 'doc-data';
     dbFrame.title = d.title;
@@ -925,25 +1051,34 @@ function closeDb() {
 // what the frame says (the script datasette.go adds to its pages): where it went, or Back
 window.addEventListener('message', (e: MessageEvent<{ type?: string; at?: unknown } | null>) => {
     if (!dbFrame || e.source !== dbFrame.contentWindow || e.origin !== location.origin) return;
-    if (e.data?.type === 'went' && typeof e.data.at === 'string') send({ type: 'doc_at', token: dbToken, at: e.data.at });
+    if (e.data?.type === 'went' && typeof e.data.at === 'string') {
+        const was = doc?.at || '/';
+        if (e.data.at !== was) [dbHere, dbLeft] = [e.data.at, was];
+        send({ type: 'doc_at', token: dbToken, at: e.data.at });
+    }
     if (e.data?.type === 'back') send({ type: 'doc_at', token: dbToken, back: true });
 });
 
 // ---------- another document, read together ----------
-// A Word file, a PowerPoint, a spreadsheet, an EPUB...: the host reads it (pandoc, session.go) and it's drawn here,
-// in the PDF's place, by Tiny Little Office's own editors, read-only (office.js, loaded the first time one comes up)
-let textEl: HTMLElement | null = null;
-let textKey = ''; // the doc drawn, and how far along it was: reading, read, or couldn't be
+// A Word file, a PowerPoint, a spreadsheet, an EPUB...: the host reads it (pandoc,
+// session.go), and it's laid out here as pages by Tiny Little Office's own view of
+// it (office.js, loaded the first time one comes up), drawn in the PDF's place.
+// The first page to lay it out tells the host how many pages it is (the slider on
+// the Mac follows).
+let textPages: { w: number; h: number; svg: string; alt?: string }[] | null = null;
+let pageSvg: ((p: { w: number; h: number; svg: string; alt?: string }, attrs?: string) => string) | null = null; // the library's: the page in its type
+let textKey = ''; // the doc laid out, and how far along it was: reading, read, or couldn't be
 
-async function showText(d: Doc) {
+async function showText(d: Doc, was: Doc | null) {
     const key = `${d.token}|${d.ready ? 1 : 0}|${d.error || ''}`;
-    if (key === textKey) return;
+    if (key === textKey) {
+        if (textPages && d.pages !== textPages.length) send({ type: 'doc_pages', token: d.token, pages: textPages.length });
+        if (!was || shownPage() !== drawnPage) drawTextPage();
+        return;
+    }
     closeText();
     textKey = key;
-    const el = (textEl = document.createElement('div'));
-    el.className = 'doc-text';
-    docEl.append(el);
-    const note = (words: string) => el.replaceChildren(Object.assign(document.createElement('p'), { className: 'doc-text-note', textContent: words }));
+    const note = (words: string) => docScroll.replaceChildren(Object.assign(document.createElement('p'), { className: 'doc-text-note', textContent: words }));
     if (d.error) return note(`Couldn’t read ${d.title}: ${d.error}`);
     if (!d.ready) return note(`Reading ${d.title}…`);
     note(`Opening ${d.title}…`);
@@ -953,19 +1088,47 @@ async function showText(d: Doc) {
         const { app, text } = (await r.json()) as { app: string; text: string };
         const office = (await import(/* @vite-ignore */ `${BASE}/apps/office.js`)) as typeof import('./apps/office.ts');
         const lib = await office.library(BASE);
-        if (textEl !== el) return; // the host moved on while it loaded
-        el.textContent = '';
-        await lib.editors.mount(app, text, el, () => {}, { readOnly: true, fill: true });
+        if (textKey !== key) return; // the host moved on while it loaded
+        const def = lib.editors.appOf(app);
+        if (!def) throw new Error(`no ${app}`);
+        const pages = def.view(text);
+        if (!pages.length) throw new Error('no pages');
+        textPages = pages;
+        pageSvg = lib.editors.pageSvg;
+        if (doc && doc.token === d.token && doc.pages !== pages.length) send({ type: 'doc_pages', token: d.token, pages: pages.length });
+        drawTextPage();
     } catch (e) {
         console.log('document:', e);
-        if (textEl === el) note(`Couldn’t open ${d.title}`);
+        if (textKey === key) note(`Couldn’t open ${d.title}`);
     }
 }
 
+// a page of it, as the PDF's are drawn: the whole page, or the width
+function drawTextPage() {
+    if (!textPages || !doc || doc.kind !== 'text') return;
+    const number = Math.min(shownPage(), textPages.length);
+    const page = textPages[number - 1]!;
+    const w = docScroll.clientWidth,
+        h = docScroll.clientHeight;
+    const scale = fitWidth ? w / page.w : Math.min(w / page.w, h / page.h);
+    // the library's drawing of the host's document (its words escaped by it), in its type
+    const holder = document.createElement('div');
+    holder.innerHTML = pageSvg!(page);
+    const svg = holder.querySelector('svg');
+    if (!svg) return;
+    svg.setAttribute('width', String(Math.floor(page.w * scale)));
+    svg.setAttribute('height', String(Math.floor(page.h * scale)));
+    svg.classList.add('doc-page');
+    docScroll.replaceChildren(svg);
+    if (drawnPage !== number) docScroll.scrollTop = 0;
+    drawnPage = number;
+}
+
 function closeText() {
-    textEl?.remove();
-    textEl = null;
+    textPages = null;
     textKey = '';
+    drawnPage = null;
+    if (doc?.kind !== 'pdf') docScroll.textContent = '';
 }
 
 function toggleFit() {
@@ -973,7 +1136,7 @@ function toggleFit() {
     docEl.classList.toggle('fit-width', fitWidth);
     docZoom.textContent = fitWidth ? 'whole page' : 'fit width';
     docZoom.title = fitWidth ? 'Show the whole page (or double-click it)' : 'Fit the width (or double-click the page)';
-    drawPage();
+    drawShown();
 }
 docZoom.addEventListener('click', toggleFit);
 docScroll.addEventListener('dblclick', toggleFit);
@@ -981,7 +1144,7 @@ let redrawTimer: ReturnType<typeof setTimeout> | undefined;
 new ResizeObserver(() => {
     // a new layout, full screen, a phone turned: draw it at the new size
     clearTimeout(redrawTimer);
-    redrawTimer = setTimeout(drawPage, 150);
+    redrawTimer = setTimeout(drawShown, 150);
 }).observe(docScroll);
 
 if (myName) showChatInput();
@@ -1063,7 +1226,7 @@ const compact = () => app.dataset.mode !== 'side';
 function firstPlace(size: AppInfo['size']): Place {
     const n = [...wins.values()].filter((w) => !w.info.glass).length % 5,
         step = 0.035 * n;
-    if (size === 'full') return { x: 0, y: 0, w: 1, h: 1 };
+    if (size === 'full' || size === 'bare') return { x: 0, y: 0, w: 1, h: 1 };
     if (size === 'small') return { x: 0.6 - step, y: 0.04 + step, w: 0.38, h: 0.55 };
     return { x: 0.08 + step, y: 0.06 + step, w: 0.8, h: 0.84 };
 }
@@ -1091,7 +1254,7 @@ async function openApp(info: AppInfo) {
     let w = wins.get(info.id);
     if (!w) {
         const el = document.createElement('div');
-        el.className = 'win' + (info.glass ? ' glass' : '') + (['office', 'reel'].includes(info.script) ? ' office' : '');
+        el.className = 'win' + (info.glass ? ' glass' : '') + (info.size === 'bare' ? ' bare' : '') + (['office', 'reel'].includes(info.script) ? ' office' : '');
         el.innerHTML =
             '<div class="win-bar"><span class="win-icon"></span><span class="win-title"></span>' +
             '<input class="win-glass" type="range" min="2" max="100" title="See-through or solid (for you)" aria-label="How solid this window is">' +
@@ -1159,6 +1322,11 @@ async function openApp(info: AppInfo) {
             openedHere = name;
             send({ type: 'app_open', name });
         },
+        close: () => send({ type: 'app_close', id: info.id }),
+        now: () => ({
+            position: clock && !doc ? clock.position + (performance.now() - clock.at) / 1000 : null,
+            page: !doc ? null : doc.kind === 'db' ? 1 : shownPage(),
+        }),
     };
     w.inst = start(ctx, info.view) || {};
 }

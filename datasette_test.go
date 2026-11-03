@@ -189,3 +189,28 @@ func TestDatasetteOddNames(t *testing.T) {
 		}
 	}
 }
+
+// a table big enough that SQLite's sorts and groupings spill to temporary files, which must stay in
+// memory: nothing Python sees is writable, and a temporary file there fails "unable to open database file"
+func TestDatasetteBigTable(t *testing.T) {
+	py := needPython(t)
+	path := filepath.Join(t.TempDir(), "big.db")
+	c, err := sqlite3.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Exec(`CREATE TABLE a(id INTEGER PRIMARY KEY, name TEXT, cat TEXT);
+		WITH RECURSIVE r(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM r WHERE i < 300000)
+		INSERT INTO a SELECT i, hex(randomblob(40)), 'c' || (i % 50) FROM r;`); err != nil {
+		t.Fatal(err)
+	}
+	c.Close()
+	d := startDatasette(py, pythonHome(), path, "Big", "/k/data/t/", func(s string) { t.Log(s) })
+	defer d.stop()
+	for _, q := range []string{"", "_sort=name", "_facet=cat"} {
+		a, err := d.ask("GET", "/k/data/t/big/a", q, nil)
+		if err != nil || a.Status != 200 || strings.Contains(body(t, a), "unable to open") {
+			t.Fatalf("?%s: %v %v", q, err, a)
+		}
+	}
+}

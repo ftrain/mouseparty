@@ -313,6 +313,9 @@ func (m *testMovie) Position() (float64, bool) { return m.pos, true }
 func (m *testMovie) Frame() ([]byte, Picture, error) {
 	return []byte("png"), Picture{W: 1920, H: 800, At: m.pos, Title: "The Movie"}, nil
 }
+func (m *testMovie) Playing() Playing {
+	return Playing{Key: "k" + fmt.Sprint(int(m.pos)/100), Title: "The Movie", Paged: int(m.pos)%2 == 1}
+}
 func (m *testMovie) Keep(b []byte, mime string) (Picture, error) {
 	m.kept = append(m.kept, string(b))
 	return Picture{Ref: fmt.Sprintf("asset:%d", len(m.kept)), W: 1280, H: 720}, nil

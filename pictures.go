@@ -121,6 +121,25 @@ type nowShowing struct {
 	path, title string
 }
 
+// SetPlaying: what's on now, for Stickies: a movie, a song or a document ("" when nothing is); paged, a document
+func (h *Host) SetPlaying(path, title string, paged bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if path == "" {
+		h.playing = apps.Playing{}
+		return
+	}
+	sum := sha256.Sum256([]byte(path)) // its notes are kept by it; the pages are told nothing of where it is
+	h.playing = apps.Playing{Key: hex.EncodeToString(sum[:8]), Title: title, Paged: paged}
+}
+
+// Playing: what's on now (apps.Movie)
+func (h *Host) Playing() apps.Playing {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.playing
+}
+
 // SetShowing: the movie that's playing now ("" when none is)
 func (h *Host) SetShowing(path, title string) {
 	h.mu.Lock()

@@ -39,6 +39,9 @@ type Item struct {
 // isDoc: a PDF, a database or another document, which viewers' pages show themselves (the stream carries a card)
 func (it *Item) isDoc() bool { return it.kind() == "pdf" || it.kind() == "db" || it.kind() == "text" }
 
+// paged: a PDF, or another document laid out (by viewers' pages: session.go SetPages), has pages to slide through
+func (it *Item) paged() bool { return (it.kind() == "pdf" || it.kind() == "text") && it.Pages > 0 }
+
 func (it *Item) kind() string {
 	if it.Kind == "" {
 		return "video"

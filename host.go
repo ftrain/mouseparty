@@ -143,6 +143,8 @@ type Host struct {
 	Standby        []byte
 	Party          *party          // where apps (apps.Keeper) and the pictures they name are kept (store.go); nil nowhere
 	DocAt          func(at string) // viewers went to another page of the database up (SetAt)
+	DocPages       func(pages int) // viewers laid out the document up as this many pages (SetPages)
+	Paced          func()          // the pace says turn the page everyone is on (pace.go)
 
 	mu        sync.Mutex
 	key       string
@@ -166,11 +168,14 @@ type Host struct {
 	clockSent time.Time
 	schedule  []ScheduleRow
 	doc       *document
-	datasette *datasette // the database up, looked through (datasette.go)
-	python    *wasmTool  // what runs it
+	pace      int         // seconds a page, everyone's (0: off); kept from one document to the next (pace.go)
+	paceTimer *time.Timer // the next turn it makes
+	datasette *datasette  // the database up, looked through (datasette.go)
+	python    *wasmTool   // what runs it
 	apps      *appHost
 	pics      *pictures
 	showing   *nowShowing
+	playing   apps.Playing // what's on, for Stickies (SetPlaying)
 	grabbing  sync.Mutex
 	pandoc    *wasmTool     // documents brought in are read by it (pandoc.go)
 	reading   chan struct{} // one at a time
@@ -224,6 +229,7 @@ func (h *Host) start() error {
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
 	h.chat.docAt = h.SetAt
+	h.chat.docPage, h.chat.docPages, h.chat.docPace = h.Viewing, h.SetPages, h.SetPace
 	h.ports = map[string]int{"api": freePort(), "rtsp": freePort(), "hls": freePort(), "webrtc": freePort()}
 	h.tmp = tmp
 	h.stdins = map[*exec.Cmd]io.WriteCloser{}

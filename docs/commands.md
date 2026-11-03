@@ -79,6 +79,9 @@ Not walked: `GetView`, a question, not a command: every step reads the view; `Se
 | `app_open` | `name` (app) | open an app for everyone |
 | `app_close` | `id` (appid) | close one for everyone |
 | `doc_at` | `token` (str), `at` (str), `back` (bool) | a page of the database up |
+| `doc_page` | `token` (doctoken), `page` (int) | resting on a page of the document up: chat says so |
+| `doc_pages` | `token` (doctoken), `pages` (int) | the document up, laid out as so many pages |
+| `doc_pace` | `token` (doctoken), `pace` (int) | everyone's pace: a page every so many seconds |
 | `app` | `id` (appid) | a message for an app: its kind and fields are apps.Commands |
 
 ## The apps
@@ -88,6 +91,10 @@ What a page sends each app, as `{"type": "app", "id", "kind", ...}`.
 | App | Kind | Fields |
 |---|---|---|
 | Graffiti | `line` | `c` (int), `w` (int), `p` (points) |
+| Stickies | `add` | `text` (str), `c` (int), `x` (num), `y` (num), `at` (num), `page` (int) |
+|  | `move` | `sid` (int), `x` (num), `y` (num) |
+|  | `color` | `sid` (int), `c` (int) |
+|  | `remove` | `sid` (int) |
 | Room | `go` | `x` (num), `y` (num) |
 | Call | `join` |  |
 |  | `live` |  |
