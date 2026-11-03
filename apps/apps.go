@@ -123,6 +123,7 @@ type Movie interface {
 	Frame() ([]byte, Picture, error)             // the frame showing now, a PNG, and what it is (no Ref: not kept)
 	Keep(b []byte, mime string) (Picture, error) // a picture an app made, kept as the pages' are
 	Playing() Playing                            // what's on: a movie, a song or a document (Stickies)
+	Say(text string, page int)                   // a line in chat; page, of the document up, links there (0: none)
 }
 
 // Picture is one the host keeps: Ref is what a document holds ("asset:…"),

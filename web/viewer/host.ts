@@ -792,8 +792,12 @@ setInterval(() => {
 // out as pages by Tiny Little Office (the same pages on every screen). There's a
 // page everyone is on (the host's, and the pace's: pace.go), which this page
 // follows until its slider (or ← →) goes elsewhere; resting there, chat says
-// whose turn it was, with a link that turns everyone back there. The pace is
-// everyone's too: faster and slower change it for all. Whole page or fit width is each viewer's own choice.
+// whose turn it was. A viewer can read on their own instead ("read on my own"):
+// their slider then moves only their page, and chat says where they are as they
+// rest, and when they're back with everyone. A "go there" link in chat takes this
+// viewer there on their own (or back to everyone's, if it's that page). The pace
+// is everyone's: faster and slower change it for all; it doesn't move a reader
+// on their own. Whole page or fit width is each viewer's own choice.
 const docEl = byId('doc');
 const docScroll = byId('docScroll');
 const docZoom = byId('docZoom');
@@ -809,6 +813,11 @@ let renderTask: { cancel(): void } | null = null,
     drawAgain = false,
     drawnPage: number | null = null;
 let turning: number | null = null; // the page this viewer is turning everyone to, shown till the host says so
+let alone = false; // reading on their own
+let myPage = 1; // their page, then
+const READ_MS = 1200; // resting this long on a page of one's own says so in chat
+const docAlone = byId<HTMLButtonElement>('docAlone');
+const docNotes = byId<HTMLButtonElement>('docNotes');
 let restTimer: ReturnType<typeof setTimeout> | undefined;
 let turnTimer: ReturnType<typeof setTimeout> | undefined;
 const REST_MS = 400; // resting this long on a page turns everyone's there
@@ -824,7 +833,7 @@ function paceWords(seconds: number, word: string) {
 }
 
 // the page this viewer sees: everyone's, or the one they're turning it to
-const shownPage = () => (!doc ? 1 : Math.max(1, Math.min(doc.pages || 1, turning ?? doc.page)));
+const shownPage = () => (!doc ? 1 : Math.max(1, Math.min(doc.pages || 1, alone ? myPage : (turning ?? doc.page))));
 
 // the bar: the slider, where this is, everyone's page, the pace
 function showBar() {
@@ -836,6 +845,11 @@ function showBar() {
     docSlider.max = String(Math.max(2, doc.pages));
     docSlider.value = String(shownPage());
     byId('docPage').textContent = paged ? `${shownPage()} / ${doc.pages}` : '';
+    docAlone.hidden = !paged || doc.pages < 2;
+    docAlone.textContent = alone ? `back to everyone · ${doc.page}` : 'read on my own';
+    docAlone.title = alone ? `Back to the ${word} everyone is on (chat says so)` : `Read at your own pace: your slider moves only your ${word} (chat says where you are)`;
+    docAlone.classList.toggle('on', alone);
+    docNotes.hidden = !paged || [...wins.values()].some((w) => w.info?.name === 'stickies');
     byId('docPace').hidden = !paged;
     byId('docPaceText').textContent = paceWords(doc.pace || 0, word);
     const i = PACES.indexOf(doc.pace || 0);
@@ -849,10 +863,20 @@ function drawShown() {
     else drawPage();
 }
 
-// turn everyone's page (the slider, the arrow keys, a link in chat): shown here at once, sent once it rests
+// the slider, the arrow keys: this viewer's own page, reading on their own (chat told once it rests); else everyone's
 function goToPage(page: number) {
     if (!doc || !(doc.pages > 0)) return;
     const at = Math.max(1, Math.min(doc.pages, page));
+    if (alone) {
+        myPage = at;
+        drawShown();
+        clearTimeout(restTimer);
+        const token = doc.token;
+        restTimer = setTimeout(() => {
+            if (alone && doc?.token === token && myPage === at) send({ type: 'doc_read', token, page: at });
+        }, READ_MS);
+        return;
+    }
     turning = at === doc.page ? null : at;
     drawShown();
     clearTimeout(restTimer);
@@ -873,6 +897,31 @@ function goToPage(page: number) {
 }
 
 docSlider.addEventListener('input', () => goToPage(Number(docSlider.value)));
+
+// reading on one's own, from this page (or the one asked), or back with everyone
+function readAlone(on: boolean, page?: number) {
+    if (!doc || !(doc.pages > 0)) return;
+    clearTimeout(restTimer);
+    clearTimeout(turnTimer);
+    if (on) {
+        myPage = Math.max(1, Math.min(doc.pages, page ?? shownPage()));
+        turning = null;
+        alone = true;
+        send({ type: 'doc_read', token: doc.token, page: myPage });
+    } else if (alone) {
+        alone = false;
+        send({ type: 'doc_read', token: doc.token, page: 0 });
+    }
+    drawShown();
+}
+docAlone.addEventListener('click', () => readAlone(!alone));
+docNotes.addEventListener('click', () => {
+    if (![...wins.values()].some((w) => w.info?.name === 'stickies')) {
+        openedHere = 'stickies';
+        send({ type: 'app_open', name: 'stickies' });
+    }
+    docNotes.hidden = true;
+});
 function changePace(step: number) {
     if (!doc) return;
     const i = PACES.indexOf(doc.pace || 0);
@@ -896,9 +945,11 @@ document.addEventListener('keydown', (e) => {
 function pageLink(m: ChatLine, el: HTMLElement) {
     if (!m.doc || !m.page) return;
     const a = Object.assign(document.createElement('button'), { className: 'go-page', textContent: 'go there' });
-    a.title = 'Turn everyone back to it';
+    a.title = 'Read it on your own (or, if everyone is on it, with them)';
     a.addEventListener('click', () => {
-        if (doc?.token === m.doc) goToPage(m.page!);
+        if (!doc || doc.token !== m.doc) return;
+        if (m.page === doc.page) readAlone(false);
+        else readAlone(true, m.page);
     });
     a.hidden = doc?.token !== m.doc;
     a.dataset.doc = m.doc;
@@ -915,6 +966,7 @@ async function setDoc(d: Doc | null | undefined) {
     doc = d || null;
     if (!doc || was?.token !== doc.token || doc.page === turning) {
         turning = null; // turned (or a new document)
+        if (!doc || was?.token !== doc.token) alone = false;
         clearTimeout(restTimer);
         clearTimeout(turnTimer);
     }
@@ -1286,6 +1338,7 @@ async function openApp(info: AppInfo) {
             if (nw.inst && nw.inst.resize) nw.inst.resize();
         }).observe(nw.body);
         wins.set(info.id, nw);
+        showBar(); // no notes button while Stickies is open
         if (info.name === openedHere) {
             // asked for here: show it
             openedHere = null;
@@ -1336,6 +1389,7 @@ function closeApp(id: number) {
     if (w.inst && w.inst.stop) w.inst.stop();
     w.el.remove();
     wins.delete(id);
+    showBar();
     if (tab === id) tab = null;
     arrangeApps();
 }

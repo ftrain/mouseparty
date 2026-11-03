@@ -7,9 +7,11 @@ package apps
 // its moment for a few seconds (stickyShow, the script's), or for as long as its
 // page is up. There's no window: the notes are on the picture itself (Glass).
 // Anyone writes them; only their writer moves, recolours or takes one off.
+// Chat says when one goes on or comes off, and where (a page's line links there).
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -128,6 +130,7 @@ func (s *stickies) Message(r *Room, from Viewer, m Msg) {
 		n.ID = t.Next
 		t.Title, t.Last = s.now.Title, time.Now().Unix()
 		t.Notes = append(t.Notes, n)
+		s.say(r, fmt.Sprintf("%s left a note %s: “%s”", from.Name, s.where(n), clip(n.Text, 80)), n)
 		r.Changed()
 	case "move", "color", "remove":
 		id, ok := m.Int("sid", 1, 1<<30)
@@ -154,13 +157,40 @@ func (s *stickies) Message(r *Room, from Viewer, m Msg) {
 				}
 				n.Color = c
 			case "remove":
+				gone := *n
 				t.Notes = append(t.Notes[:i], t.Notes[i+1:]...)
+				s.say(r, fmt.Sprintf("%s took a note off %s", from.Name, s.where(gone)), gone)
 			}
 			t.Last = time.Now().Unix()
 			r.Changed()
 			return
 		}
 	}
+}
+
+// where: "on page 4", "at 1:02:03"
+func (s *stickies) where(n Sticky) string {
+	if s.now.Paged {
+		return fmt.Sprintf("on page %d", n.Page)
+	}
+	t := int(n.At)
+	if t >= 3600 {
+		return fmt.Sprintf("at %d:%02d:%02d", t/3600, t/60%60, t%60)
+	}
+	return fmt.Sprintf("at %d:%02d", t/60, t%60)
+}
+
+func (s *stickies) say(r *Room, text string, n Sticky) {
+	if r.Movie != nil {
+		r.Movie.Say(text, n.Page)
+	}
+}
+
+func clip(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n-1]) + "…"
+	}
+	return s
 }
 
 // trim: the things with notes on them, the stickyThings most lately written on

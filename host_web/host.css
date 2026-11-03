@@ -127,6 +127,7 @@ button { font-family: var(--font); }
 .doc-pace { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--text); }
 .doc-pace[hidden], .doc-bar button[hidden] { display: none; }
 .doc-zoom:disabled { opacity: 0.35; cursor: default; }
+.doc-zoom.on { background: var(--green); color: #000; }
 .go-page {
     background: none; border: none; padding: 0; color: var(--green); font: inherit; text-decoration: underline; cursor: pointer;
 }

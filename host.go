@@ -230,7 +230,7 @@ func (h *Host) start() error {
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
 	h.chat.docAt = h.SetAt
-	h.chat.docPage, h.chat.docPages, h.chat.docPace = h.Turn, h.SetPages, h.SetPace
+	h.chat.docPage, h.chat.docRead, h.chat.docPages, h.chat.docPace = h.Turn, h.Reading, h.SetPages, h.SetPace
 	h.ports = map[string]int{"api": freePort(), "rtsp": freePort(), "hls": freePort(), "webrtc": freePort()}
 	h.tmp = tmp
 	h.stdins = map[*exec.Cmd]io.WriteCloser{}

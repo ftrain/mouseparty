@@ -29,9 +29,11 @@
             <div class="doc" id="doc" hidden>
                 <div class="doc-scroll" id="docScroll"><canvas id="docCanvas"></canvas></div>
                 <div class="doc-bar">
-                    <!-- this viewer's own page; resting on one tells chat, with a link there (pace.go) -->
+                    <!-- everyone's page, which anyone turns; or, reading on one's own, this viewer's alone. Chat says which (pace.go) -->
                     <input type="range" class="doc-slider" id="docSlider" min="1" max="2" step="1" aria-label="Page" hidden>
                     <span class="doc-page" id="docPage"></span>
+                    <button class="doc-zoom" id="docAlone" hidden>read on my own</button>
+                    <button class="doc-zoom" id="docNotes" title="Stick notes on pages (Stickies)" hidden>notes</button>
                     <!-- everyone's pace: anyone makes it faster or slower, for all -->
                     <span class="doc-pace" id="docPace" hidden>
                         <button class="doc-zoom" id="docSlower" title="Slower, for everyone" aria-label="Slower">−</button>

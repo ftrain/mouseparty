@@ -118,6 +118,7 @@ var socketGraph = []socketCommand{
 	{"app_close", []apps.Field{{Name: "id", Type: "appid"}}, "close one for everyone"},
 	{"doc_at", []apps.Field{{Name: "token", Type: "str", Max: 20}, {Name: "at", Type: "str", Max: 80}, {Name: "back", Type: "bool"}}, "a page of the database up"},
 	{"doc_page", []apps.Field{{Name: "token", Type: "doctoken"}, {Name: "page", Type: "int", Lo: -1, Hi: 12}}, "turning everyone's page of the document up: chat says who"},
+	{"doc_read", []apps.Field{{Name: "token", Type: "doctoken"}, {Name: "page", Type: "int", Lo: -1, Hi: 12}}, "reading on one's own, resting on a page (0: back to everyone's): chat says so"},
 	{"doc_pages", []apps.Field{{Name: "token", Type: "doctoken"}, {Name: "pages", Type: "int", Lo: -1, Hi: 12}}, "the document up, laid out as so many pages"},
 	{"doc_pace", []apps.Field{{Name: "token", Type: "doctoken"}, {Name: "pace", Type: "int", Lo: 0, Hi: 300}}, "everyone's pace: a page every so many seconds"},
 	{"app", []apps.Field{{Name: "id", Type: "appid"}}, "a message for an app: its kind and fields are apps.Commands"},
@@ -415,7 +416,7 @@ func socketWalk(t *testing.T, data []byte) {
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
 	h.doc = &document{Token: socketDoc, Kind: "text", App: "deck", Title: "Slides", Page: 1, Pages: 3} // pages laid out, viewed and paced
-	h.chat.docPage, h.chat.docPages, h.chat.docPace = h.Turn, h.SetPages, h.SetPace
+	h.chat.docPage, h.chat.docRead, h.chat.docPages, h.chat.docPace = h.Turn, h.Reading, h.SetPages, h.SetPace
 	defer func() { h.ClearDocument() }()
 	srv := httptest.NewServer(http.HandlerFunc(h.chat.handle))
 	defer srv.Close()

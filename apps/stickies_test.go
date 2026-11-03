@@ -2,6 +2,7 @@ package apps
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 )
 
@@ -52,5 +53,9 @@ func TestStickies(t *testing.T) {
 	s.Message(r, ann, Msg{"kind": "remove", "sid": id})
 	if len(s.things["k2"].Notes) != 0 {
 		t.Fatal("its writer took it off")
+	}
+	want := []string{"Ann left a note at 0:12: “look at this” @0", "Bob left a note on page 3: “page three” @3", "Ann took a note off at 0:12 @0"}
+	if fmt.Sprint(m.said) != fmt.Sprint(want) {
+		t.Fatalf("chat said %q, want %q", m.said, want)
 	}
 }

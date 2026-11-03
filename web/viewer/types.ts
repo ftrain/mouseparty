@@ -8,8 +8,8 @@ export interface ChatLine {
     type: 'msg' | 'system';
     name?: string; // a msg's
     text: string;
-    doc?: string; // someone turned everyone to a page of a document (pace.go Turn): its token,
-    page?: number; // and the page, which anyone can turn everyone back to
+    doc?: string; // a line about a page of a document (pace.go Turn, Reading; a note on it): its token,
+    page?: number; // and the page, which anyone can go to
     at: number; // epoch seconds
 }
 
@@ -131,6 +131,7 @@ export type ToHost =
     | { type: 'app_close'; id: number }
     | { type: 'doc_at'; token: string | null; at?: string; back?: true }
     | { type: 'doc_page'; token: string; page: number }
+    | { type: 'doc_read'; token: string; page: number } // reading on one's own, resting on page (0: back with everyone)
     | { type: 'doc_pages'; token: string; pages: number }
     | { type: 'doc_pace'; token: string; pace: number }
     | ({ type: 'app'; id: number } & AppMsg);

@@ -306,6 +306,7 @@ type testMovie struct {
 	lines []Line
 	pos   float64
 	kept  []string
+	said  []string
 }
 
 func (m *testMovie) Lines() []Line             { return m.lines }
@@ -315,6 +316,9 @@ func (m *testMovie) Frame() ([]byte, Picture, error) {
 }
 func (m *testMovie) Playing() Playing {
 	return Playing{Key: "k" + fmt.Sprint(int(m.pos)/100), Title: "The Movie", Paged: int(m.pos)%2 == 1}
+}
+func (m *testMovie) Say(text string, page int) {
+	m.said = append(m.said, fmt.Sprint(text, " @", page))
 }
 func (m *testMovie) Keep(b []byte, mime string) (Picture, error) {
 	m.kept = append(m.kept, string(b))

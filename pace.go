@@ -4,7 +4,9 @@ package main
 // turns it (the host's slider and arrow keys, any viewer's, the pace). A viewer's
 // turn is said in chat, with a link that turns everyone back there. The pace (a
 // page every so many seconds, or off) is everyone's too: anyone makes it faster
-// or slower, and chat says who did.
+// or slower, and chat says who did. A viewer can also read on their own, their
+// slider moving only their page: chat says which page they're on as they go
+// (Reading), with a link there, and when they come back to everyone's.
 
 import (
 	"fmt"
@@ -66,6 +68,45 @@ func (h *Host) Turn(name, token string, page int) {
 	if chat != nil {
 		chat.say(map[string]any{"type": "system", "text": fmt.Sprintf("%s turned to %s %d", name, word, page),
 			"doc": token, "page": page})
+	}
+}
+
+// Reading: a viewer reading on their own rested on a page (or, page 0, came back to everyone's); chat says so
+func (h *Host) Reading(name, token string, page int) {
+	h.mu.Lock()
+	d := h.doc
+	ok := d.paged() && d.Token == token && page >= 0 && page <= d.Pages
+	var word string
+	var at int
+	if ok {
+		word, at = d.pageWord(), d.Page
+	}
+	chat := h.chat
+	h.mu.Unlock()
+	if !ok || chat == nil {
+		return
+	}
+	if name == "" {
+		name = "Someone"
+	}
+	text := fmt.Sprintf("%s is reading %s %d on their own", name, word, page)
+	if page == 0 {
+		text, page = fmt.Sprintf("%s is back with everyone on %s %d", name, word, at), at
+	}
+	chat.say(map[string]any{"type": "system", "text": text, "doc": token, "page": page})
+}
+
+// Say: a line in chat from an app (Stickies: a note left); page, if it's on a page of the document up, links there
+func (h *Host) Say(text string, page int) {
+	h.mu.Lock()
+	d, chat := h.doc, h.chat
+	line := map[string]any{"type": "system", "text": text}
+	if page > 0 && d.paged() && page <= d.Pages {
+		line["doc"], line["page"] = d.Token, page
+	}
+	h.mu.Unlock()
+	if chat != nil {
+		chat.say(line)
 	}
 }
 

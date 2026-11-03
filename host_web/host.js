@@ -710,6 +710,11 @@ let drawing = false;
 let drawAgain = false;
 let drawnPage = null;
 let turning = null;
+let alone = false;
+let myPage = 1;
+const READ_MS = 1200;
+const docAlone = byId("docAlone");
+const docNotes = byId("docNotes");
 let restTimer;
 let turnTimer;
 const REST_MS = 400;
@@ -734,7 +739,7 @@ function paceWords(seconds, word) {
 	if (seconds >= 120 && seconds % 60 === 0) return `a ${word} every ${seconds / 60} min`;
 	return `a ${word} every ${seconds} s`;
 }
-const shownPage = () => !doc ? 1 : Math.max(1, Math.min(doc.pages || 1, turning ?? doc.page));
+const shownPage = () => !doc ? 1 : Math.max(1, Math.min(doc.pages || 1, alone ? myPage : turning ?? doc.page));
 function showBar() {
 	if (!doc || doc.kind === "db") return;
 	const word = pageWord(doc);
@@ -744,6 +749,11 @@ function showBar() {
 	docSlider.max = String(Math.max(2, doc.pages));
 	docSlider.value = String(shownPage());
 	byId("docPage").textContent = paged ? `${shownPage()} / ${doc.pages}` : "";
+	docAlone.hidden = !paged || doc.pages < 2;
+	docAlone.textContent = alone ? `back to everyone · ${doc.page}` : "read on my own";
+	docAlone.title = alone ? `Back to the ${word} everyone is on (chat says so)` : `Read at your own pace: your slider moves only your ${word} (chat says where you are)`;
+	docAlone.classList.toggle("on", alone);
+	docNotes.hidden = !paged || [...wins.values()].some((w) => w.info?.name === "stickies");
 	byId("docPace").hidden = !paged;
 	byId("docPaceText").textContent = paceWords(doc.pace || 0, word);
 	const i = PACES.indexOf(doc.pace || 0);
@@ -758,6 +768,20 @@ function drawShown() {
 function goToPage(page) {
 	if (!doc || !(doc.pages > 0)) return;
 	const at = Math.max(1, Math.min(doc.pages, page));
+	if (alone) {
+		myPage = at;
+		drawShown();
+		clearTimeout(restTimer);
+		const token = doc.token;
+		restTimer = setTimeout(() => {
+			if (alone && doc?.token === token && myPage === at) send({
+				type: "doc_read",
+				token,
+				page: at
+			});
+		}, READ_MS);
+		return;
+	}
 	turning = at === doc.page ? null : at;
 	drawShown();
 	clearTimeout(restTimer);
@@ -780,6 +804,40 @@ function goToPage(page) {
 	}, REST_MS);
 }
 docSlider.addEventListener("input", () => goToPage(Number(docSlider.value)));
+function readAlone(on, page) {
+	if (!doc || !(doc.pages > 0)) return;
+	clearTimeout(restTimer);
+	clearTimeout(turnTimer);
+	if (on) {
+		myPage = Math.max(1, Math.min(doc.pages, page ?? shownPage()));
+		turning = null;
+		alone = true;
+		send({
+			type: "doc_read",
+			token: doc.token,
+			page: myPage
+		});
+	} else if (alone) {
+		alone = false;
+		send({
+			type: "doc_read",
+			token: doc.token,
+			page: 0
+		});
+	}
+	drawShown();
+}
+docAlone.addEventListener("click", () => readAlone(!alone));
+docNotes.addEventListener("click", () => {
+	if (![...wins.values()].some((w) => w.info?.name === "stickies")) {
+		openedHere = "stickies";
+		send({
+			type: "app_open",
+			name: "stickies"
+		});
+	}
+	docNotes.hidden = true;
+});
 function changePace(step) {
 	if (!doc) return;
 	const i = PACES.indexOf(doc.pace || 0);
@@ -808,9 +866,11 @@ function pageLink(m, el) {
 		className: "go-page",
 		textContent: "go there"
 	});
-	a.title = "Turn everyone back to it";
+	a.title = "Read it on your own (or, if everyone is on it, with them)";
 	a.addEventListener("click", () => {
-		if (doc?.token === m.doc) goToPage(m.page);
+		if (!doc || doc.token !== m.doc) return;
+		if (m.page === doc.page) readAlone(false);
+		else readAlone(true, m.page);
 	});
 	a.hidden = doc?.token !== m.doc;
 	a.dataset.doc = m.doc;
@@ -825,6 +885,7 @@ async function setDoc(d) {
 	doc = d || null;
 	if (!doc || was?.token !== doc.token || doc.page === turning) {
 		turning = null;
+		if (!doc || was?.token !== doc.token) alone = false;
 		clearTimeout(restTimer);
 		clearTimeout(turnTimer);
 	}
@@ -1174,6 +1235,7 @@ async function openApp(info) {
 			if (nw.inst && nw.inst.resize) nw.inst.resize();
 		}).observe(nw.body);
 		wins.set(info.id, nw);
+		showBar();
 		if (info.name === openedHere) {
 			openedHere = null;
 			tab = info.glass ? tab : info.id;
@@ -1234,6 +1296,7 @@ function closeApp(id) {
 	if (w.inst && w.inst.stop) w.inst.stop();
 	w.el.remove();
 	wins.delete(id);
+	showBar();
 	if (tab === id) tab = null;
 	arrangeApps();
 }

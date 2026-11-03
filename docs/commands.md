@@ -80,6 +80,7 @@ Not walked: `GetView`, a question, not a command: every step reads the view; `Se
 | `app_close` | `id` (appid) | close one for everyone |
 | `doc_at` | `token` (str), `at` (str), `back` (bool) | a page of the database up |
 | `doc_page` | `token` (doctoken), `page` (int) | turning everyone's page of the document up: chat says who |
+| `doc_read` | `token` (doctoken), `page` (int) | reading on one's own, resting on a page (0: back to everyone's): chat says so |
 | `doc_pages` | `token` (doctoken), `pages` (int) | the document up, laid out as so many pages |
 | `doc_pace` | `token` (doctoken), `pace` (int) | everyone's pace: a page every so many seconds |
 | `app` | `id` (appid) | a message for an app: its kind and fields are apps.Commands |
