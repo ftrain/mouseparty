@@ -1032,6 +1032,82 @@ window.addEventListener("message", (e) => {
 let textPages = null;
 let pageSvg = null;
 let textKey = "";
+const SCREEN_PAD = 24;
+const SCREEN_W = 672;
+const SCREEN_H = Math.round(SCREEN_W * 9 / 16);
+function spans(svg) {
+	const root = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${svg}</svg>`, "image/svg+xml").documentElement;
+	if (root.querySelector("parsererror")) return null;
+	const out = [];
+	const num = (el, a) => Number(el.getAttribute(a));
+	for (const el of root.children) {
+		const tag = el.localName;
+		if (tag === "text") {
+			const y = num(el, "y"), fs = num(el, "font-size") || 16;
+			if (!isFinite(y)) return null;
+			out.push([y - fs * .85, y + fs * .3]);
+		} else if (tag === "rect" || tag === "svg" || tag === "image" || tag === "foreignObject") {
+			const y = num(el, "y") || 0, h = num(el, "height");
+			if (!isFinite(y) || !isFinite(h) || !el.hasAttribute("height")) return null;
+			out.push([y, y + h]);
+		} else if (tag === "line") {
+			const a = num(el, "y1"), b = num(el, "y2");
+			if (!isFinite(a) || !isFinite(b)) return null;
+			out.push([Math.min(a, b) - 1, Math.max(a, b) + 1]);
+		} else if (tag !== "defs" && tag !== "title" && tag !== "desc") return null;
+	}
+	return out.sort((a, b) => a[0] - b[0]);
+}
+function screenPages(paper) {
+	const segs = [];
+	const cuts = [];
+	let at = 0;
+	for (const page of paper) {
+		const sp = spans(page.svg);
+		if (sp === null) return paper;
+		if (!sp.length) continue;
+		const top = sp[0][0];
+		let bottom = sp[0][1];
+		for (const [a, b] of sp) {
+			if (a > bottom) cuts.push(at + (bottom + a) / 2 - top);
+			bottom = Math.max(bottom, b);
+		}
+		segs.push({
+			page,
+			top,
+			bottom,
+			at
+		});
+		at += bottom - top + 16;
+		cuts.push(at - 8);
+	}
+	if (!segs.length) return paper;
+	const end = at - 16;
+	const room = 330;
+	const out = [];
+	let from = 0;
+	while (from < end - .5) {
+		const fits = cuts.filter((c) => c > from + .5 && c <= from + room);
+		let to = fits.length ? fits[fits.length - 1] : cuts.find((c) => c > from + room) ?? end;
+		if (to > end) to = end;
+		const h = Math.max(SCREEN_H, to - from + 48);
+		let svg = "";
+		for (const s of segs) {
+			const a = Math.max(from, s.at), b = Math.min(to, s.at + s.bottom - s.top);
+			if (b <= a) continue;
+			const y0 = s.top + (a - s.at);
+			const x0 = (s.page.w - 624) / 2 - SCREEN_PAD;
+			svg += `<svg x="0" y="${SCREEN_PAD + a - from}" width="${SCREEN_W}" height="${b - a}" viewBox="${x0} ${y0} ${SCREEN_W} ${b - a}" overflow="hidden">${s.page.svg}</svg>`;
+		}
+		out.push({
+			w: SCREEN_W,
+			h,
+			svg
+		});
+		from = to;
+	}
+	return out.length ? out : paper;
+}
 async function showText(d, was) {
 	const key = `${d.token}|${d.ready ? 1 : 0}|${d.error || ""}`;
 	if (key === textKey) {
@@ -1063,7 +1139,9 @@ async function showText(d, was) {
 		if (textKey !== key) return;
 		const def = lib.editors.appOf(app);
 		if (!def) throw new Error(`no ${app}`);
-		const pages = def.view(text);
+		const write = app === "write";
+		const lettered = !write ? text : text.startsWith("---\n") ? `---\npaper: letter\n${text.slice(4)}` : `---\npaper: letter\n---\n${text}`;
+		const pages = write ? screenPages(def.view(lettered)) : def.view(text);
 		if (!pages.length) throw new Error("no pages");
 		textPages = pages;
 		pageSvg = lib.editors.pageSvg;

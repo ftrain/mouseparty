@@ -1120,6 +1120,94 @@ let textPages: { w: number; h: number; svg: string; alt?: string }[] | null = nu
 let pageSvg: ((p: { w: number; h: number; svg: string; alt?: string }, attrs?: string) => string) | null = null; // the library's: the page in its type
 let textKey = ''; // the doc laid out, and how far along it was: reading, read, or couldn't be
 
+// ---------- a document's words on screen-shaped pages ----------
+// A text document (a book, a web page, a Word file: pandoc has reflowed them all)
+// is laid out by Write on Letter paper, the same for every viewer (not each one's
+// own locale's paper, whose different width would break its pages differently).
+// Then its column of words is cut into pages the shape of the screen, each about
+// fourteen lines, so drawn to fill the picture its type is twice the size of a
+// paper page's. A cut always falls between lines, read from where Write put each
+// thing on its page (the SVG's own numbers, so every browser cuts the same and the
+// pages are the same everywhere); a picture or table taller than a screen gets a
+// page of its own, drawn smaller.
+type TextPage = { w: number; h: number; svg: string; alt?: string };
+const SCREEN_PAD = 24; // around the column, in the paper's px
+const SCREEN_W = 624 + 2 * SCREEN_PAD; // Letter's column (816 less two 96 margins), padded
+const SCREEN_H = Math.round((SCREEN_W * 9) / 16);
+
+// where each thing on a page is, top to bottom (null: something it can't place, so the page isn't cut)
+function spans(svg: string): [number, number][] | null {
+    const root = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${svg}</svg>`, 'image/svg+xml').documentElement;
+    if (root.querySelector('parsererror')) return null;
+    const out: [number, number][] = [];
+    const num = (el: Element, a: string) => Number(el.getAttribute(a));
+    for (const el of root.children) {
+        const tag = el.localName;
+        if (tag === 'text') {
+            const y = num(el, 'y'),
+                fs = num(el, 'font-size') || 16;
+            if (!isFinite(y)) return null;
+            out.push([y - fs * 0.85, y + fs * 0.3]);
+        } else if (tag === 'rect' || tag === 'svg' || tag === 'image' || tag === 'foreignObject') {
+            const y = num(el, 'y') || 0,
+                h = num(el, 'height');
+            if (!isFinite(y) || !isFinite(h) || !el.hasAttribute('height')) return null;
+            out.push([y, y + h]);
+        } else if (tag === 'line') {
+            const a = num(el, 'y1'),
+                b = num(el, 'y2');
+            if (!isFinite(a) || !isFinite(b)) return null;
+            out.push([Math.min(a, b) - 1, Math.max(a, b) + 1]);
+        } else if (tag !== 'defs' && tag !== 'title' && tag !== 'desc') return null;
+    }
+    return out.sort((a, b) => a[0] - b[0]);
+}
+
+function screenPages(paper: TextPage[]): TextPage[] {
+    // the column as one strip: each paper page's things, one after another, a little apart
+    type Seg = { page: TextPage; top: number; bottom: number; at: number }; // at: where its top is on the strip
+    const segs: Seg[] = [];
+    const cuts: number[] = []; // places on the strip between things
+    let at = 0;
+    for (const page of paper) {
+        const sp = spans(page.svg);
+        if (sp === null) return paper; // something it can't read: the paper pages as they are
+        if (!sp.length) continue;
+        const top = sp[0]![0];
+        let bottom = sp[0]![1];
+        for (const [a, b] of sp) {
+            if (a > bottom) cuts.push(at + (bottom + a) / 2 - top);
+            bottom = Math.max(bottom, b);
+        }
+        segs.push({ page, top, bottom, at });
+        at += bottom - top + 16;
+        cuts.push(at - 8);
+    }
+    if (!segs.length) return paper;
+    const end = at - 16;
+    const room = SCREEN_H - 2 * SCREEN_PAD;
+    const out: TextPage[] = [];
+    let from = 0;
+    while (from < end - 0.5) {
+        const fits = cuts.filter((c) => c > from + 0.5 && c <= from + room);
+        let to = fits.length ? fits[fits.length - 1]! : (cuts.find((c) => c > from + room) ?? end); // too tall: a page of its own
+        if (to > end) to = end;
+        const h = Math.max(SCREEN_H, to - from + 2 * SCREEN_PAD);
+        let svg = '';
+        for (const s of segs) {
+            const a = Math.max(from, s.at),
+                b = Math.min(to, s.at + s.bottom - s.top);
+            if (b <= a) continue;
+            const y0 = s.top + (a - s.at); // where on its paper page
+            const x0 = (s.page.w - 624) / 2 - SCREEN_PAD;
+            svg += `<svg x="0" y="${SCREEN_PAD + a - from}" width="${SCREEN_W}" height="${b - a}" viewBox="${x0} ${y0} ${SCREEN_W} ${b - a}" overflow="hidden">${s.page.svg}</svg>`;
+        }
+        out.push({ w: SCREEN_W, h, svg });
+        from = to;
+    }
+    return out.length ? out : paper;
+}
+
 async function showText(d: Doc, was: Doc | null) {
     const key = `${d.token}|${d.ready ? 1 : 0}|${d.error || ''}`;
     if (key === textKey) {
@@ -1142,7 +1230,10 @@ async function showText(d: Doc, was: Doc | null) {
         if (textKey !== key) return; // the host moved on while it loaded
         const def = lib.editors.appOf(app);
         if (!def) throw new Error(`no ${app}`);
-        const pages = def.view(text);
+        // Write on Letter for everyone (its head says so), then cut to the screen's shape
+        const write = app === 'write';
+        const lettered = !write ? text : text.startsWith('---\n') ? `---\npaper: letter\n${text.slice(4)}` : `---\npaper: letter\n---\n${text}`;
+        const pages = write ? screenPages(def.view(lettered)) : def.view(text);
         if (!pages.length) throw new Error('no pages');
         textPages = pages;
         pageSvg = lib.editors.pageSvg;
