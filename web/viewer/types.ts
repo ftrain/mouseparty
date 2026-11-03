@@ -8,8 +8,8 @@ export interface ChatLine {
     type: 'msg' | 'system';
     name?: string; // a msg's
     text: string;
-    doc?: string; // someone is viewing a page of a document (pace.go Viewing): its token,
-    page?: number; // and the page, which anyone can go to
+    doc?: string; // someone turned everyone to a page of a document (pace.go Turn): its token,
+    page?: number; // and the page, which anyone can turn everyone back to
     at: number; // epoch seconds
 }
 

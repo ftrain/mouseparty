@@ -1095,6 +1095,7 @@ func (a *App) hostStart() {
 	h.DocAt = func(at string) { a.do(func() { a.docAt(at) }) }
 	h.DocPages = func(pages int) { a.do(func() { a.docPages(pages) }) }
 	h.Paced = func() { a.do(a.pacedTurn) }
+	h.Turned = func(page int) { a.do(func() { a.showPage(page) }) }
 	if a.hostSetup != nil {
 		a.hostSetup(h)
 	}

@@ -1,10 +1,9 @@
 package main
 
-// Pages read together, each at their own pace: the document up has a page
-// everyone is on (the host's slider and arrow keys, and the pace, turn it), and
-// each viewer's page slides on its own over it. Resting on one, a viewer is said
-// in chat to be viewing it, with a link that takes anyone else there. The pace
-// (a page every so many seconds, or off) is everyone's: anyone makes it faster
+// Pages read together: the document up has one page everyone is on, and anyone
+// turns it (the host's slider and arrow keys, any viewer's, the pace). A viewer's
+// turn is said in chat, with a link that turns everyone back there. The pace (a
+// page every so many seconds, or off) is everyone's too: anyone makes it faster
 // or slower, and chat says who did.
 
 import (
@@ -42,25 +41,32 @@ func paceWords(seconds int, word string) string {
 // paged: the document up has pages to slide through (a database's are Datasette's, not a row of them)
 func (d *document) paged() bool { return d != nil && d.Kind != "db" && d.Pages > 0 }
 
-// Viewing: a viewer rested on a page of the document up (their own, not everyone's); chat says so
-func (h *Host) Viewing(name, token string, page int) {
+// Turn: a viewer turned everyone's page (their slider rested, their arrow keys, a link in chat); chat says so
+func (h *Host) Turn(name, token string, page int) {
 	h.mu.Lock()
 	d := h.doc
-	ok := d.paged() && d.Token == token && page >= 1 && page <= d.Pages
+	ok := d.paged() && d.Token == token && page >= 1 && page <= d.Pages && page != d.Page
 	var word string
 	if ok {
 		word = d.pageWord()
 	}
-	chat := h.chat
+	chat, turned := h.chat, h.Turned
 	h.mu.Unlock()
-	if !ok || chat == nil {
+	if !ok {
 		return
+	}
+	if turned != nil {
+		turned(page) // through the app, which keeps where it was left
+	} else {
+		h.SetPage(page)
 	}
 	if name == "" {
 		name = "Someone"
 	}
-	chat.say(map[string]any{"type": "system", "text": fmt.Sprintf("%s is viewing %s %d", name, word, page),
-		"doc": token, "page": page})
+	if chat != nil {
+		chat.say(map[string]any{"type": "system", "text": fmt.Sprintf("%s turned to %s %d", name, word, page),
+			"doc": token, "page": page})
+	}
 }
 
 // SetPages: a viewer laid out the document up (another document: its pages are the editors' layout, the same on every page)

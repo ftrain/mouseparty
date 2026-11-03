@@ -792,14 +792,12 @@ setInterval(() => {
 // out as pages by Tiny Little Office (the same pages on every screen). There's a
 // page everyone is on (the host's, and the pace's: pace.go), which this page
 // follows until its slider (or ← →) goes elsewhere; resting there, chat says
-// which page this viewer is viewing, with a link for anyone to go there too, and
-// "follow" comes back to everyone's. The pace is everyone's: faster and slower
-// change it for all. Whole page or fit width is each viewer's own choice.
+// whose turn it was, with a link that turns everyone back there. The pace is
+// everyone's too: faster and slower change it for all. Whole page or fit width is each viewer's own choice.
 const docEl = byId('doc');
 const docScroll = byId('docScroll');
 const docZoom = byId('docZoom');
 const docSlider = byId<HTMLInputElement>('docSlider');
-const docFollow = byId<HTMLButtonElement>('docFollow');
 let doc: Doc | null = null; // {token, title, pages, page, pace}, from the host
 let pdf: PdfDocument | null = null; // pdf.js's copy of it
 let pdfTask: PdfLoading | null = null; // its loading, which is what lets it go again
@@ -810,10 +808,10 @@ let renderTask: { cancel(): void } | null = null,
     drawing = false,
     drawAgain = false,
     drawnPage: number | null = null;
-let following = true; // on everyone's page; else on mine
-let myPage = 1;
+let turning: number | null = null; // the page this viewer is turning everyone to, shown till the host says so
 let restTimer: ReturnType<typeof setTimeout> | undefined;
-const REST_MS = 1200; // resting this long on a page says so in chat
+let turnTimer: ReturnType<typeof setTimeout> | undefined;
+const REST_MS = 400; // resting this long on a page turns everyone's there
 
 // the paces (pace.go paces), seconds a page: off, then slowest to fastest
 const PACES = [0, 300, 180, 120, 90, 60, 45, 30, 20, 15, 10, 5];
@@ -825,8 +823,8 @@ function paceWords(seconds: number, word: string) {
     return `a ${word} every ${seconds} s`;
 }
 
-// the page this viewer sees
-const shownPage = () => (!doc ? 1 : Math.max(1, Math.min(doc.pages || 1, following ? doc.page : myPage)));
+// the page this viewer sees: everyone's, or the one they're turning it to
+const shownPage = () => (!doc ? 1 : Math.max(1, Math.min(doc.pages || 1, turning ?? doc.page)));
 
 // the bar: the slider, where this is, everyone's page, the pace
 function showBar() {
@@ -836,11 +834,8 @@ function showBar() {
     docSlider.hidden = !paged || doc.pages < 2;
     docSlider.min = '1';
     docSlider.max = String(Math.max(2, doc.pages));
-    if (document.activeElement !== docSlider || following) docSlider.value = String(shownPage());
+    docSlider.value = String(shownPage());
     byId('docPage').textContent = paged ? `${shownPage()} / ${doc.pages}` : '';
-    docFollow.hidden = following || !paged;
-    docFollow.textContent = `follow · ${doc.page}`;
-    docFollow.title = `Back to the ${word} everyone is on, ${doc.page}`;
     byId('docPace').hidden = !paged;
     byId('docPaceText').textContent = paceWords(doc.pace || 0, word);
     const i = PACES.indexOf(doc.pace || 0);
@@ -854,28 +849,30 @@ function drawShown() {
     else drawPage();
 }
 
-// go to a page of my own (the slider, the arrow keys, a link in chat); back on everyone's, follow it again
-function goToPage(page: number, say: boolean) {
+// turn everyone's page (the slider, the arrow keys, a link in chat): shown here at once, sent once it rests
+function goToPage(page: number) {
     if (!doc || !(doc.pages > 0)) return;
-    myPage = Math.max(1, Math.min(doc.pages, page));
-    following = myPage === doc.page;
+    const at = Math.max(1, Math.min(doc.pages, page));
+    turning = at === doc.page ? null : at;
     drawShown();
     clearTimeout(restTimer);
-    if (say) {
-        const token = doc.token,
-            at = myPage;
-        restTimer = setTimeout(() => {
-            if (doc?.token === token && shownPage() === at) send({ type: 'doc_page', token, page: at });
-        }, REST_MS);
-    }
+    clearTimeout(turnTimer);
+    if (turning === null) return;
+    const token = doc.token;
+    restTimer = setTimeout(() => {
+        if (doc?.token !== token || turning !== at) return;
+        send({ type: 'doc_page', token, page: at });
+        turnTimer = setTimeout(() => {
+            // the host didn't turn it (someone else turned it first, or it was dropped): everyone's again
+            if (turning === at) {
+                turning = null;
+                drawShown();
+            }
+        }, 3000);
+    }, REST_MS);
 }
 
-docSlider.addEventListener('input', () => goToPage(Number(docSlider.value), true));
-docFollow.addEventListener('click', () => {
-    following = true;
-    clearTimeout(restTimer);
-    drawShown();
-});
+docSlider.addEventListener('input', () => goToPage(Number(docSlider.value)));
 function changePace(step: number) {
     if (!doc) return;
     const i = PACES.indexOf(doc.pace || 0);
@@ -892,15 +889,16 @@ document.addEventListener('keydown', (e) => {
     const step = e.key === 'ArrowRight' || e.key === 'PageDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'PageUp' ? -1 : 0;
     if (!step || t === docSlider) return; // the slider moves itself (and says so: input)
     e.preventDefault();
-    goToPage(shownPage() + step, true);
+    goToPage(shownPage() + step);
 });
 
-// a line in chat saying who is viewing which page: a link there, while that document is up
+// a line in chat saying who turned to which page: a link that turns everyone back there, while that document is up
 function pageLink(m: ChatLine, el: HTMLElement) {
     if (!m.doc || !m.page) return;
     const a = Object.assign(document.createElement('button'), { className: 'go-page', textContent: 'go there' });
+    a.title = 'Turn everyone back to it';
     a.addEventListener('click', () => {
-        if (doc?.token === m.doc) goToPage(m.page!, false);
+        if (doc?.token === m.doc) goToPage(m.page!);
     });
     a.hidden = doc?.token !== m.doc;
     a.dataset.doc = m.doc;
@@ -915,9 +913,10 @@ async function setDoc(d: Doc | null | undefined) {
     if (ended) return;
     const was = doc;
     doc = d || null;
-    if (!doc || was?.token !== doc.token) {
-        following = true; // a new document: everyone's page
+    if (!doc || was?.token !== doc.token || doc.page === turning) {
+        turning = null; // turned (or a new document)
         clearTimeout(restTimer);
+        clearTimeout(turnTimer);
     }
     pageLinksFor();
     docEl.hidden = !doc;

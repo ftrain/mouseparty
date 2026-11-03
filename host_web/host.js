@@ -699,7 +699,6 @@ const docEl = byId("doc");
 const docScroll = byId("docScroll");
 const docZoom = byId("docZoom");
 const docSlider = byId("docSlider");
-const docFollow = byId("docFollow");
 let doc = null;
 let pdf = null;
 let pdfTask = null;
@@ -710,10 +709,10 @@ let renderTask = null;
 let drawing = false;
 let drawAgain = false;
 let drawnPage = null;
-let following = true;
-let myPage = 1;
+let turning = null;
 let restTimer;
-const REST_MS = 1200;
+let turnTimer;
+const REST_MS = 400;
 const PACES = [
 	0,
 	300,
@@ -735,7 +734,7 @@ function paceWords(seconds, word) {
 	if (seconds >= 120 && seconds % 60 === 0) return `a ${word} every ${seconds / 60} min`;
 	return `a ${word} every ${seconds} s`;
 }
-const shownPage = () => !doc ? 1 : Math.max(1, Math.min(doc.pages || 1, following ? doc.page : myPage));
+const shownPage = () => !doc ? 1 : Math.max(1, Math.min(doc.pages || 1, turning ?? doc.page));
 function showBar() {
 	if (!doc || doc.kind === "db") return;
 	const word = pageWord(doc);
@@ -743,11 +742,8 @@ function showBar() {
 	docSlider.hidden = !paged || doc.pages < 2;
 	docSlider.min = "1";
 	docSlider.max = String(Math.max(2, doc.pages));
-	if (document.activeElement !== docSlider || following) docSlider.value = String(shownPage());
+	docSlider.value = String(shownPage());
 	byId("docPage").textContent = paged ? `${shownPage()} / ${doc.pages}` : "";
-	docFollow.hidden = following || !paged;
-	docFollow.textContent = `follow · ${doc.page}`;
-	docFollow.title = `Back to the ${word} everyone is on, ${doc.page}`;
 	byId("docPace").hidden = !paged;
 	byId("docPaceText").textContent = paceWords(doc.pace || 0, word);
 	const i = PACES.indexOf(doc.pace || 0);
@@ -759,29 +755,31 @@ function drawShown() {
 	if (doc?.kind === "text") drawTextPage();
 	else drawPage();
 }
-function goToPage(page, say) {
+function goToPage(page) {
 	if (!doc || !(doc.pages > 0)) return;
-	myPage = Math.max(1, Math.min(doc.pages, page));
-	following = myPage === doc.page;
+	const at = Math.max(1, Math.min(doc.pages, page));
+	turning = at === doc.page ? null : at;
 	drawShown();
 	clearTimeout(restTimer);
-	if (say) {
-		const token = doc.token, at = myPage;
-		restTimer = setTimeout(() => {
-			if (doc?.token === token && shownPage() === at) send({
-				type: "doc_page",
-				token,
-				page: at
-			});
-		}, REST_MS);
-	}
+	clearTimeout(turnTimer);
+	if (turning === null) return;
+	const token = doc.token;
+	restTimer = setTimeout(() => {
+		if (doc?.token !== token || turning !== at) return;
+		send({
+			type: "doc_page",
+			token,
+			page: at
+		});
+		turnTimer = setTimeout(() => {
+			if (turning === at) {
+				turning = null;
+				drawShown();
+			}
+		}, 3e3);
+	}, REST_MS);
 }
-docSlider.addEventListener("input", () => goToPage(Number(docSlider.value), true));
-docFollow.addEventListener("click", () => {
-	following = true;
-	clearTimeout(restTimer);
-	drawShown();
-});
+docSlider.addEventListener("input", () => goToPage(Number(docSlider.value)));
 function changePace(step) {
 	if (!doc) return;
 	const i = PACES.indexOf(doc.pace || 0);
@@ -802,7 +800,7 @@ document.addEventListener("keydown", (e) => {
 	const step = e.key === "ArrowRight" || e.key === "PageDown" ? 1 : e.key === "ArrowLeft" || e.key === "PageUp" ? -1 : 0;
 	if (!step || t === docSlider) return;
 	e.preventDefault();
-	goToPage(shownPage() + step, true);
+	goToPage(shownPage() + step);
 });
 function pageLink(m, el) {
 	if (!m.doc || !m.page) return;
@@ -810,8 +808,9 @@ function pageLink(m, el) {
 		className: "go-page",
 		textContent: "go there"
 	});
+	a.title = "Turn everyone back to it";
 	a.addEventListener("click", () => {
-		if (doc?.token === m.doc) goToPage(m.page, false);
+		if (doc?.token === m.doc) goToPage(m.page);
 	});
 	a.hidden = doc?.token !== m.doc;
 	a.dataset.doc = m.doc;
@@ -824,9 +823,10 @@ async function setDoc(d) {
 	if (ended) return;
 	const was = doc;
 	doc = d || null;
-	if (!doc || was?.token !== doc.token) {
-		following = true;
+	if (!doc || was?.token !== doc.token || doc.page === turning) {
+		turning = null;
 		clearTimeout(restTimer);
+		clearTimeout(turnTimer);
 	}
 	pageLinksFor();
 	docEl.hidden = !doc;

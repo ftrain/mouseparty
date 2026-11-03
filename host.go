@@ -144,6 +144,7 @@ type Host struct {
 	Party          *party          // where apps (apps.Keeper) and the pictures they name are kept (store.go); nil nowhere
 	DocAt          func(at string) // viewers went to another page of the database up (SetAt)
 	DocPages       func(pages int) // viewers laid out the document up as this many pages (SetPages)
+	Turned         func(page int)  // a viewer turned everyone's page (Turn); without it, SetPage
 	Paced          func()          // the pace says turn the page everyone is on (pace.go)
 
 	mu        sync.Mutex
@@ -229,7 +230,7 @@ func (h *Host) start() error {
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
 	h.chat.docAt = h.SetAt
-	h.chat.docPage, h.chat.docPages, h.chat.docPace = h.Viewing, h.SetPages, h.SetPace
+	h.chat.docPage, h.chat.docPages, h.chat.docPace = h.Turn, h.SetPages, h.SetPace
 	h.ports = map[string]int{"api": freePort(), "rtsp": freePort(), "hls": freePort(), "webrtc": freePort()}
 	h.tmp = tmp
 	h.stdins = map[*exec.Cmd]io.WriteCloser{}

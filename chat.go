@@ -67,7 +67,7 @@ type Chat struct {
 	app        func(from apps.Viewer, m map[string]any) // a message for an app open (apphost.go)
 	appControl func(from apps.Viewer, m map[string]any) // a page opening or closing an app
 	docAt      func(token, at string, back bool)        // a page went to another page of the database up, or back
-	docPage    func(name, token string, page int)       // a viewer rested on a page of the document up (pace.go)
+	docPage    func(name, token string, page int)       // a viewer turned everyone's page of the document up (pace.go)
 	docPages   func(token string, pages int)            // a viewer laid it out as this many
 	docPace    func(name, token string, seconds int)    // a viewer set everyone's pace
 	joined     func(v apps.Viewer)                      // a socket opened, or its viewer took a name
@@ -202,7 +202,6 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	var last, lastControl, lastAt, lastPage, lastPages, lastPace time.Time
-	viewing := "" // the page this viewer was last said to be viewing (its document's token, and its number)
 	appWindow, appCount := time.Now(), 0
 	for {
 		kind, data, err := ws.ReadMessage()
@@ -266,9 +265,8 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 		case "doc_page":
 			token, _ := m["token"].(string)
 			page, ok := m["page"].(float64)
-			at := fmt.Sprint(token, " ", page)
-			if ok && page == float64(int(page)) && at != viewing && time.Since(lastPage) > time.Second && c.docPage != nil {
-				lastPage, viewing = time.Now(), at
+			if ok && page == float64(int(page)) && time.Since(lastPage) > 250*time.Millisecond && c.docPage != nil {
+				lastPage = time.Now()
 				c.mu.Lock()
 				name := conn.name
 				c.mu.Unlock()
