@@ -158,6 +158,7 @@ type Host struct {
 	stdins    map[*exec.Cmd]io.WriteCloser
 	exited    map[*exec.Cmd]chan struct{} // closed when the tool has gone
 	mediamtx  *exec.Cmd
+	mtxUp     bool // MediaMTX came up: from then on, one that dies is started again on the same ports
 	tunnel    *exec.Cmd
 	config    string
 	stun      bool
@@ -265,17 +266,11 @@ func (h *Host) start() error {
 		return err
 	}
 	h.config = filepath.Join(tmp, "mediamtx.yml")
-	if err := os.WriteFile(h.config, []byte(mediamtxConfig(h.ports, public, standby, h.ICEPort)), 0o644); err != nil {
+	if err := h.startMediaMTX(public, standby); err != nil { // before the site, which reads its ports
 		return err
-	}
-	if h.mediamtx, err = h.spawn("mediamtx", h.MediaMTX, h.config); err != nil {
-		return fmt.Errorf("MediaMTX: %w", err)
 	}
 	if err := h.startWeb(); err != nil {
 		return err
-	}
-	if err := waitFor(h.ports["api"], 10*time.Second); err != nil {
-		return errors.New("MediaMTX did not start")
 	}
 	h.mu.Lock()
 	h.urls = map[string]string{"lan": fmt.Sprintf("http://%s:%d/%s/", lan, h.HTTPPort, h.key)}
@@ -463,7 +458,7 @@ func (h *Host) drain(cmd *exec.Cmd, out io.Reader, name, bin string, args []stri
 		close(done)
 		delete(h.exited, cmd)
 	}
-	restart := name == "mediamtx" && h.mediamtx == cmd && h.key != ""
+	restart := name == "mediamtx" && h.mediamtx == cmd && h.key != "" && h.mtxUp // one that never came up: startMediaMTX's to try again
 	h.mu.Unlock()
 	if restart {
 		// died while we were hosting: bring it back on the same config, so the link keeps working
@@ -481,6 +476,57 @@ func (h *Host) drain(cmd *exec.Cmd, out io.Reader, name, bin string, args []stri
 				h.mediamtx = c
 				h.mu.Unlock()
 			}
+		}
+	}
+}
+
+// startMediaMTX starts MediaMTX and waits for it to listen. Its loopback ports are ones that were
+// free a moment ago (freePort), but something else can take one before MediaMTX does (an outgoing
+// connection's port, drawn from the same range): then it exits at once, and it is started again
+// on fresh ones, rather than on the same taken port again and again.
+func (h *Host) startMediaMTX(public, standby string) error {
+	for try := 1; ; try++ {
+		h.mu.Lock()
+		if try > 1 {
+			h.ports = map[string]int{"api": freePort(), "rtsp": freePort(), "hls": freePort(), "webrtc": freePort()}
+		}
+		ports := h.ports
+		h.mtxUp = false
+		h.mu.Unlock()
+		if err := os.WriteFile(h.config, []byte(mediamtxConfig(ports, public, standby, h.ICEPort)), 0o644); err != nil {
+			return err
+		}
+		cmd, err := h.spawn("mediamtx", h.MediaMTX, h.config)
+		if err != nil {
+			return fmt.Errorf("MediaMTX: %w", err)
+		}
+		h.mu.Lock()
+		h.mediamtx = cmd
+		exited, running := h.exited[cmd]
+		h.mu.Unlock()
+		if !running { // gone already
+			exited = make(chan struct{})
+			close(exited)
+		}
+		up := make(chan error, 1)
+		go func() { up <- waitFor(ports["api"], 10*time.Second) }()
+		select {
+		case err := <-up:
+			if err != nil {
+				return errors.New("MediaMTX did not start")
+			}
+			h.mu.Lock()
+			h.mtxUp = true
+			h.mu.Unlock()
+			return nil
+		case <-exited:
+			if try == 5 {
+				return errors.New("MediaMTX did not start")
+			}
+			h.mu.Lock()
+			h.procs = slices.DeleteFunc(h.procs, func(p *exec.Cmd) bool { return p == cmd })
+			h.mu.Unlock()
+			h.Log("MediaMTX stopped as it started; trying it on other ports.")
 		}
 	}
 }

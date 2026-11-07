@@ -2,12 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -171,5 +174,45 @@ func TestCallVoicesReachTheirPaths(t *testing.T) {
 	want := []string{"POST /call-" + voice + "/whip", "DELETE /call-" + voice + "/whip/sess1"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatal(got)
+	}
+}
+
+// MediaMTX's loopback ports were free a moment before it starts, but one can be taken before it
+// listens (on CI, by an outgoing connection's port): it exits at once, and is started again on
+// other ports, not the taken one again. A stand-in exits at once twice, then is the real one.
+func TestMediaMTXTriesOtherPorts(t *testing.T) {
+	real := findTool("mediamtx")
+	if real == "" {
+		t.Skip("needs mediamtx")
+	}
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	stand := filepath.Join(dir, "mediamtx")
+	script := fmt.Sprintf("#!/bin/sh\nn=$(cat %[1]s/runs 2>/dev/null || echo 0); echo $((n+1)) > %[1]s/runs; grep apiAddress \"$1\" >> %[1]s/apis\n"+
+		"[ \"$n\" -lt 2 ] && { echo 'ERR listen tcp 127.0.0.1:1: bind: address already in use'; exit 1; }\nexec %[2]q \"$@\"\n", dir, real)
+	if err := os.WriteFile(stand, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var said []string
+	var mu sync.Mutex
+	h := NewHost(func(s string) { mu.Lock(); said = append(said, s); mu.Unlock() }, stand, "", standby)
+	h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers = freePort(), freeICEPort(), false, false // never the default ports (CLAUDE.md)
+	if err := h.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer h.Stop()
+	if runs, _ := os.ReadFile(filepath.Join(dir, "runs")); strings.TrimSpace(string(runs)) != "3" {
+		t.Fatalf("MediaMTX ran %s times, not 3", runs)
+	}
+	if apis, _ := os.ReadFile(filepath.Join(dir, "apis")); len(slices.Compact(slices.Sorted(slices.Values(strings.Fields(string(apis)))))) != 4 {
+		t.Errorf("not three different ports: %s", apis) // "apiAddress:" and three addresses
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if n := strings.Count(strings.Join(said, "\n"), "trying it on other ports"); n != 2 {
+		t.Errorf("said so %d times, not 2: %q", n, said)
+	}
+	if strings.Contains(strings.Join(said, "\n"), "restarting it") {
+		t.Errorf("restarted on the same ports: %q", said)
 	}
 }
