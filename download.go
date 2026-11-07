@@ -3,10 +3,15 @@ package main
 // A download link (Party > Add Download Link…): a movie, or a song, a document
 // or a database, by its URL, as a file service hands one out. It goes in the
 // list at once, as a row with a download arrow counting its bytes, and the file
-// comes down into this Mac's cache, ~/Library/Caches/Mouse Party/downloads;
-// there, the row is looked at as a dropped file is (ffmpeg, subtitles, pages)
-// and plays from the cache as often as wanted. The app's ffmpeg speaks no https
-// and a link may run out, so the file is fetched once, here, in Go.
+// comes down into this Mac's cache, ~/Library/Caches/Mouse Party/downloads. A
+// movie plays while it comes: as soon as ffmpeg can read what's there (its
+// length known, a few MB in) the row can be played, and when playback reaches
+// the end of what's downloaded the app waits for more and goes on from there
+// (App.finished, resumeDownloading), the slider reaching only as far as the
+// bytes do. Once it's all there, the row is looked at as a dropped file is
+// (ffmpeg, subtitles, pages) and plays from the cache as often as wanted. The
+// app's ffmpeg speaks no https and a link may run out, so the file is fetched
+// once, here, in Go, written straight to its place (Item.Got says when it's whole).
 //
 // Each link has its own folder, named by a hash of the link, so names can't
 // collide; the same link twice is one row. Removing the row deletes its folder,
@@ -49,6 +54,7 @@ const (
 type download struct {
 	cancel     context.CancelFunc
 	got, total int64  // bytes so far, and the file's size (0: the server didn't say)
+	ready      bool   // ffmpeg reads what's there: it plays while it downloads
 	refused    string // stopped by the app itself (too big for the cache): the row's note
 }
 
@@ -112,15 +118,16 @@ func dispositionName(resp *http.Response) string {
 	return cleanName(params["filename"])
 }
 
-// fetch brings the link down to path (its folder made), as path+".part" until it's all there,
-// going on from where an earlier try stopped. It says each step: the path, once the server
-// has named the file (which may change it), and the bytes as they come. Returns the path.
+// fetch brings the link down to path (its folder made), straight into the file, so that it
+// can be played as it comes, going on from where an earlier try stopped. It says each step:
+// the path, once the server has named the file (which may change it), and the bytes as
+// they come. Returns the path.
 func fetch(ctx context.Context, link, path string, step func(path string, got, total int64)) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return path, err
 	}
 	var start int64
-	if st, err := os.Stat(path + ".part"); err == nil {
+	if st, err := os.Stat(path); err == nil {
 		start = st.Size()
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", link, nil)
@@ -139,8 +146,8 @@ func fetch(ctx context.Context, link, path string, step func(path string, got, t
 	}
 	defer resp.Body.Close()
 	switch {
-	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && start > 0: // the part is stale: from the top
-		os.Remove(path + ".part")
+	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && start > 0: // what's there is stale: from the top
+		os.Remove(path)
 		return fetch(ctx, link, path, step)
 	case resp.StatusCode == http.StatusPartialContent && start > 0:
 	case resp.StatusCode == http.StatusOK:
@@ -150,7 +157,7 @@ func fetch(ctx context.Context, link, path string, step func(path string, got, t
 	}
 	if name := dispositionName(resp); name != "" && name != filepath.Base(path) {
 		next := filepath.Join(filepath.Dir(path), name)
-		os.Rename(path+".part", next+".part")
+		os.Rename(path, next)
 		path = next
 	}
 	total := int64(0)
@@ -165,7 +172,7 @@ func fetch(ctx context.Context, link, path string, step func(path string, got, t
 	if start == 0 {
 		flags |= os.O_TRUNC
 	}
-	f, err := os.OpenFile(path+".part", flags, 0o644)
+	f, err := os.OpenFile(path, flags, 0o644)
 	if err != nil {
 		return path, err
 	}
@@ -203,9 +210,6 @@ func fetch(ctx context.Context, link, path string, step func(path string, got, t
 	}
 	if total > 0 && got != total {
 		return path, fmt.Errorf("cut short at %s of %s", formatBytes(got), formatBytes(total))
-	}
-	if err := os.Rename(path+".part", path); err != nil {
-		return path, err
 	}
 	step(path, got, got)
 	return path, nil
@@ -280,8 +284,20 @@ func (a *App) AddURL(link string) string {
 	return result
 }
 
-// downloading: a row that isn't a file yet: its download is under way, or waiting to be tried again
+// downloading: a row that isn't a whole file yet: its download is under way, or waiting to be tried again
 func (it *Item) downloading() bool { return it.URL != "" && !it.Got }
+
+// ready: downloading, and far enough in that ffmpeg plays it
+func (it *Item) ready() bool { return it.dl != nil && it.dl.ready }
+
+// downloadedSeconds: how far into a movie playing as it downloads the bytes reach, about (its
+// bitrate taken as even), a little short; false when that can't be told
+func downloadedSeconds(it *Item) (float64, bool) {
+	if !it.ready() || it.dl.total <= 0 || it.Duration <= 0 {
+		return 0, false
+	}
+	return max(0, it.Duration*float64(it.dl.got)/float64(it.dl.total)*0.95-5), true
+}
 
 // startDownload begins (or goes on with) the item's download, off the app's goroutine; done fills the row in
 func (a *App) startDownload(it *Item) {
@@ -292,7 +308,34 @@ func (a *App) startDownload(it *Item) {
 	d := &download{cancel: cancel}
 	it.dl, it.Note, it.Cleared = d, "", false
 	go func() {
+		ready, lookAt := false, int64(-1) // whether it plays yet, and the bytes at which to look next
 		path, err := fetch(ctx, it.URL, it.Path, func(path string, got, total int64) {
+			if !ready && got > 0 && lookAt < 0 {
+				lookAt = max(16<<10, min(4<<20, total/20)) // a few MB in, or a twentieth of a small one
+			}
+			if !ready && lookAt > 0 && got >= lookAt && (total == 0 || got < total) && kindOf(path) != "pdf" && kindOf(path) != "text" && kindOf(path) != "db" {
+				if info := probe(path); info.Error == "" && info.Duration > 0 { // ffmpeg reads it, and knows how long it is
+					ready = true
+					it := it
+					a.do(func() {
+						if it.dl != d {
+							return
+						}
+						d.ready, it.Duration, it.Kind = true, info.Duration, "video"
+						if info.Audio != "" && info.Video == "" {
+							it.Kind = "audio"
+						}
+						applyFound(it, findTracks(it))
+						a.save()
+						a.log(filepath.Base(path) + " can play while it downloads.")
+					})
+				} else {
+					if lookAt < 1<<20 {
+						a.log(fmt.Sprintf("%s can't play yet (%s; %s long); looking again further in.", filepath.Base(path), info.Error, formatTime(info.Duration)))
+					}
+					lookAt = got*2 + 1<<20 // not yet (a header still coming, or its length at the end of the file): later
+				}
+			}
 			a.do(func() {
 				if it.dl != d {
 					return
@@ -414,6 +457,10 @@ func downloadNote(it *Item) string {
 		return "not in the cache"
 	case d == nil:
 		return "not downloaded"
+	case d.ready && d.total > 0:
+		return fmt.Sprintf("%s · %d%%", formatTime(it.Duration), d.got*100/d.total)
+	case d.ready:
+		return fmt.Sprintf("%s · %s", formatTime(it.Duration), formatBytes(d.got))
 	case d.total > 0:
 		return fmt.Sprintf("%d%% of %s", d.got*100/d.total, formatBytes(d.total))
 	case d.got > 0:
@@ -471,11 +518,11 @@ func (a *App) makeRoom(it *Item, total int64) {
 		it.dl.cancel()
 		return
 	}
-	part := int64(0)
-	if st, err := os.Stat(it.Path + ".part"); err == nil {
-		part = st.Size()
+	have := int64(0)
+	if st, err := os.Stat(it.Path); err == nil {
+		have = st.Size()
 	}
-	a.trimCache(limit - (total - part))
+	a.trimCache(limit - (total - have))
 }
 
 // trimCache deletes the oldest downloads (the one playing never) until the cache is within limit bytes
@@ -544,4 +591,32 @@ func touchDownload(it *Item) {
 		now := time.Now()
 		os.Chtimes(it.Path, now, now)
 	}
+}
+
+// ---------- playing as it comes ----------
+
+// resumeDownloading: the movie playing from a download ran out of file (finished); once there's
+// more, it goes on from where it was (resume). Something else begun meanwhile, the list goes on as usual.
+func (a *App) resumeDownloading(it *Item) {
+	if !a.playing || a.player.Running() || a.phase != "" || a.resume == nil {
+		return
+	}
+	pos := a.cfg.Position
+	if pos >= len(a.cfg.Queue) || a.cfg.Queue[pos] != it {
+		a.resume = nil
+		a.play(-1)
+		return
+	}
+	if d := it.dl; d != nil && !it.Got {
+		need := int64(8 << 20) // new bytes worth starting ffmpeg again for: a fiftieth of the file
+		if d.total > 0 {
+			need = max(64<<10, d.total/50)
+		}
+		if d.got < a.resume.got+need {
+			a.after(2*time.Second, func() { a.resumeDownloading(it) })
+			return
+		}
+	}
+	a.log("Going on with " + filepath.Base(it.Path) + " at " + formatTime(a.resume.at) + ".")
+	a.play(pos)
 }

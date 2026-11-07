@@ -65,6 +65,12 @@ type moviePos struct {
 	at      time.Time
 }
 
+// resumePoint: where a movie playing as it downloads ran out of file (download.go)
+type resumePoint struct {
+	at  float64 // movie seconds
+	got int64   // the download's bytes then
+}
+
 type cueKey struct {
 	path, track string
 	offset      float64
@@ -80,30 +86,31 @@ type App struct {
 	locked       bool          // the party is sealed and its passcode not yet typed (party.go)
 	unlockWait   time.Duration // before the next try, after a wrong passcode
 	player       *Player
-	current      *Item       // the item now streaming
-	playing      bool        // Play pressed and not stopped: the big button says Stop
-	playedFirst  bool        // the skip setting applies to the first file started
-	stopRequest  bool        // Stop: keep the file where it is
-	jumpTo       int         // row: double-clicked, or removed the one streaming; -1 none
-	phase        string      // "countdown" (the up-next card), "movie" or "doc" (a PDF) while streaming
-	docDone      bool        // turned past a PDF's last page: its card stopping is it finishing
-	afterAudio   bool        // the last thing to finish was a song: the next song needs no countdown
-	pendingSkip  float64     // minutes into the movie to start once the countdown ends
-	countdownEnd time.Time   //
-	host         *Host       // while serving viewers from this Mac
-	hostStarting bool        //
-	hostFailed   string      // why the last try at hosting didn't work, for the link button
-	tunnelRetry  bool        // trying again for a Cloudflare link (the link button pressed)
-	seekTo       *float64    // movie seconds: the slider was let go there; restart the movie at it
-	selected     int         // -1: none
-	restoreSel   int         // a row to select again after the next redraw; -1 none
-	copiedUntil  time.Time   // the link button says "Copied" until then
-	moviePos     *moviePos   // from ffmpeg's last position
-	scheduleSent string      // what the viewers' guide was last told
-	subToken     string      // names the movie now playing to viewers' subtitles
-	language     string      // "en": the audio played, the subtitles offered first
-	standby      []byte      // the card MediaMTX loops between movies
-	hostSetup    func(*Host) // tests: free ports, no router, no tunnel
+	current      *Item        // the item now streaming
+	playing      bool         // Play pressed and not stopped: the big button says Stop
+	playedFirst  bool         // the skip setting applies to the first file started
+	stopRequest  bool         // Stop: keep the file where it is
+	jumpTo       int          // row: double-clicked, or removed the one streaming; -1 none
+	phase        string       // "countdown" (the up-next card), "movie" or "doc" (a PDF) while streaming
+	docDone      bool         // turned past a PDF's last page: its card stopping is it finishing
+	afterAudio   bool         // the last thing to finish was a song: the next song needs no countdown
+	pendingSkip  float64      // minutes into the movie to start once the countdown ends
+	countdownEnd time.Time    //
+	host         *Host        // while serving viewers from this Mac
+	hostStarting bool         //
+	hostFailed   string       // why the last try at hosting didn't work, for the link button
+	tunnelRetry  bool         // trying again for a Cloudflare link (the link button pressed)
+	seekTo       *float64     // movie seconds: the slider was let go there; restart the movie at it
+	resume       *resumePoint // a download being played ran out of file: on from there once there's more
+	selected     int          // -1: none
+	restoreSel   int          // a row to select again after the next redraw; -1 none
+	copiedUntil  time.Time    // the link button says "Copied" until then
+	moviePos     *moviePos    // from ffmpeg's last position
+	scheduleSent string       // what the viewers' guide was last told
+	subToken     string       // names the movie now playing to viewers' subtitles
+	language     string       // "en": the audio played, the subtitles offered first
+	standby      []byte       // the card MediaMTX loops between movies
+	hostSetup    func(*Host)  // tests: free ports, no router, no tunnel
 
 	cueMu    sync.Mutex
 	cueCache map[cueKey][]Cue
@@ -636,6 +643,10 @@ func (a *App) play(index int) {
 		countdown = 0 // an album plays straight through
 	}
 	a.afterAudio = false
+	if a.resume != nil { // on with a download, from where it ran out of file
+		skip, countdown = a.resume.at/60, 0
+	}
+	a.resume = nil
 	if countdown > 0 {
 		a.pendingSkip = skip
 		a.startCountdown(countdown)
@@ -688,7 +699,7 @@ func (a *App) startCurrent(skip float64) {
 }
 
 func (a *App) stop() {
-	a.playing = false
+	a.playing, a.resume = false, nil
 	if a.player.Running() {
 		a.log("Stopping " + filepath.Base(a.current.Path))
 		a.stopRequest = true
@@ -699,6 +710,9 @@ func (a *App) stop() {
 func (a *App) seek(seconds float64) {
 	if a.state() != "movie" {
 		return
+	}
+	if far, ok := downloadedSeconds(a.current); ok && seconds > far { // only as far as the download has come
+		seconds = far
 	}
 	a.log("Moving to " + formatTime(seconds))
 	a.seekTo = &seconds
@@ -759,6 +773,16 @@ func (a *App) finished(code int) {
 	if a.stopRequest {
 		a.log("Stopped " + name + ".")
 		a.playedFirst = false
+		return
+	}
+	if it != nil && it.dl != nil && a.playing { // played to the end of what's downloaded: wait for more, then on from there
+		pos := 0.0
+		if a.moviePos != nil {
+			pos = a.moviePos.seconds + max(0, time.Since(a.moviePos.at).Seconds())
+		}
+		a.resume = &resumePoint{max(0, pos-2), it.dl.got} // a little back: the last seconds were cut mid-cluster
+		a.log(fmt.Sprintf("%s has played to where its download is (%s); waiting for more.", name, formatTime(a.resume.at)))
+		a.after(2*time.Second, func() { a.resumeDownloading(it) })
 		return
 	}
 	if code != 0 {
@@ -1142,9 +1166,9 @@ func (a *App) hostReady(err error) {
 // ---------- files that can't be played now ----------
 
 // off: a row that can't play, greyed out: its file is gone, or ffmpeg couldn't read it when
-// it was added, or it's a download not yet down
+// it was added, or it's a download not yet far enough in to play
 func off(it *Item) bool {
-	return it.Missing || it.downloading() || (it.Note != "" && it.Note != "didn't play")
+	return it.Missing || (it.downloading() && !it.ready()) || (it.Note != "" && it.Note != "didn't play")
 }
 
 // watchFiles looks every few seconds for files that have gone, or come back (a

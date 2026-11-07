@@ -102,8 +102,11 @@ Terminal to read it.
   would, and everything in it the app can show is added.
 - **Download links:** **Party > Add Download Link…** (⌘L) takes a link that
   downloads a movie (or a song, a document or a database), as a file service
-  hands one out. The row goes in the list at once, greyed, counting its bytes,
-  and is a movie like any other once the file is all here: downloaded to
+  hands one out. The row goes in the list at once, counting its bytes, and a
+  movie can be played as soon as ffmpeg can read what's there, a few MB in:
+  it plays as it comes down, the slider reaching as far as the download has,
+  and if it catches up with the download it waits for more and goes on. Once
+  the file is all here it's a movie like any other, in
   `~/Library/Caches/Mouse Party/downloads`, played from there as often as you
   like. Quit in the middle, and it goes on from where it was next time; a link
   that didn't work is tried again when its row is double-clicked. Remove the

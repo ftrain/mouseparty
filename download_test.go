@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -199,7 +200,7 @@ func TestDownloadLink(t *testing.T) {
 	until("downloaded again after a start", func(v View) bool { return len(v.Rows) == 1 && !v.Rows[0].Off })
 }
 
-// fetch goes on from a part that's there (Range), takes the server's name, and says why when it can't
+// fetch goes on from what's there (Range), takes the server's name, and says why when it can't
 func TestFetch(t *testing.T) {
 	dir := t.TempDir()
 	body := []byte(strings.Repeat("0123456789", 1000))
@@ -223,7 +224,7 @@ func TestFetch(t *testing.T) {
 
 	path := filepath.Join(dir, "a", "file.bin")
 	os.MkdirAll(filepath.Dir(path), 0o755)
-	os.WriteFile(path+".part", body[:4000], 0o644)
+	os.WriteFile(path, body[:4000], 0o644)
 	got, err := fetch(t.Context(), server.URL+"/file.bin", path, quiet)
 	if err != nil || got != path {
 		t.Fatal(got, err)
@@ -233,9 +234,6 @@ func TestFetch(t *testing.T) {
 	}
 	if len(ranges) != 1 || ranges[0] != "bytes=4000-" {
 		t.Fatalf("asked for %v", ranges)
-	}
-	if _, err := os.Stat(path + ".part"); !os.IsNotExist(err) {
-		t.Fatal("the part is still there")
 	}
 
 	got, err = fetch(t.Context(), server.URL+"/named", filepath.Join(dir, "b", "named"), quiet)
@@ -281,5 +279,83 @@ func TestLinkName(t *testing.T) {
 		if _, why := checkLink(bad); why == "" {
 			t.Errorf("%q passed", bad)
 		}
+	}
+}
+
+// A movie plays while it downloads: served slower than it plays, it starts once ffmpeg can
+// read what's there, runs out of file, waits for more, goes on from where it was, and ends
+// when the whole of it has played. Needs ffmpeg (with drawtext) and MediaMTX, on free ports.
+func TestPlayWhileDownloading(t *testing.T) {
+	if findTool("mediamtx") == "" || findTool("ffmpeg") == "" {
+		t.Skip("needs mediamtx and ffmpeg")
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", "")
+	clip := filepath.Join(t.TempDir(), "Slow.Clip.mkv")
+	out, err := exec.Command(findTool("ffmpeg"), "-v", "error", "-f", "lavfi", "-i", "testsrc=s=320x240:r=30:d=8",
+		"-f", "lavfi", "-i", "sine=f=440:d=8", "-c:v", "libx264", "-c:a", "libopus", clip).CombinedOutput()
+	if err != nil {
+		t.Fatal(err, string(out))
+	}
+	body, _ := os.ReadFile(clip)
+	// the clip over about 48 seconds: a sixth as fast as it plays
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		chunk := len(body) / 64
+		for i := 0; i < len(body); i += chunk {
+			w.Write(body[i:min(len(body), i+chunk)])
+			w.(http.Flusher).Flush()
+			time.Sleep(750 * time.Millisecond)
+		}
+	}))
+	defer server.Close()
+
+	a := NewApp(standby)
+	a.hostSetup = func(h *Host) {
+		h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
+	}
+	go a.run()
+	go a.watchFiles()
+	defer a.shutdown(nil)
+	a.wait(func() { a.cfg.Countdown = 1 })
+	state := func() (s string) { a.wait(func() { s = a.state() }); return }
+	until := func(what string, seconds int, ok func(View) bool) View {
+		t.Helper()
+		for end := time.Now().Add(time.Duration(seconds) * time.Second); time.Now().Before(end); time.Sleep(100 * time.Millisecond) {
+			if v := a.GetView(); ok(v) {
+				return v
+			}
+		}
+		t.Fatalf("never: %s (%+v, %s)", what, a.GetView(), state())
+		return View{}
+	}
+	if why := a.AddURL(server.URL + "/Slow.Clip.mkv"); why != "" {
+		t.Fatal(why)
+	}
+	v := until("playable while downloading", 40, func(v View) bool { return v.PlayOn && len(v.Rows) == 1 && !v.Rows[0].Off })
+	if r := v.Rows[0]; r.Icon != "download" || !strings.HasPrefix(r.Length, "0:00:08 · ") {
+		t.Fatalf("playable: %+v", r)
+	}
+	a.PlayClicked()
+	until("playing", 10, func(View) bool { return state() == "movie" })
+	a.Seek(7) // further than the download has come: only as far as it has
+	v = until("the seek held back", 10, func(v View) bool { return state() == "movie" && v.Slider.On })
+	if v.Slider.Value >= 7 {
+		t.Fatalf("sought to %v, past the download", v.Slider.Value)
+	}
+	until("ran out of file, waiting for more", 30, func(View) bool {
+		var waiting bool
+		a.wait(func() { waiting = a.resume != nil })
+		return state() == "between" && waiting
+	})
+	until("going on", 30, func(View) bool { return state() == "movie" })
+	until("the download done", 60, func(v View) bool { return v.Rows[0].Icon == "video" })
+	until("played to the end", 40, func(v View) bool {
+		var pos int
+		a.wait(func() { pos = a.cfg.Position })
+		return v.Play == "play" && pos == 1
+	})
+	if v := a.GetView(); v.Rows[0].Length != "0:00:08" || v.Rows[0].Off {
+		t.Fatalf("after: %+v", v.Rows[0])
 	}
 }
