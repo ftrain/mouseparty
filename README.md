@@ -27,7 +27,9 @@ The window is two big buttons over a list.
 
 - **Add:** drag videos, sound files or PDFs (or folders of them) from Finder
   into the list: anything ffmpeg plays. Drag rows up and down to reorder; select
-  one and press Backspace to take it out. A row goes grey while its file can't be
+  one and press Backspace to take it out, or **Party > Clear Played Files** (⌘R)
+  to take out everything already played (a download's file goes with its row;
+  your own files stay where they are). A row goes grey while its file can't be
   played (a drive unplugged); it's skipped, and comes back when the file does.
 - **The link:** adding something starts hosting. The right-hand button says
   "Making link" while it gets one, then becomes a copy button: press it and
@@ -157,7 +159,7 @@ As text, the settings are:
 
 | Setting | Default | |
 |---|---|---|
-| `bitrate` | `"1500k"` | video bitrate; each viewer takes about this plus 128k of your upload |
+| `bitrate` | `"2500k"` | video bitrate, one of `800k`, `1500k`, `2500k`, `4000k`, `6000k` (another is taken as the nearest); each viewer takes about this plus 128k of your upload |
 | `preset` | `"veryfast"` | x264's speed/quality trade |
 | `countdown` | `10` | seconds of "up next" card before each movie; 0 for none |
 | `skip` | `0` | minutes into the first movie played |

@@ -87,6 +87,7 @@ var windowGraph = []windowCommand{
 	{"Select", windowStates, each(windowStates, "same"), "a row clicked"},
 	{"Move", windowStates, each(windowStates, "same"), "a row dragged"},
 	{"Remove", windowStates, each(windowStates, "same", "empty", "stopping", "between"), "Backspace: the selected row"},
+	{"ClearPlayed", windowStates, each(windowStates, "same", "empty", "stopping", "between"), "Party > Clear Played Files (⌘R): every row above the one playing, or next to play"},
 	{"LinkClicked", windowStates, merge(each(windowStates, "same"), each([]string{"nolink"}, "linking", "nolink")), "copy the link, or try again for one"},
 	{"SetSettingsText", windowStates, nil, "Party > Settings: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first)"},
 	{"AddPaths", windowStates, nil, "files dropped (off the app's goroutine: no immediate state)"},
@@ -772,6 +773,9 @@ func windowWalk(t *testing.T, data []byte) {
 			name, fn = "Move", func() { a.move(i, j) }
 		case 9:
 			name, fn = "Remove", a.remove
+			if c.n(3) == 0 {
+				name, fn = "ClearPlayed", a.clearPlayed
+			}
 		case 10:
 			name, fn = "LinkClicked", a.linkClicked
 		case 11: // the settings changed: as text, or in the Settings window (good ones and refused ones)

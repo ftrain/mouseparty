@@ -15,6 +15,24 @@ import (
 // presets: x264's, from the least work (and the most bandwidth for a picture) to the most
 var presets = []string{"ultrafast", "superfast", "veryfast", "faster", "fast", "medium"}
 
+// bitrates: the bandwidths the Settings window offers, in kbit/s (prefs.ts names them)
+var bitrates = []int{800, 1500, 2500, 4000, 6000}
+
+// nearestBitrate: the choice nearest a bitrate (halfway, the higher), so that the window never
+// shows a number that isn't one of them; none set, the default, High
+func nearestBitrate(k int) int {
+	if k <= 0 {
+		return 2500
+	}
+	best := bitrates[0]
+	for _, b := range bitrates {
+		if abs(float64(b-k)) <= abs(float64(best-k)) {
+			best = b
+		}
+	}
+	return best
+}
+
 // Prefs: the settings, as the Settings window shows them
 type Prefs struct {
 	Countdown       float64   `json:"countdown"`       // seconds of "up next" card before each movie
@@ -79,8 +97,8 @@ func (a *App) SetPrefs(p Prefs) string {
 		return "The countdown is from 0 to 600 seconds"
 	case p.Skip < 0 || p.Skip > 600:
 		return "The first movie starts from 0 to 600 minutes in"
-	case p.Bitrate < 200 || p.Bitrate > 50000:
-		return "The bandwidth is from 200 to 50,000 kbit/s"
+	case nearestBitrate(p.Bitrate) != p.Bitrate:
+		return "That isn't a bandwidth Mouse Party offers"
 	case !strings.Contains(" "+strings.Join(presets, " ")+" ", " "+p.Preset+" "):
 		return "That isn't an encoding effort Mouse Party knows"
 	case p.CacheGB < 0 || p.CacheGB > 100000:

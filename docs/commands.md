@@ -10,46 +10,46 @@ Its states are `App.state`'s; each command acts only in the states it leads from
 
 ```mermaid
 stateDiagram-v2
-    empty --> between: Remove
-    empty --> stopping: Remove
-    linking --> empty: Remove
-    linking --> between: Remove
-    linking --> stopping: Remove
-    nolink --> empty: Remove
+    empty --> between: Remove, ClearPlayed
+    empty --> stopping: Remove, ClearPlayed
+    linking --> empty: Remove, ClearPlayed
+    linking --> between: Remove, ClearPlayed
+    linking --> stopping: Remove, ClearPlayed
+    nolink --> empty: Remove, ClearPlayed
     nolink --> linking: LinkClicked
-    nolink --> between: Remove
-    nolink --> stopping: Remove
-    ready --> empty: Remove
+    nolink --> between: Remove, ClearPlayed
+    nolink --> stopping: Remove, ClearPlayed
+    ready --> empty: Remove, ClearPlayed
     ready --> countdown: PlayClicked, PlayRow
     ready --> movie: PlayClicked, PlayRow
     ready --> doc: PlayClicked, PlayRow
-    ready --> between: Remove
-    ready --> stopping: Remove
-    countdown --> empty: PlayClicked, Remove
+    ready --> between: Remove, ClearPlayed
+    ready --> stopping: Remove, ClearPlayed
+    countdown --> empty: PlayClicked, Remove, ClearPlayed
     countdown --> linking: PlayClicked
     countdown --> nolink: PlayClicked
     countdown --> ready: PlayClicked
-    countdown --> between: PlayRow, Remove
-    countdown --> stopping: PlayClicked, Remove
-    movie --> empty: PlayClicked, Remove
+    countdown --> between: PlayRow, Remove, ClearPlayed
+    countdown --> stopping: PlayClicked, Remove, ClearPlayed
+    movie --> empty: PlayClicked, Remove, ClearPlayed
     movie --> linking: PlayClicked
     movie --> nolink: PlayClicked
     movie --> ready: PlayClicked
-    movie --> between: PlayRow, Seek, Remove
-    movie --> stopping: PlayClicked, Remove
-    doc --> empty: PlayClicked, Remove
+    movie --> between: PlayRow, Seek, Remove, ClearPlayed
+    movie --> stopping: PlayClicked, Remove, ClearPlayed
+    doc --> empty: PlayClicked, Remove, ClearPlayed
     doc --> linking: PlayClicked
     doc --> nolink: PlayClicked
     doc --> ready: PlayClicked, TurnPage
-    doc --> between: PlayRow, TurnPage, Remove
-    doc --> stopping: PlayClicked, TurnPage, Remove
-    between --> empty: PlayClicked, Remove
+    doc --> between: PlayRow, TurnPage, Remove, ClearPlayed
+    doc --> stopping: PlayClicked, TurnPage, Remove, ClearPlayed
+    between --> empty: PlayClicked, Remove, ClearPlayed
     between --> linking: PlayClicked
     between --> nolink: PlayClicked
     between --> ready: PlayClicked
-    between --> stopping: PlayClicked, Remove
-    stopping --> empty: Remove
-    stopping --> between: Remove
+    between --> stopping: PlayClicked, Remove, ClearPlayed
+    stopping --> empty: Remove, ClearPlayed
+    stopping --> between: Remove, ClearPlayed
 ```
 
 Besides those, the app moves on its own (the link made, a countdown over, a movie ended, a file gone).
@@ -64,6 +64,7 @@ Besides those, the app moves on its own (the link made, a countdown over, a movi
 | `Select` | a row clicked | every state |
 | `Move` | a row dragged | every state |
 | `Remove` | Backspace: the selected row | every state |
+| `ClearPlayed` | Party > Clear Played Files (⌘R): every row above the one playing, or next to play | every state |
 | `LinkClicked` | copy the link, or try again for one | every state |
 | `SetSettingsText` | Party > Settings: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first) | every state |
 | `AddPaths` | files dropped (off the app's goroutine: no immediate state) | every state |

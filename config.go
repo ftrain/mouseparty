@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -95,7 +96,7 @@ func dataDir() string {
 
 // loadConfig: the settings kept in the party, or the defaults (p nil: nothing kept)
 func loadConfig(p *party) *Config {
-	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, CacheGB: 20, Queue: []*Item{}}
+	cfg := &Config{OpenRouterPorts: true, Bitrate: "2500k", Preset: "veryfast", Countdown: 10, CacheGB: 20, Queue: []*Item{}}
 	if p != nil {
 		if b, ok := p.setting("config"); ok {
 			json.Unmarshal(b, cfg)
@@ -105,6 +106,7 @@ func loadConfig(p *party) *Config {
 		cfg.Queue = []*Item{}
 	}
 	cfg.Position = max(0, min(cfg.Position, len(cfg.Queue)))
+	cfg.Bitrate = fmt.Sprintf("%dk", nearestBitrate(kbps(cfg.Bitrate))) // one of the Settings window's choices
 	return cfg
 }
 

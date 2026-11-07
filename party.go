@@ -169,6 +169,8 @@ func (a *App) menu() *menu.Menu {
 	party := m.AddSubmenu("Party")
 	link := party.AddText("Add Download Link…", keys.CmdOrCtrl("l"), func(*menu.CallbackData) { a.ask("link") })
 	link.Disabled = a.locked
+	played := party.AddText("Clear Played Files", keys.CmdOrCtrl("r"), func(*menu.CallbackData) { a.ClearPlayed() })
+	played.Disabled = a.locked
 	clear := party.AddText("Clear Download Cache…", nil, func(*menu.CallbackData) { a.ask("clear") })
 	clear.Disabled = a.locked
 	party.AddSeparator()

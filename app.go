@@ -209,6 +209,7 @@ func (a *App) Select(i int)                     { a.do(func() { a.selectRow(i) }
 func (a *App) Move(from, to int)                { a.do(func() { a.move(from, to) }) }
 func (a *App) PlayRow(i int)                    { a.do(func() { a.playRow(i) }) }
 func (a *App) Remove()                          { a.do(a.remove) }
+func (a *App) ClearPlayed()                     { a.do(a.clearPlayed) }
 func (a *App) Seek(seconds float64)             { a.do(func() { a.seek(seconds) }) }
 func (a *App) ShowPage(page int)                { a.do(func() { a.showPage(page) }) }
 func (a *App) TurnPage(step int)                { a.do(func() { a.turnPage(step) }) }
@@ -587,6 +588,25 @@ func (a *App) remove() {
 			a.stopRequest, a.playing = true, false
 		}
 		a.player.Stop()
+	}
+}
+
+// clearPlayed: Party > Clear Played Files: every row above the one playing (or next to play) out of the
+// list, as Backspace takes one (a download's file goes with its row; a file of one's own stays where it is)
+func (a *App) clearPlayed() {
+	n := min(a.cfg.Position, len(a.cfg.Queue))
+	if n == 0 {
+		return
+	}
+	for _, it := range a.cfg.Queue[:n] {
+		a.removeDownload(it)
+	}
+	a.editQueue(func(q []*Item) []*Item { return append([]*Item{}, q[n:]...) }, nil)
+	a.selected = -1
+	a.log(fmt.Sprintf("Cleared %d played from the list", n))
+	if len(a.cfg.Queue) == 0 { // all of it played: nothing left to go on to
+		a.seekTo, a.jumpTo = nil, -1
+		a.stop()
 	}
 }
 

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,7 +18,7 @@ func TestPrefs(t *testing.T) {
 	defer a.shutdown(nil)
 
 	p := a.Prefs()
-	if p.Countdown != 10 || p.Bitrate != 1500 || p.Preset != "veryfast" || p.CacheGB != 20 || !p.OpenRouterPorts || p.Sealed || len(p.Accounts) != 0 {
+	if p.Countdown != 10 || p.Bitrate != 2500 || p.Preset != "veryfast" || p.CacheGB != 20 || !p.OpenRouterPorts || p.Sealed || len(p.Accounts) != 0 {
 		t.Fatalf("the defaults: %+v", p)
 	}
 	p.Countdown, p.Bitrate, p.Preset, p.CacheGB, p.OpenRouterPorts, p.Skip = 3, 4000, "fast", 50, false, 2
@@ -48,6 +50,20 @@ func TestPrefs(t *testing.T) {
 		if got := kbps(in); got != want {
 			t.Errorf("kbps(%q) = %d, not %d", in, got, want)
 		}
+	}
+	// a bandwidth is one of the choices: one set otherwise (by hand, or before there were choices) is the nearest
+	for in, want := range map[int]int{2000: 2500, 1000: 800, 1600: 1500, 99999: 6000, 0: 2500, 4000: 4000} {
+		if got := nearestBitrate(in); got != want {
+			t.Errorf("nearestBitrate(%d) = %d, not %d", in, got, want)
+		}
+	}
+	q := a.Prefs()
+	q.Bitrate = 2000
+	if why := a.SetPrefs(q); !strings.Contains(why, "bandwidth") {
+		t.Errorf("a bandwidth not offered: %q", why)
+	}
+	if c := loadConfig(nil); c.Bitrate != "2500k" {
+		t.Errorf("the default bandwidth: %s", c.Bitrate)
 	}
 
 	// accounts
@@ -90,4 +106,43 @@ func TestPrefs(t *testing.T) {
 	if text := a.SettingsText(); strings.Contains(text, "n3w") || strings.Contains(text, "ann2") {
 		t.Error("a login is in the Settings text")
 	}
+}
+
+// Clear Played Files: the rows above the one next to play go, a download's file with its row, a file of
+// one's own staying where it is; the one next to play stays next; with nothing played, nothing changes
+func TestClearPlayed(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // never the real party file, nor the real cache
+	t.Setenv("XDG_CACHE_HOME", "")
+	dir := t.TempDir()
+	mine := filepath.Join(dir, "Mine.mkv")
+	os.WriteFile(mine, []byte("x"), 0o644)
+	got := filepath.Join(downloadsDir(), downloadKey("https://example.com/Got.mkv"), "Got.mkv")
+	os.MkdirAll(filepath.Dir(got), 0o755)
+	os.WriteFile(got, []byte("x"), 0o644)
+	a := NewApp(standby)
+	go a.run()
+	defer a.shutdown(nil)
+	next := &Item{Path: filepath.Join(dir, "Next.mkv")}
+	a.wait(func() {
+		a.cfg.Queue = []*Item{{Path: mine}, {Path: got, URL: "https://example.com/Got.mkv", Got: true}, next, {Path: filepath.Join(dir, "Last.mkv")}}
+		a.cfg.Position, a.selected = 2, 1
+	})
+	a.ClearPlayed()
+	a.wait(func() {
+		if len(a.cfg.Queue) != 2 || a.cfg.Queue[0] != next || a.cfg.Position != 0 || a.selected != -1 {
+			t.Errorf("after: %d rows, position %d, selected %d", len(a.cfg.Queue), a.cfg.Position, a.selected)
+		}
+	})
+	if _, err := os.Stat(mine); err != nil {
+		t.Error("a file of one's own went:", err)
+	}
+	if _, err := os.Stat(filepath.Dir(got)); !os.IsNotExist(err) {
+		t.Error("the played download's folder is still there:", err)
+	}
+	a.ClearPlayed() // nothing played now
+	a.wait(func() {
+		if len(a.cfg.Queue) != 2 || a.cfg.Position != 0 {
+			t.Errorf("nothing played, yet: %d rows, position %d", len(a.cfg.Queue), a.cfg.Position)
+		}
+	})
 }
