@@ -1,23 +1,25 @@
 // The party file's screens (party.go), as a sheet over the window: the
 // passcode it asks for while the party is sealed, the Party menu's encryption
-// (on, change the passcode, off), its Settings, the settings as JSON text, Add
-// Download Link, a link for a row, and Clear Download Cache (download.go).
-// Nothing here is kept: each sheet asks the Go side, which says "" or why not.
+// (on, change the passcode, off), the Settings window (prefs.ts), the list and
+// the settings as JSON text, Add Download Link (with the login its site wants),
+// and Clear Download Cache (download.go). Nothing here is kept: each sheet asks
+// the Go side, which says "" or why not.
 import type { Ask, View } from './wails.d.ts';
+import { openPrefs } from './prefs.ts';
 
 const App = () => window.go.main.App;
 const sheet = document.getElementById('sheet') as HTMLElement;
 
-type Field = { name: string; label: string; kind: 'password' | 'text' | 'line' };
+type Field = { name: string; label: string; kind: 'password' | 'text' | 'line' | 'check'; hidden?: boolean };
 
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]) => {
+export const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]) => {
     const e = Object.assign(document.createElement(tag), props);
     e.append(...kids);
     return e;
 };
 
 // a sheet: a heading, words, fields, and buttons; done gets the fields' values and says "" or why not
-function show(opts: {
+export function show(opts: {
     title: string;
     words?: string;
     fields: Field[];
@@ -31,10 +33,20 @@ function show(opts: {
     const form = el('form', { className: 'sheet-box' });
     const error = el('p', { className: 'sheet-error' });
     const inputs: Record<string, HTMLInputElement | HTMLTextAreaElement> = {};
+    const labels: Record<string, HTMLElement> = {};
     form.append(el('h1', { textContent: opts.title }));
     if (opts.words) form.append(el('p', { className: 'sheet-words', textContent: opts.words }));
     for (const f of opts.fields) {
         let input: HTMLInputElement | HTMLTextAreaElement;
+        if (f.kind === 'check') {
+            const box = Object.assign(document.createElement('input'), { type: 'checkbox', name: f.name });
+            inputs[f.name] = box;
+            const label = el('label', { className: 'sheet-check' }, box, el('span', { textContent: f.label }));
+            label.hidden = !!f.hidden;
+            labels[f.name] = label;
+            form.append(label);
+            continue;
+        }
         if (f.kind === 'text') {
             const area = document.createElement('textarea');
             area.spellcheck = false;
@@ -49,7 +61,10 @@ function show(opts: {
         }
         input.name = f.name;
         inputs[f.name] = input;
-        form.append(el('label', {}, el('span', { textContent: f.label }), input));
+        const label = el('label', {}, el('span', { textContent: f.label }), input);
+        label.hidden = !!f.hidden;
+        labels[f.name] = label;
+        form.append(label);
     }
     const go = el('button', { type: 'submit', className: 'go', textContent: opts.go });
     const buttons = el('div', { className: 'sheet-buttons' });
@@ -59,7 +74,7 @@ function show(opts: {
     if (opts.more) form.append(opts.more);
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const values = Object.fromEntries(Object.entries(inputs).map(([k, i]) => [k, i.value]));
+        const values = Object.fromEntries(Object.entries(inputs).map(([k, i]) => [k, i instanceof HTMLInputElement && i.type === 'checkbox' ? (i.checked ? 'yes' : '') : i.value]));
         const wrong = opts.check?.(values) ?? '';
         if (wrong) return void (error.textContent = wrong);
         go.disabled = true;
@@ -80,12 +95,21 @@ function show(opts: {
     sheet.append(form);
     sheet.hidden = false;
     Object.values(inputs)[0]?.focus();
-    return inputs;
+    return { ...inputs, labels } as Record<string, HTMLInputElement | HTMLTextAreaElement> & { labels: Record<string, HTMLElement> };
 }
 
-function close() {
+// a sheet opened from the Settings window goes back to it when it closes
+let back: (() => void) | null = null;
+export function askFrom(mode: Ask, then: () => void) {
+    void ask(mode).then(() => (back = then));
+}
+
+export function close() {
     sheet.hidden = true;
     sheet.textContent = '';
+    const then = back;
+    back = null;
+    then?.();
 }
 
 // whether a sheet is up (the window's own keys leave it alone then)
@@ -96,34 +120,21 @@ const FORGET = 'If it is forgotten, nothing in the party can be recovered.';
 
 // the Party menu's sheets
 export async function ask(mode: Ask) {
-    if (mode === 'settings') {
+    back = null;
+    if (mode === 'prefs') {
+        await openPrefs();
+    } else if (mode === 'settings') {
         const text = await App().SettingsText();
         const inputs = show({
-            title: 'Settings',
-            words: 'The list and the settings, as text. A movie’s subtitles are its "subs"; the others are in the README.',
+            title: 'Edit as Text',
+            words: 'The list and the settings, as JSON. A movie’s subtitles are its "subs"; the rest are in the README. Download logins aren’t here: they’re in Accounts.',
             fields: [{ name: 'text', label: '', kind: 'text' }],
             go: 'Save',
             done: (v) => App().SetSettingsText(v.text),
         });
         inputs.text.value = text;
     } else if (mode === 'link') {
-        show({
-            title: 'Add Download Link',
-            words: 'A link that downloads a movie (or a song, a document or a database). It goes in the list and is downloaded to this Mac, playing once it’s all here; removing it from the list deletes the download.',
-            fields: [
-                { name: 'link', label: 'Link', kind: 'line' },
-                { name: 'user', label: 'Username', kind: 'line' },
-                { name: 'pass', label: 'Password', kind: 'password' },
-            ],
-            go: 'Add',
-            check: (v) => (!v.link.trim() ? 'Paste a link' : v.pass && !v.user.trim() ? 'The password wants its username' : ''),
-            done: (v) => App().AddURL(v.link, v.user, v.pass),
-            more: el('p', {
-                className: 'sheet-words',
-                textContent:
-                    'A username and password only if the site asks for them (Easynews does): they’re kept for that site, used for every link to it and sent only to it, over https. They’re kept in the party file, encrypted when it’s sealed (Party > Use Encryption…).',
-            }),
-        });
+        linkSheet();
     } else if (mode === 'clear') {
         const held = await App().CacheText();
         show({
@@ -169,6 +180,54 @@ export async function ask(mode: Ask) {
             done: (v) => App().SetPasscode(v.current, ''),
         });
     }
+}
+
+// Add Download Link: the link, and the login its site wants, if it wants one. A site with a
+// login kept (or given since the app started) has it filled in as the link is pasted, its
+// password as dots; "Save this login for <site>" keeps it for next time.
+function linkSheet() {
+    let site = '';
+    let filled = { user: '', pass: '' }; // what the sheet filled in itself (typed over, it's left alone)
+    const inputs = show({
+        title: 'Add Download Link',
+        words: 'A link that downloads a movie (or a song, a document or a database). It goes in the list and is downloaded to this Mac, playing as soon as it can; removing it from the list deletes the download.',
+        fields: [
+            { name: 'link', label: 'Link', kind: 'line' },
+            { name: 'user', label: 'Username', kind: 'line' },
+            { name: 'pass', label: 'Password', kind: 'password' },
+            { name: 'save', label: 'Save this login', kind: 'check', hidden: true },
+        ],
+        go: 'Add',
+        check: (v) => (!v.link.trim() ? 'Paste a link' : v.pass && !v.user.trim() ? 'The password needs its username' : ''),
+        done: (v) => App().AddURL(v.link, v.user, v.pass, !!v.save),
+        more: el('p', {
+            className: 'sheet-words',
+            textContent:
+                'A username and password only if the site asks for them. They go to that site alone, over https. Saved, they’re kept in the party file (encrypted when it’s sealed) and filled in next time; Settings > Accounts lists them.',
+        }),
+    });
+    const save = inputs.save as HTMLInputElement;
+    save.checked = true;
+    inputs.labels.save.after(sheet.querySelector('.sheet-box > .sheet-words:last-child')!); // the login's note, by the login
+    let asked = 0;
+    const look = async () => {
+        const n = ++asked;
+        const l = await App().LoginFor(inputs.link.value);
+        if (n !== asked) return; // a later paste is being looked at
+        if (l.site !== site) {
+            site = l.site;
+            inputs.labels.save.hidden = !site;
+            inputs.labels.save.querySelector('span')!.textContent = `Save this login for ${site}`;
+            const untouched = inputs.user.value === filled.user && inputs.pass.value === filled.pass;
+            if (untouched) {
+                inputs.user.value = l.user;
+                inputs.pass.value = l.pass;
+                filled = { user: l.user, pass: l.pass };
+                save.checked = l.saved || !l.user;
+            }
+        }
+    };
+    inputs.link.addEventListener('input', () => void look());
 }
 
 // the sheet that stays while the party is sealed: its passcode, or starting over

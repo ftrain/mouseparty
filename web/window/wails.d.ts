@@ -61,7 +61,8 @@ export interface App {
     ShowPage(page: number): Promise<void>;
     TurnPage(step: number): Promise<void>;
     AddPaths(paths: string[], row: number, at: number): Promise<void>;
-    AddURL(link: string, user: string, pass: string): Promise<string>; // Party > Add Download Link: "" when it's in the list, or why not; a username is kept as the login for the link's site
+    AddURL(link: string, user: string, pass: string, save: boolean): Promise<string>; // Party > Add Download Link: "" when it's in the list, or why not; a username is the login for the link's site, saved, or only until the app quits
+    LoginFor(link: string): Promise<LinkLogin>; // the login the sheet fills in for a link
     CacheText(): Promise<string>; // what the download cache holds: "3 downloads, 4.2 GB" ("" for nothing)
     ClearCache(): Promise<string>; // Party > Clear Download Cache: every download deleted, the rows kept; "" or why not
     // the party file (party.go): each "" when it worked, or why not
@@ -70,10 +71,41 @@ export interface App {
     SetPasscode(current: string, next: string): Promise<string>;
     SettingsText(): Promise<string>;
     SetSettingsText(text: string): Promise<string>;
+    // the Settings window (prefs.go): each change kept as it's made
+    Prefs(): Promise<Prefs>;
+    SetPrefs(p: Prefs): Promise<string>;
+    SaveAccount(site: string, user: string, pass: string): Promise<string>; // site: its name, or a link to it
+    RemoveAccount(site: string): Promise<string>;
+}
+
+// prefs.go's Prefs: the settings, as the Settings window shows them
+export interface Prefs {
+    countdown: number; // seconds of "up next" card before each movie
+    skip: number; // minutes into the first movie played
+    bitrate: number; // kbit/s
+    preset: string; // x264's preset
+    openRouterPorts: boolean;
+    cacheGB: number; // 0: no limit
+    cache: string; // only shown: what the cache holds now ("" for nothing)
+    accounts: Account[]; // only shown
+    sealed: boolean; // only shown
+}
+
+export interface Account {
+    site: string;
+    user: string;
+}
+
+// prefs.go's LinkLogin: what the Add Download Link sheet fills in
+export interface LinkLogin {
+    site: string; // "" while it isn't a link
+    user: string;
+    pass: string;
+    saved: boolean;
 }
 
 // what the Party menu asks the window for (party.go's ask)
-export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear';
+export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear' | 'prefs';
 
 // as much of the Wails runtime as the window uses
 export interface Runtime {

@@ -112,8 +112,9 @@ type App struct {
 	standby      []byte       // the card MediaMTX loops between movies
 	hostSetup    func(*Host)  // tests: free ports, no router, no tunnel
 
-	cueMu    sync.Mutex
-	cueCache map[cueKey][]Cue
+	cueMu      sync.Mutex
+	cueCache   map[cueKey][]Cue
+	tempLogins map[string]siteLogin // logins given for a link but not saved, by site: only until the app quits (logins.go)
 
 	openMu   sync.Mutex // files dropped on the Dock icon, gathered (openFile)
 	opening  []string
@@ -122,7 +123,7 @@ type App struct {
 
 func NewApp(standby []byte) *App {
 	a := &App{jobs: make(chan func(), 4096), jumpTo: -1, selected: -1, restoreSel: -1,
-		language: hostLanguage(), standby: standby, cueCache: map[cueKey][]Cue{}}
+		language: hostLanguage(), standby: standby, cueCache: map[cueKey][]Cue{}, tempLogins: map[string]siteLogin{}}
 	a.party, a.locked = openTheParty(a.log)
 	a.cfg = loadConfig(a.party)
 	a.player = &Player{Log: a.log,

@@ -67,9 +67,10 @@ Besides those, the app moves on its own (the link made, a countdown over, a movi
 | `LinkClicked` | copy the link, or try again for one | every state |
 | `SetSettingsText` | Party > Settings: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first) | every state |
 | `AddPaths` | files dropped (off the app's goroutine: no immediate state) | every state |
+| `SetPrefs` | Party > Settings (⌘,): a setting changed in the Settings window, kept at once (off the app's goroutine: no immediate state) | every state |
 | `AddURL` | Party > Add Download Link: a row downloading from a link (off the app's goroutine: no immediate state) | every state |
 
-Not walked: `CacheText`, a question: what the download cache holds; `ClearCache`, the download cache (download_test.go): every download deleted, the rows kept; `GetView`, a question, not a command: every step reads the view; `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz.
+Not walked: `CacheText`, a question: what the download cache holds; `ClearCache`, the download cache (download_test.go): every download deleted, the rows kept; `GetView`, a question, not a command: every step reads the view; `LoginFor`, a question: the login the Add Download Link sheet fills in (download_test.go); `Prefs`, a question: SetPrefs is walked; `RemoveAccount`, the Settings window's accounts (prefs_test.go); `SaveAccount`, the Settings window's accounts (prefs_test.go); `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz.
 
 ## A viewer's page, on its socket
 

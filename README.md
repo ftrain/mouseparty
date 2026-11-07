@@ -77,7 +77,7 @@ have. Words are checked against ENABLE. You join in by opening the link
 yourself. They're wireframes, there to try the idea; in the browser player's
 full screen they don't show.
 
-That's all of it. The few settings are under **Party > Settings…** (below), and the log
+That's all of it. The few settings are under **Party > Settings…** (⌘,; below), and the log
 goes to stderr: run `"/Applications/Mouse Party.app/Contents/MacOS/MouseParty"` from
 Terminal to read it.
 
@@ -109,14 +109,16 @@ Terminal to read it.
   the file is all here it's a movie like any other, in
   `~/Library/Caches/Mouse Party/downloads`, played from there as often as you
   like. Quit in the middle, and it goes on from where it was next time; a link
-  that didn't work is tried again when its row is double-clicked. A site that
-  wants a login (Easynews's members' links do) gets the username and password
-  given with the link (or written into it, `https://user:pass@…`): kept for
-  that site in the party file (encrypted when it's sealed, never in Settings),
-  sent with every request to it and to no other, over https only, so a link
-  never depends on a browser's login running out. Remove the
-  row and its download is deleted. The cache keeps at most `cache_gb` (a
-  setting, 20 GB to start with) of downloads: a link bigger than that is
+  that didn't work is tried again when its row is double-clicked. A site whose
+  links want a login gets the username and password given with the link (or
+  written into it, `https://user:pass@…`), sent with every request to that site
+  and to no other, over https only, so a link never depends on a browser's
+  login running out. With **Save this login for** the site ticked, it's kept in
+  the party file (encrypted when it's sealed) and filled in, the password as
+  dots, whenever a link to that site is pasted; **Settings > Accounts** lists
+  the saved ones, and adds, changes and removes them. Remove the
+  row and its download is deleted. The cache keeps at most 20 GB of downloads
+  to start with (**Settings > Downloads**): a link bigger than that is
   refused, and when one would take the cache past it, the downloads played
   longest ago are deleted first, their rows staying, greyed, for a double-click
   to fetch again. **Party > Clear Download Cache…** does that to all of them.
@@ -126,7 +128,7 @@ Terminal to read it.
 The app looks for subtitles when a movie is added: text and picture tracks inside
 the file, and files beside it named after it (`Movie.srt`, `Movie.en.srt`,
 `Movie.French.forced.srt`). Drop an `.srt`, `.vtt` or `.ass` onto a movie to add
-one. Each movie's `subs` setting (**Party > Settings…**, in the list's entry for it) is one of:
+one. Each movie's `subs` setting (**Settings > Security > Edit as Text…**, in the list's entry for it) is one of:
 
 - `viewers` (the default when there are text subtitles): every text track
   becomes a language in a **CC** menu on the viewer page. Each viewer turns them
@@ -140,7 +142,18 @@ one. Each movie's `subs` setting (**Party > Settings…**, in the list's entry f
 
 ### Settings
 
-**Party > Settings…** shows the list and these as text (JSON) to edit; none of them is in the window itself:
+**Party > Settings…** (⌘,) opens the Settings window, its tabs as a Mac app's are; a change is kept
+as it's made:
+
+- **General:** the countdown before each movie, and how far into the first movie to start.
+- **Streaming:** the bandwidth each friend is sent, and how hard this Mac works at the picture.
+- **Network:** whether to ask the router to let friends in.
+- **Downloads:** how much the download cache keeps, what's in it, and clearing it.
+- **Accounts:** the saved logins for download sites: added, changed, removed.
+- **Security:** encrypting the party file, and **Edit as Text…**: the list and the settings
+  as JSON, for what has no control (a movie's `subs`).
+
+As text, the settings are:
 
 | Setting | Default | |
 |---|---|---|

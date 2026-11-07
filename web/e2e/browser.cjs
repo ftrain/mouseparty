@@ -390,6 +390,72 @@ async function fillSheet(page, values) {
 }
 const viewIs = (page, what, fn) => until(page, what, fn, null, 30000);
 
+// the Settings window (prefs.ts): every tab; a change kept, a bad one refused and put back; an account
+// added, filled in by the link sheet for a link to its site, and removed; a sheet opened from it going back to it
+async function settingsWindow(page) {
+    const prefs = () => page.evaluate(() => window.go.main.App.Prefs());
+    await page.evaluate(() => window.__ask('prefs'));
+    await sheetUp(page, 'General');
+    const tabs = await page.$$eval('#sheet .pref-tab', (b) => b.map((x) => x.textContent));
+    if (tabs.join() !== 'General,Streaming,Network,Downloads,Accounts,Security') fail(`the Settings tabs: ${tabs}`);
+    for (const t of tabs) {
+        await page.click(`#sheet .pref-tab[data-tab="${t.toLowerCase()}"]`);
+        await sheetUp(page, t);
+        if (process.env.BROWSER_SHOTS) await page.screenshot({ path: `${process.env.BROWSER_SHOTS}/settings-${t}.png` });
+    }
+    await page.click('#sheet .pref-tab[data-tab="general"]');
+    await page.fill('#sheet .pref-number >> nth=0', '3');
+    await page.press('#sheet .pref-number >> nth=0', 'Tab');
+    await until(page, 'kept the countdown', () => window.go.main.App.Prefs().then((p) => p.countdown === 3));
+    await page.fill('#sheet .pref-number >> nth=0', '-5');
+    await page.press('#sheet .pref-number >> nth=0', 'Tab');
+    await sheetSays(page, 'a countdown below 0', 'The countdown is from 0');
+    if ((await prefs()).countdown !== 3 || (await page.inputValue('#sheet .pref-number >> nth=0')) !== '3') fail('a refused countdown wasn’t put back');
+    await page.click('#sheet .pref-tab[data-tab="streaming"]');
+    await page.selectOption('#sheet .pref-select >> nth=0', '4000');
+    await until(page, 'kept the bandwidth, its note following', () =>
+        window.go.main.App.Prefs().then((p) => p.bitrate === 4000 && document.querySelector('#sheet .pref-note').textContent.includes('16.5 Mbit/s')),
+    );
+    await page.selectOption('#sheet .pref-select >> nth=0', '1500');
+    // an account, filled in for its site's links, then removed
+    await page.click('#sheet .pref-tab[data-tab="accounts"]');
+    await page.click('#sheet .pref-add button');
+    await sheetSays(page, 'an account with no site', 'Type the site');
+    await page.fill('#sheet .pref-add [name="site"]', 'https://members.example.com/dl/x.mkv');
+    await page.fill('#sheet .pref-add [name="user"]', 'ann');
+    await page.fill('#sheet .pref-add [name="pass"]', 'pw');
+    await page.click('#sheet .pref-add button');
+    await until(page, 'listed the account', () => [...document.querySelectorAll('#sheet .pref-account')].map((r) => r.textContent).join() === 'example.comannRemove');
+    await page.click('#sheet .pref-done');
+    await sheetGone(page, 'Done');
+    await page.evaluate(() => window.__ask('link'));
+    await sheetUp(page, 'Add Download Link');
+    await page.fill('#sheet [name="link"]', 'https://cdn.example.com/Some.Movie.mkv');
+    await until(page, 'filled in the saved login', () => {
+        const q = (n) => document.querySelector(`#sheet [name="${n}"]`);
+        return (
+            q('user').value === 'ann' && q('pass').value === 'pw' && q('pass').type === 'password' && q('save').checked && q('save').closest('label').textContent === 'Save this login for example.com'
+        );
+    });
+    if (process.env.BROWSER_SHOTS) await page.screenshot({ path: `${process.env.BROWSER_SHOTS}/link-sheet.png` });
+    await page.keyboard.press('Escape');
+    await sheetGone(page, 'Escape');
+    await page.evaluate(() => window.__ask('prefs'));
+    await sheetUp(page, 'Accounts'); // where it was
+    await page.click('#sheet .pref-account button');
+    await until(page, 'removed the account', () => !document.querySelector('#sheet .pref-account'));
+    if ((await prefs()).accounts.length) fail('the account is still kept');
+    // a sheet opened from Settings goes back to it
+    await page.click('#sheet .pref-tab[data-tab="security"]');
+    await page.click('#sheet .pref-button >> text=Edit as Text…');
+    await sheetUp(page, 'Edit as Text');
+    await page.keyboard.press('Escape');
+    await sheetUp(page, 'Security');
+    await page.keyboard.press('Escape');
+    await sheetGone(page, 'Escape from Settings');
+    await windowMatches(page, 'the Settings window used');
+}
+
 async function party(page) {
     // Add Download Link: nothing, not a link, then a clip the test serves: a row downloading, then a movie
     const files = await (await fetch(`${base}/files`)).json();
@@ -399,7 +465,12 @@ async function party(page) {
     await sheetSays(page, 'no link', 'Paste a link');
     await fillSheet(page, { link: 'Some.Clip.mkv' });
     await sheetSays(page, 'not a link', "isn't a web link");
-    await fillSheet(page, { link: `${base}/served/${files.clip.split('/').pop()}` });
+    await page.fill('#sheet [name="link"]', `${base}/served/${files.clip.split('/').pop()}`);
+    await until(page, 'offered to save a login for the link’s site', () => {
+        const label = document.querySelector('#sheet [name="save"]')?.closest('label');
+        return label && !label.hidden && label.textContent === 'Save this login for 127.0.0.1';
+    });
+    await page.click('#sheet .go');
     await sheetGone(page, 'adding a link');
     await viewIs(page, 'the link downloaded, a movie now', () => {
         const last = window.__view.rows[window.__view.rows.length - 1];
@@ -421,7 +492,7 @@ async function party(page) {
     const wasPlaying = await page.evaluate(() => window.__view.play === 'stop');
     if (wasPlaying) {
         await page.evaluate(() => window.__ask('settings'));
-        await sheetUp(page, 'Settings');
+        await sheetUp(page, 'Edit as Text');
         await page.click('#sheet .go');
         await sheetSays(page, 'saving while playing', 'Stop first');
         await page.keyboard.press('Escape');
@@ -430,7 +501,7 @@ async function party(page) {
         await viewIs(page, 'stopped', () => window.__view.play === 'play' && window.__view.playOn);
     }
     await page.evaluate(() => window.__ask('settings'));
-    await sheetUp(page, 'Settings');
+    await sheetUp(page, 'Edit as Text');
     const text = await page.inputValue('#sheet [name="text"]');
     await fillSheet(page, { text: '{ "countdown": ' });
     await sheetSays(page, 'broken JSON', "isn't JSON");
@@ -439,10 +510,12 @@ async function party(page) {
     await fillSheet(page, { text: JSON.stringify(settings, null, 2) });
     await sheetGone(page, 'saving the settings');
     await page.evaluate(() => window.__ask('settings'));
-    await sheetUp(page, 'Settings');
+    await sheetUp(page, 'Edit as Text');
     if (JSON.parse(await page.inputValue('#sheet [name="text"]')).countdown !== 2) fail('the settings saved, and read back otherwise');
     await page.keyboard.press('Escape');
     await sheetGone(page, 'Escape');
+
+    await settingsWindow(page);
 
     // Use Encryption: two passcodes that differ, then the same twice
     await page.evaluate(() => window.__ask('on'));

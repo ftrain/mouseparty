@@ -172,7 +172,7 @@ func (a *App) menu() *menu.Menu {
 	clear := party.AddText("Clear Download Cache…", nil, func(*menu.CallbackData) { a.ask("clear") })
 	clear.Disabled = a.locked
 	party.AddSeparator()
-	settings := party.AddText("Settings…", nil, func(*menu.CallbackData) { a.ask("settings") })
+	settings := party.AddText("Settings…", keys.CmdOrCtrl(","), func(*menu.CallbackData) { a.ask("prefs") })
 	settings.Disabled = a.locked
 	party.AddSeparator()
 	switch {

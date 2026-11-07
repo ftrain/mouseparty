@@ -90,18 +90,23 @@ var windowGraph = []windowCommand{
 	{"LinkClicked", windowStates, merge(each(windowStates, "same"), each([]string{"nolink"}, "linking", "nolink")), "copy the link, or try again for one"},
 	{"SetSettingsText", windowStates, nil, "Party > Settings: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first)"},
 	{"AddPaths", windowStates, nil, "files dropped (off the app's goroutine: no immediate state)"},
+	{"SetPrefs", windowStates, nil, "Party > Settings (⌘,): a setting changed in the Settings window, kept at once (off the app's goroutine: no immediate state)"},
 	{"AddURL", windowStates, nil, "Party > Add Download Link: a row downloading from a link (off the app's goroutine: no immediate state)"},
 }
 
 // windowElsewhere: App methods that aren't walked here, and where they're tested
 var windowElsewhere = map[string]string{
-	"GetView":      "a question, not a command: every step reads the view",
-	"Unlock":       "the sealed party (store_test.go): Argon2 is too slow to fuzz",
-	"StartOver":    "the sealed party (store_test.go)",
-	"SetPasscode":  "the sealed party (store_test.go)",
-	"SettingsText": "a question: SetSettingsText is walked",
-	"CacheText":    "a question: what the download cache holds",
-	"ClearCache":   "the download cache (download_test.go): every download deleted, the rows kept",
+	"GetView":       "a question, not a command: every step reads the view",
+	"Unlock":        "the sealed party (store_test.go): Argon2 is too slow to fuzz",
+	"StartOver":     "the sealed party (store_test.go)",
+	"SetPasscode":   "the sealed party (store_test.go)",
+	"SettingsText":  "a question: SetSettingsText is walked",
+	"CacheText":     "a question: what the download cache holds",
+	"ClearCache":    "the download cache (download_test.go): every download deleted, the rows kept",
+	"Prefs":         "a question: SetPrefs is walked",
+	"LoginFor":      "a question: the login the Add Download Link sheet fills in (download_test.go)",
+	"SaveAccount":   "the Settings window's accounts (prefs_test.go)",
+	"RemoveAccount": "the Settings window's accounts (prefs_test.go)",
 }
 
 // socketDoc: the document up in a socket walk
@@ -736,7 +741,7 @@ func windowWalk(t *testing.T, data []byte) {
 			var paths []string
 			for range 1 + c.n(3) {
 				if kind := kinds[c.n(len(kinds))]; kind == "link" {
-					a.AddURL(served.URL+"/"+filepath.Base(files[kinds[c.n(len(kinds)-1)]]), "", "")
+					a.AddURL(served.URL+"/"+filepath.Base(files[kinds[c.n(len(kinds)-1)]]), "", "", true)
 				} else {
 					paths = append(paths, files[kind])
 				}
@@ -769,10 +774,19 @@ func windowWalk(t *testing.T, data []byte) {
 			name, fn = "Remove", a.remove
 		case 10:
 			name, fn = "LinkClicked", a.linkClicked
-		case 11:
-			a.SetSettingsText(settingsTexts[c.n(len(settingsTexts))])
-			state, v := look()
-			checkView(t, "SetSettingsText", state, v)
+		case 11: // the settings changed: as text, or in the Settings window (good ones and refused ones)
+			if c.n(2) == 0 {
+				a.SetSettingsText(settingsTexts[c.n(len(settingsTexts))])
+				state, v := look()
+				checkView(t, "SetSettingsText", state, v)
+			} else {
+				p := a.Prefs()
+				p.Countdown, p.CacheGB = float64(c.n(4)-1), float64(c.n(3))/1000
+				p.Bitrate, p.Preset = []int{1500, 100, 4000}[c.n(3)], presets[c.n(len(presets))]
+				a.SetPrefs(p)
+				state, v := look()
+				checkView(t, "SetPrefs", state, v)
+			}
 			continue
 		case 12: // a drive unplugged, or plugged back in
 			if c.n(2) == 0 {

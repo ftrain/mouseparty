@@ -207,3 +207,84 @@ body {
 .sheet-box button.go { background: var(--play); border-color: var(--play); color: white; }
 .sheet-box button.go:disabled { opacity: 0.5; }
 .sheet-box button.quiet { align-self: center; border: 0; background: none; color: var(--muted); text-decoration: underline; }
+.sheet-box label.sheet-check { flex-direction: row; align-items: center; gap: 8px; }
+.sheet-box label.sheet-check input { padding: 0; margin: 0; }
+.sheet-box label[hidden] { display: none; }
+
+/* the Settings window (web/window/prefs.ts): tabs along the top, as a Mac app's Settings has them; held at
+   the top, so that it doesn't jump as tabs of other heights are chosen */
+.sheet:has(.prefs) { align-items: flex-start; }
+.prefs {
+    width: min(100%, 600px);
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    background: var(--row);
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 40px rgb(0 0 0 / 0.25);
+    overflow: hidden;
+}
+.pref-head { position: relative; padding: 10px 16px 0; text-align: center; }
+.pref-head h1 { margin: 0; font-size: 13px; font-weight: 600; }
+.pref-done {
+    position: absolute; right: 12px; top: 6px;
+    font: inherit; font-size: 13px; padding: 3px 12px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.pref-tabs {
+    display: flex; justify-content: center; gap: 2px;
+    padding: 6px 10px 8px;
+    border-bottom: 1px solid var(--border);
+    background: var(--row-alt);
+}
+.pref-tab {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    min-width: 72px; padding: 6px 8px 4px;
+    font: inherit; font-size: 11px;
+    color: var(--muted);
+    background: none; border: 0; border-radius: 7px;
+}
+.pref-tab svg { width: 24px; height: 24px; }
+.pref-tab:hover { color: var(--text); }
+.pref-tab.on { color: var(--selected); background: color-mix(in srgb, var(--selected) 12%, transparent); }
+.pref-tab:focus-visible { outline: 2px solid var(--selected); outline-offset: -2px; }
+.pref-body {
+    display: flex; flex-direction: column; gap: 18px;
+    padding: 22px 26px 8px;
+    overflow: auto;
+    -webkit-user-select: text; user-select: text;
+}
+.pref-row { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: baseline; }
+.pref-label { text-align: right; font-weight: 500; }
+.pref-control { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pref-note { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.pref-inline { display: inline-flex; align-items: center; gap: 6px; }
+.pref-number { width: 80px; }
+.pref-select { max-width: 100%; }
+.pref-number, .pref-select, .pref-add input {
+    font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+}
+.pref-check { display: inline-flex; align-items: center; gap: 8px; }
+.pref-button {
+    font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.pref-button.quiet-button { padding: 2px 10px; font-size: 12px; }
+.pref-accounts { display: flex; flex-direction: column; gap: 10px; }
+.pref-list { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.pref-list > .pref-note { padding: 12px; }
+.pref-account { display: grid; grid-template-columns: 1fr 1fr auto; align-items: center; gap: 10px; padding: 7px 10px; }
+.pref-account:nth-child(even) { background: var(--row-alt); }
+.pref-site { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.pref-user { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.pref-subhead { margin: 6px 0 0; font-weight: 500; }
+.pref-add { display: grid; grid-template-columns: 1.3fr 1fr 1fr auto; gap: 6px; }
+.pref-status { padding: 0 26px 14px; min-height: 1.2em; }
+@media (max-width: 520px) {
+    .pref-row { grid-template-columns: 1fr; gap: 6px; }
+    .pref-label { text-align: left; }
+    .pref-add { grid-template-columns: 1fr; }
+    .pref-tab { min-width: 0; }
+}

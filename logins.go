@@ -1,19 +1,22 @@
 package main
 
 // Logins for download links: a site that wants its username and password with
-// every download (HTTP Basic auth, as Easynews's members' links do) is given
+// every download (HTTP Basic auth, as file services' members' links do) is given
 // them, so a link never needs a browser's session, which runs out. A login is
-// kept for the link's site (its registered domain, so easynews.com covers
-// members.easynews.com and the servers it sends a download on to) in the party
-// file, under its own key, never in the Settings text (sealing the party
-// encrypts it), and sent only to that site, and only over https (or plain http
-// to this Mac).
+// for the link's site (its registered domain, so example.com covers
+// members.example.com and the servers it sends a download on to), kept in the
+// party file under its own key, never in the Settings text (sealing the party
+// encrypts it), or, when the sheet's "Save this login" is off, only until the app
+// quits (App.tempLogins); and sent only to that site, and only over https (or
+// plain http to this Mac). The Settings window's Accounts tab lists, adds and
+// removes them (prefs.go).
 
 import (
 	"encoding/json"
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"golang.org/x/net/publicsuffix"
@@ -25,7 +28,7 @@ type siteLogin struct {
 	Pass string `json:"pass"`
 }
 
-// siteOf: a host's site, the domain it is registered under (members.easynews.com: easynews.com)
+// siteOf: a host's site, the domain it is registered under (members.example.com: example.com)
 func siteOf(host string) string {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	if net.ParseIP(host) != nil {
@@ -70,16 +73,46 @@ func (a *App) setLogin(site string, l siteLogin) {
 	}
 }
 
-// loginFor: the login kept for a link's site, if there is one
+// forgetLogin takes a site's login out of the party file
+func (a *App) forgetLogin(site string) {
+	all := a.logins()
+	if _, ok := all[site]; !ok || a.party == nil {
+		return
+	}
+	delete(all, site)
+	if b, err := json.Marshal(all); err == nil {
+		a.party.setSetting("logins", b)
+	}
+}
+
+// loginFor: the login for a link's site, if there is one: one given since the app started
+// and not saved, else the one kept
 func (a *App) loginFor(link string) *siteLogin {
 	u, err := url.Parse(link)
 	if err != nil {
 		return nil
 	}
-	if l, ok := a.logins()[siteOf(u.Hostname())]; ok && l.User != "" {
+	site := siteOf(u.Hostname())
+	if l, ok := a.tempLogins[site]; ok {
+		return &l
+	}
+	if l, ok := a.logins()[site]; ok && l.User != "" {
 		return &l
 	}
 	return nil
+}
+
+// retryLoginWanted tries again the site's downloads that stopped short (wanting a login, say), now that it has one
+func (a *App) retryLoginWanted(site string) {
+	for _, it := range a.cfg.Queue {
+		if u, err := url.Parse(it.URL); err == nil && it.downloading() && it.dl == nil && !it.Cleared && siteOf(u.Hostname()) == site {
+			a.retryDownload(it)
+		}
+	}
+}
+
+func sortAccounts(list []Account) {
+	sort.Slice(list, func(i, j int) bool { return list[i].Site < list[j].Site })
 }
 
 // withLogin: a transport that adds the login to every request to its site (the first, and any

@@ -267,9 +267,10 @@ func shortNetError(err error) string {
 // ---------- the app's side ----------
 
 // AddURL: Party > Add Download Link…: the link's file as a row at the end of the list, downloading;
-// "" or why not. A username (and its password), or one written into the link, is kept as the login for
-// the link's site (logins.go); a link already in the list given one is tried again with it.
-func (a *App) AddURL(link, user, pass string) string {
+// "" or why not. A username (and its password), or one written into the link, is the login for the
+// link's site (logins.go): kept in the party file when save is set, else only until the app quits; a
+// link already in the list given one is tried again with it.
+func (a *App) AddURL(link, user, pass string, save bool) string {
 	u, login, why := checkLink(link)
 	if why != "" {
 		return why
@@ -288,9 +289,12 @@ func (a *App) AddURL(link, user, pass string) string {
 		case downloadsDir() == "":
 			result = "There's no cache folder to download into"
 		default:
-			if login != nil {
-				a.setLogin(siteOf(u.Hostname()), *login)
-				a.log("Kept the login for " + siteOf(u.Hostname()) + " (" + login.User + ")")
+			if site := siteOf(u.Hostname()); login != nil && save {
+				a.setLogin(site, *login)
+				delete(a.tempLogins, site)
+				a.log("Saved the login for " + site + " (" + login.User + ")")
+			} else if login != nil {
+				a.tempLogins[site] = *login
 			}
 			for _, it := range a.cfg.Queue {
 				if it.URL == u.String() {
