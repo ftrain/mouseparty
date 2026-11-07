@@ -147,13 +147,18 @@ func TestDownloadLink(t *testing.T) {
 	if why := a.AddURL(server.URL+"/files/Some.Clip.2026.mkv?again=1", "", "", true); why != "" {
 		t.Fatal(why)
 	}
-	v = until("the newest down, the oldest cleared", func(v View) bool {
-		return len(v.Rows) == 3 && !v.Rows[2].Off && v.Rows[0].Off && v.Rows[0].Length == "not in the cache"
+	v = until("the newest down, the oldest removed to make room", func(v View) bool {
+		return len(v.Rows) == 1 && !v.Rows[0].Off
 	})
-	if cacheSize() > size+size/2 || !v.Rows[1].Off || v.Rows[1].Length != "not in the cache" {
+	if cacheSize() > size+size/2 {
 		t.Fatalf("after trimming: %s in the cache, %+v", formatBytes(cacheSize()), v.Rows)
 	}
-	a.wait(func() { a.cfg.CacheGB = Number(float64(size/2) / (1 << 30)) })
+	a.wait(func() {
+		it = a.cfg.Queue[0]
+		a.cfg.CacheGB = Number(float64(size/2) / (1 << 30))
+		os.RemoveAll(filepath.Dir(it.Path)) // its file gone (as macOS might make room): fetched again when played
+		it.Got = false
+	})
 	a.PlayRow(0)
 	v = until("too big for the cache", func(v View) bool { return strings.Contains(v.Rows[0].Title, "bigger than the cache limit") })
 	if _, err := os.Stat(filepath.Dir(it.Path)); err == nil {
@@ -163,25 +168,46 @@ func TestDownloadLink(t *testing.T) {
 	}
 	a.wait(func() { a.cfg.CacheGB = 0 })
 
-	// Clear Download Cache: every download gone, every row kept, each a double-click from coming back
+	// Clear Download Cache: every download gone, and its row with it; a file of one's own stays
+	if why := a.AddURL(link, "", "", true); why != "" {
+		t.Fatal(why)
+	}
+	until("one more down", func(v View) bool { return len(v.Rows) == 2 && !v.Rows[1].Off })
 	if text := a.CacheText(); !strings.HasPrefix(text, "1 download, ") {
 		t.Fatalf("CacheText: %q", text)
 	}
+	own := filepath.Join(dir, "Own.mkv")
+	os.Link(clip, own)
+	a.addPaths([]string{own}, -1, -1)
+	until("one's own added", func(v View) bool { return len(v.Rows) == 3 })
 	if why := a.ClearCache(); why != "" {
 		t.Fatal(why)
 	}
 	v = a.GetView()
-	for i, r := range v.Rows {
-		if !r.Off || r.Icon != "download" || r.Length != "not in the cache" {
-			t.Fatalf("row %d after clearing: %+v", i, r)
-		}
+	if len(v.Rows) != 1 || v.Rows[0].Title != "Own" {
+		t.Fatalf("after clearing: %+v", v.Rows)
 	}
 	if entries, _ := os.ReadDir(downloadsDir()); len(entries) != 0 || a.CacheText() != "" {
 		t.Fatalf("%d folders after clearing, %q", len(entries), a.CacheText())
 	}
-	a.PlayRow(0)
-	until("downloaded again after clearing", func(v View) bool { return !v.Rows[0].Off })
-	a.wait(func() { a.selectRow(2); a.remove(); a.selectRow(1); a.remove() })
+	if _, err := os.Stat(own); err != nil {
+		t.Fatal("clearing the cache took one's own file:", err)
+	}
+	// a row cleared by an earlier Mouse Party, kept greyed: taken out at the next start
+	a.wait(func() {
+		a.cfg.Queue = []*Item{{URL: link + "?old=1", Path: filepath.Join(downloadsDir(), downloadKey(link+"?old=1"), "Old.mkv"), Cleared: true}}
+		a.save()
+	})
+	a.shutdown(nil)
+	a = newApp()
+	a.wait(a.started)
+	if v := a.GetView(); len(v.Rows) != 0 {
+		t.Fatalf("an old cleared row at start: %+v", v.Rows)
+	}
+	if why := a.AddURL(link, "", "", true); why != "" {
+		t.Fatal(why)
+	}
+	until("down again", func(v View) bool { return len(v.Rows) == 1 && !v.Rows[0].Off })
 
 	// started again: a download that didn't finish goes on, and a stray folder is cleaned out
 	a.wait(func() {

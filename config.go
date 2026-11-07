@@ -38,7 +38,7 @@ type Item struct {
 	Audio     *[]AudioTrack `json:"audio,omitempty"`     // its sound tracks; nil until looked at
 	URL       string        `json:"url,omitempty"`       // a download link (download.go): Path is its download, in the cache
 	Got       bool          `json:"got,omitempty"`       // the download is complete; until then the row is off, counting bytes
-	Cleared   bool          `json:"cleared,omitempty"`   // cleared from the cache (the limit, or Clear Download Cache): fetched again only on a double-click
+	Cleared   bool          `json:"cleared,omitempty"`   // an earlier Mouse Party's row kept, greyed, when its download was cleared: taken out at start (syncDownloads)
 	Missing   bool          `json:"-"`                   // its file isn't there now (App.watchFiles)
 	dl        *download     // the download under way (download.go); nil otherwise
 }

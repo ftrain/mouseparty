@@ -23,8 +23,9 @@ package main
 // The cache has a limit, cache_gb in the settings (0: none): a link bigger than
 // it is refused, and when a download would take the cache past it, the oldest
 // downloads (by when they last played) are deleted first, their rows staying,
-// greyed, for a double-click to fetch again. Party > Clear Download Cache… does
-// that to every download at once.
+// and their rows with them. Party > Clear Download Cache… does that to every
+// download at once. The cache holds the list's downloads and nothing else:
+// whatever no row names is deleted (pruneCache).
 
 import (
 	"context"
@@ -343,7 +344,7 @@ func (a *App) startDownload(it *Item) {
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &download{cancel: cancel}
 	login := a.loginFor(it.URL)
-	it.dl, it.Note, it.Cleared = d, "", false
+	it.dl, it.Note = d, ""
 	go func() {
 		ready, lookAt := false, int64(-1) // whether it plays yet, and the bytes at which to look next
 		path, err := fetch(ctx, it.URL, it.Path, login, func(path string, got, total int64) {
@@ -445,26 +446,43 @@ func (a *App) retryDownload(it *Item) {
 }
 
 // syncDownloads: every row's download under way, or tried again (a failed one, or a file the
-// cache lost), and every folder in the cache that no row names deleted. At start, and after
-// the list is set as text.
+// cache lost, macOS making room, say), and every folder in the cache that no row names deleted.
+// At start, and after the list is set as text.
 func (a *App) syncDownloads() {
+	if downloadsDir() == "" {
+		return
+	}
+	gone := map[*Item]bool{} // rows an earlier Mouse Party kept, greyed, when it cleared their downloads
+	for _, it := range a.cfg.Queue {
+		if it.URL != "" && it.Cleared && it != a.current {
+			gone[it] = true
+		}
+	}
+	a.removeItems(gone)
+	for _, it := range a.cfg.Queue {
+		if it.URL == "" {
+			continue
+		}
+		if it.Got {
+			if _, err := os.Stat(it.Path); err != nil {
+				it.Got = false // the cache was cleared by hand: again
+			}
+		}
+		a.startDownload(it)
+	}
+	a.pruneCache()
+}
+
+// pruneCache deletes every folder in the cache that no row names: the cache holds the list's downloads, nothing else
+func (a *App) pruneCache() {
 	dir := downloadsDir()
 	if dir == "" {
 		return
 	}
 	keep := map[string]bool{}
 	for _, it := range a.cfg.Queue {
-		if it.URL == "" {
-			continue
-		}
-		keep[downloadKey(it.URL)] = true
-		if it.Got {
-			if _, err := os.Stat(it.Path); err != nil {
-				it.Got = false // the cache was cleared by hand: again
-			}
-		}
-		if !it.Cleared {
-			a.startDownload(it)
+		if it.URL != "" {
+			keep[downloadKey(it.URL)] = true
 		}
 	}
 	entries, _ := os.ReadDir(dir)
@@ -490,8 +508,6 @@ func (a *App) removeDownload(it *Item) {
 func downloadNote(it *Item) string {
 	d := it.dl
 	switch {
-	case d == nil && it.Cleared:
-		return "not in the cache"
 	case d == nil:
 		return "not downloaded"
 	case d.ready && d.total > 0:
@@ -581,27 +597,21 @@ func (a *App) trimCache(limit int64) {
 		return st.ModTime()
 	}
 	sort.SliceStable(kept, func(i, j int) bool { return modified(kept[i]).Before(modified(kept[j])) })
+	gone := map[*Item]bool{}
 	for _, it := range kept {
 		if cacheSize() <= limit {
 			break
 		}
-		a.clearDownload(it)
-		a.log("Cleared " + filepath.Base(it.Path) + " from the cache to make room (cache_gb in Party > Settings).")
+		a.removeDownload(it)
+		gone[it] = true
+		a.log("Removed " + filepath.Base(it.Path) + " to make room in the download cache (Settings > Downloads).")
 	}
+	a.removeItems(gone)
 	a.save()
 }
 
-// clearDownload deletes the item's download, its row staying for a double-click
-func (a *App) clearDownload(it *Item) {
-	a.stopDownload(it)
-	if dir := downloadsDir(); dir != "" {
-		os.RemoveAll(filepath.Join(dir, downloadKey(it.URL)))
-	}
-	it.Got, it.Cleared, it.Note = false, true, ""
-}
-
-// ClearCache: Party > Clear Download Cache…: every download deleted (the one playing stays until
-// it's done), their rows kept; "" or why not
+// ClearCache: Party > Clear Download Cache…: every download deleted, and its row with it (the one
+// playing stays until it's done); "" or why not
 func (a *App) ClearCache() string {
 	result := ""
 	a.wait(func() {
@@ -609,15 +619,16 @@ func (a *App) ClearCache() string {
 			result = "The party is sealed: open it first"
 			return
 		}
+		gone := map[*Item]bool{}
 		for _, it := range a.cfg.Queue {
-			if it.URL == "" || (it == a.current && a.player.Running()) {
-				continue
+			if it.URL != "" && !(it == a.current && a.player.Running()) {
+				gone[it] = true
 			}
-			a.clearDownload(it)
 		}
-		a.syncDownloads() // strays, and the rows kept out of it
+		a.removeItems(gone)
+		a.pruneCache() // strays too, with nothing removed
 		a.save()
-		a.log("The download cache is cleared.")
+		a.log(fmt.Sprintf("The download cache is cleared: %d removed from the list.", len(gone)))
 	})
 	return result
 }

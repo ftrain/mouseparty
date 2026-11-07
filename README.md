@@ -122,8 +122,10 @@ Terminal to read it.
   row and its download is deleted. The cache keeps at most 20 GB of downloads
   to start with (**Settings > Downloads**): a link bigger than that is
   refused, and when one would take the cache past it, the downloads played
-  longest ago are deleted first, their rows staying, greyed, for a double-click
-  to fetch again. **Party > Clear Download Cache…** does that to all of them.
+  longest ago are deleted first, and their rows go from the list.
+  **Party > Clear Download Cache…** does that to all of them (but one playing,
+  until it's done). The cache only ever holds the list's downloads: whatever no
+  row names is deleted.
 
 ### Subtitles
 

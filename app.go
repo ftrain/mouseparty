@@ -574,6 +574,7 @@ func (a *App) remove() {
 	streaming := a.player.Running() && i == a.cfg.Position
 	a.removeDownload(a.cfg.Queue[i])                                               // a download: its folder goes with it
 	a.editQueue(func(q []*Item) []*Item { return append(q[:i], q[i+1:]...) }, nil) // position now points at the one after
+	a.pruneCache()                                                                 // and nothing stays in the cache that no row names
 	if len(a.cfg.Queue) == 0 {                                                     // nothing left to play: whatever was going on stops
 		a.seekTo, a.jumpTo = nil, -1
 		a.stop()
@@ -598,13 +599,29 @@ func (a *App) clearPlayed() {
 	if n == 0 {
 		return
 	}
+	gone := map[*Item]bool{}
 	for _, it := range a.cfg.Queue[:n] {
+		gone[it] = true
+	}
+	a.removeItems(gone)
+	a.log(fmt.Sprintf("Cleared %d played from the list", n))
+}
+
+// removeItems takes these rows out of the list, a download's file with each (never the one
+// streaming: callers leave it out), and anything else in the cache that no row names
+func (a *App) removeItems(gone map[*Item]bool) {
+	if len(gone) == 0 {
+		return
+	}
+	for it := range gone {
 		a.removeDownload(it)
 	}
-	a.editQueue(func(q []*Item) []*Item { return append([]*Item{}, q[n:]...) }, nil)
+	a.editQueue(func(q []*Item) []*Item {
+		return slices.DeleteFunc(slices.Clone(q), func(it *Item) bool { return gone[it] })
+	}, nil)
 	a.selected = -1
-	a.log(fmt.Sprintf("Cleared %d played from the list", n))
-	if len(a.cfg.Queue) == 0 { // all of it played: nothing left to go on to
+	a.pruneCache()
+	if len(a.cfg.Queue) == 0 { // nothing left to go on to
 		a.seekTo, a.jumpTo = nil, -1
 		a.stop()
 	}

@@ -128,7 +128,7 @@ async function ask(mode) {
 		const held = await App().CacheText();
 		show({
 			title: "Clear Download Cache",
-			words: held ? `Delete what download links brought here (${held})? Their rows stay in the list, greyed; double-click one to download it again. The cache keeps at most cache_gb (in Settings) of downloads, the oldest going first.` : "Nothing is in the download cache. It keeps at most cache_gb (in Settings) of downloads, the oldest going first.",
+			words: held ? `Delete what download links brought here (${held}), and take their rows out of the list? One playing goes once it’s done. Your own files stay where they are.` : "Nothing is in the download cache. How much it keeps is in Settings > Downloads.",
 			fields: [],
 			go: held ? "Clear" : "OK",
 			done: () => held ? App().ClearCache() : Promise.resolve("")

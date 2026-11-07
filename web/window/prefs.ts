@@ -166,7 +166,7 @@ const TABS: Tab[] = [
             row(
                 'Keep up to',
                 number(p.cacheGB, 0, 100000, 1, (q, n) => (q.cacheGB = n), 'GB of downloads'),
-                'Past it, the downloads played longest ago are deleted; their rows stay, for a double-click to download again. 0 for no limit.',
+                'Past it, the downloads played longest ago are deleted, and their rows go from the list. Removing a row deletes its download too. 0 for no limit.',
             ),
             row('Downloaded now', [
                 el('span', { textContent: p.cache || 'Nothing' }),

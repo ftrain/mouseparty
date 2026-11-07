@@ -124,7 +124,7 @@ const TABS = [
 		id: "downloads",
 		label: "Downloads",
 		icon: "download",
-		draw: (p) => [row("Keep up to", number(p.cacheGB, 0, 1e5, 1, (q, n) => q.cacheGB = n, "GB of downloads"), "Past it, the downloads played longest ago are deleted; their rows stay, for a double-click to download again. 0 for no limit."), row("Downloaded now", [el("span", { textContent: p.cache || "Nothing" }), ...p.cache ? [button("Clear Download Cache…", () => askFrom("clear", () => void openPrefs("downloads")))] : []])]
+		draw: (p) => [row("Keep up to", number(p.cacheGB, 0, 1e5, 1, (q, n) => q.cacheGB = n, "GB of downloads"), "Past it, the downloads played longest ago are deleted, and their rows go from the list. Removing a row deletes its download too. 0 for no limit."), row("Downloaded now", [el("span", { textContent: p.cache || "Nothing" }), ...p.cache ? [button("Clear Download Cache…", () => askFrom("clear", () => void openPrefs("downloads")))] : []])]
 	},
 	{
 		id: "accounts",

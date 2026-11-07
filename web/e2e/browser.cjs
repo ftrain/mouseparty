@@ -477,15 +477,13 @@ async function party(page) {
         return last && last.icon === 'video' && !last.off;
     });
     await windowMatches(page, 'a download link added');
-    // Clear Download Cache: the row stays, greyed, a download again
+    // Clear Download Cache: the download gone, and its row (unless it's the one playing, which stays until it's done)
+    const before = await page.evaluate(() => window.__view.rows.length);
     await page.evaluate(() => window.__ask('clear'));
     await sheetUp(page, 'Clear Download Cache');
     await page.click('#sheet .go');
     await sheetGone(page, 'clearing the cache');
-    await viewIs(page, 'the download cleared, its row kept', () => {
-        const last = window.__view.rows[window.__view.rows.length - 1];
-        return last && last.icon === 'download' && last.off && last.length === 'not in the cache';
-    });
+    await until(page, 'the download cleared, its row gone', (n) => window.__view.rows.length === n - 1 || window.__view.rows[n - 1]?.now, before, 30000);
     await windowMatches(page, 'the cache cleared');
     const rows = await page.evaluate(() => window.__view.rows.length);
     // Settings: not while playing; not JSON that won't read; then saved
