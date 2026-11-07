@@ -360,7 +360,7 @@ func (a *App) startDownload(it *Item) {
 				return
 			}
 			it.dl, it.Path = nil, path
-			if err != nil && d.refused != "" { // too big for the cache: nothing of it kept
+			if d.refused != "" { // too big for the cache: nothing of it kept (even if all of it came before the cancel did)
 				it.Note = d.refused
 				os.RemoveAll(filepath.Dir(path))
 			} else if err != nil {

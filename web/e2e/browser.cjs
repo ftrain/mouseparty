@@ -330,7 +330,14 @@ async function viewers(browser) {
         for (let n = 0; n < 4; n++) {
             await sleep(1100); // a page opens or closes one app a second
             if (!(await ann.locator('.win-close').count())) break;
-            await ann.locator('.win-close').first().click({ timeout: 5000 });
+            // a window's own ✕, or a bare one's (Stickies draws its own); one Ann hid (its –) has none to see, so its ✕ is pressed as is
+            const shown = ann.locator('.win:not(.bare) .win-close:visible, .win.bare button[title^="Close"]:visible');
+            if (await shown.count())
+                await shown
+                    .first()
+                    .click({ timeout: 5000 })
+                    .catch((e) => fail(`${title}: closing it: ${e.message}`));
+            else await ann.locator('.win-close').first().dispatchEvent('click');
         }
         await ann.waitForFunction(() => !document.querySelector('.win'), null, { timeout: 5000 }).catch(() => fail(`${title}: its windows never closed`));
         await sleep(1100); // a page opens or closes one app a second
