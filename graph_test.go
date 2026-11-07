@@ -736,7 +736,7 @@ func windowWalk(t *testing.T, data []byte) {
 			var paths []string
 			for range 1 + c.n(3) {
 				if kind := kinds[c.n(len(kinds))]; kind == "link" {
-					a.AddURL(served.URL + "/" + filepath.Base(files[kinds[c.n(len(kinds)-1)]]))
+					a.AddURL(served.URL+"/"+filepath.Base(files[kinds[c.n(len(kinds)-1)]]), "", "")
 				} else {
 					paths = append(paths, files[kind])
 				}

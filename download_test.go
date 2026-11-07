@@ -72,15 +72,15 @@ func TestDownloadLink(t *testing.T) {
 	}
 
 	for _, bad := range []string{"", "Some.Clip.mkv", "ftp://x/y.mkv", "http://"} {
-		if why := a.AddURL(bad); !strings.Contains(why, "web link") {
+		if why := a.AddURL(bad, "", ""); !strings.Contains(why, "web link") {
 			t.Errorf("AddURL(%q): %q", bad, why)
 		}
 	}
 	link := server.URL + "/files/Some.Clip.2026.mkv"
-	if why := a.AddURL(link); why != "" {
+	if why := a.AddURL(link, "", ""); why != "" {
 		t.Fatal(why)
 	}
-	if why := a.AddURL(link + "#top"); !strings.Contains(why, "already") {
+	if why := a.AddURL(link+"#top", "", ""); !strings.Contains(why, "already") {
 		t.Errorf("the same link twice: %q", why)
 	}
 	v := a.GetView()
@@ -101,7 +101,7 @@ func TestDownloadLink(t *testing.T) {
 	}
 
 	// the server's name for it
-	if why := a.AddURL(server.URL + "/dl?id=7"); why != "" {
+	if why := a.AddURL(server.URL+"/dl?id=7", "", ""); why != "" {
 		t.Fatal(why)
 	}
 	v = until("the named one downloaded", func(v View) bool { return len(v.Rows) == 2 && !v.Rows[1].Off })
@@ -110,7 +110,7 @@ func TestDownloadLink(t *testing.T) {
 	}
 
 	// a dead link: its row says so, and double-clicking it tries again
-	if why := a.AddURL(server.URL + "/flaky.mkv"); why != "" {
+	if why := a.AddURL(server.URL+"/flaky.mkv", "", ""); why != "" {
 		t.Fatal(why)
 	}
 	v = until("the dead one gave up", func(v View) bool {
@@ -144,7 +144,7 @@ func TestDownloadLink(t *testing.T) {
 		size = st.Size()
 		a.cfg.CacheGB = Number(float64(size+size/2) / (1 << 30))
 	})
-	if why := a.AddURL(server.URL + "/files/Some.Clip.2026.mkv?again=1"); why != "" {
+	if why := a.AddURL(server.URL+"/files/Some.Clip.2026.mkv?again=1", "", ""); why != "" {
 		t.Fatal(why)
 	}
 	v = until("the newest down, the oldest cleared", func(v View) bool {
@@ -225,7 +225,7 @@ func TestFetch(t *testing.T) {
 	path := filepath.Join(dir, "a", "file.bin")
 	os.MkdirAll(filepath.Dir(path), 0o755)
 	os.WriteFile(path, body[:4000], 0o644)
-	got, err := fetch(t.Context(), server.URL+"/file.bin", path, quiet)
+	got, err := fetch(t.Context(), server.URL+"/file.bin", path, nil, quiet)
 	if err != nil || got != path {
 		t.Fatal(got, err)
 	}
@@ -236,7 +236,7 @@ func TestFetch(t *testing.T) {
 		t.Fatalf("asked for %v", ranges)
 	}
 
-	got, err = fetch(t.Context(), server.URL+"/named", filepath.Join(dir, "b", "named"), quiet)
+	got, err = fetch(t.Context(), server.URL+"/named", filepath.Join(dir, "b", "named"), nil, quiet)
 	if err != nil || got != filepath.Join(dir, "b", "Named File.bin") {
 		t.Fatal(got, err)
 	}
@@ -249,7 +249,7 @@ func TestFetch(t *testing.T) {
 		server.URL + "/short":   "cut short",
 		"http://127.0.0.1:1/x":  "refused",
 	} {
-		if _, err := fetch(t.Context(), link, filepath.Join(dir, "c", "x"), quiet); err == nil || !strings.Contains(err.Error(), want) {
+		if _, err := fetch(t.Context(), link, filepath.Join(dir, "c", "x"), nil, quiet); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v, not %q", link, err, want)
 		}
 	}
@@ -264,7 +264,7 @@ func TestLinkName(t *testing.T) {
 		"https://example.com/..":                                   "download",
 		"https://example.com/.hidden":                              "hidden",
 	} {
-		u, why := checkLink(link)
+		u, _, why := checkLink(link)
 		if why != "" {
 			t.Fatal(link, why)
 		}
@@ -272,11 +272,11 @@ func TestLinkName(t *testing.T) {
 			t.Errorf("%s: %q, not %q", link, got, want)
 		}
 	}
-	if _, why := checkLink(" https://example.com/x.mkv "); why != "" {
+	if _, _, why := checkLink(" https://example.com/x.mkv "); why != "" {
 		t.Error(why)
 	}
 	for _, bad := range []string{"", "x.mkv", "file:///etc/passwd", "https://", "mailto:a@b"} {
-		if _, why := checkLink(bad); why == "" {
+		if _, _, why := checkLink(bad); why == "" {
 			t.Errorf("%q passed", bad)
 		}
 	}
@@ -329,7 +329,7 @@ func TestPlayWhileDownloading(t *testing.T) {
 		t.Fatalf("never: %s (%+v, %s)", what, a.GetView(), state())
 		return View{}
 	}
-	if why := a.AddURL(server.URL + "/Slow.Clip.mkv"); why != "" {
+	if why := a.AddURL(server.URL+"/Slow.Clip.mkv", "", ""); why != "" {
 		t.Fatal(why)
 	}
 	v := until("playable while downloading", 40, func(v View) bool { return v.PlayOn && len(v.Rows) == 1 && !v.Rows[0].Off })
@@ -359,3 +359,118 @@ func TestPlayWhileDownloading(t *testing.T) {
 		t.Fatalf("after: %+v", v.Rows[0])
 	}
 }
+
+// A link whose site wants a login: without one its row says so; added again with a username and
+// password it downloads, the login kept for the site (and never in the Settings text), used for
+// the site's next link, and for one written into the link, which is taken out of it. Needs ffmpeg.
+func TestDownloadLogin(t *testing.T) {
+	if findTool("ffmpeg") == "" {
+		t.Skip("needs ffmpeg")
+	}
+	t.Setenv("HOME", t.TempDir()) // never the real party file, nor the real cache
+	t.Setenv("XDG_CACHE_HOME", "")
+	dir := t.TempDir()
+	clip := filepath.Join(dir, "Locked.Clip.mkv")
+	out, err := exec.Command(findTool("ffmpeg"), "-v", "error", "-f", "lavfi", "-i", "testsrc=s=320x240:r=30:d=2",
+		"-c:v", "libx264", clip).CombinedOutput()
+	if err != nil {
+		t.Fatal(err, string(out))
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/go" { // a redirect within the site: the login goes with it
+			http.Redirect(w, r, "/files/Locked.Clip.mkv", http.StatusFound)
+			return
+		}
+		if user, pass, ok := r.BasicAuth(); !ok || user != "ann" || pass != "s3cret" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="members"`)
+			http.Error(w, "who are you", http.StatusUnauthorized)
+			return
+		}
+		http.ServeFile(w, r, clip)
+	}))
+	defer server.Close()
+	a := NewApp(standby)
+	a.hostSetup = func(h *Host) { // never the default ports (CLAUDE.md)
+		h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
+	}
+	go a.run()
+	defer a.shutdown(nil)
+	until := func(what string, ok func(View) bool) View {
+		t.Helper()
+		for end := time.Now().Add(20 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+			if v := a.GetView(); ok(v) {
+				return v
+			}
+		}
+		t.Fatalf("never: %s (%+v)", what, a.GetView())
+		return View{}
+	}
+
+	link := server.URL + "/files/Locked.Clip.mkv"
+	if why := a.AddURL(link, "", ""); why != "" {
+		t.Fatal(why)
+	}
+	until("asked for a login", func(v View) bool { return len(v.Rows) == 1 && strings.Contains(v.Rows[0].Title, "wants a login") })
+	if why := a.AddURL(link, "ann", "wrong"); why != "" {
+		t.Fatal(why)
+	}
+	until("the wrong login turned down", func(v View) bool { return strings.Contains(v.Rows[0].Title, "turned down the login for ann") })
+	if why := a.AddURL(link, " ann ", "s3cret"); why != "" {
+		t.Fatal(why)
+	}
+	until("downloaded with the login", func(v View) bool { return len(v.Rows) == 1 && !v.Rows[0].Off && v.Rows[0].Icon == "video" })
+	if text := a.SettingsText(); strings.Contains(text, "s3cret") {
+		t.Fatal("the password is in the Settings text")
+	}
+	// the site's next link uses the kept login, through a redirect
+	if why := a.AddURL(server.URL+"/go", "", ""); why != "" {
+		t.Fatal(why)
+	}
+	until("the next link, with the kept login", func(v View) bool { return len(v.Rows) == 2 && !v.Rows[1].Off })
+	// a login written into the link is taken out of it, and kept
+	a.wait(func() { a.party.setSetting("logins", []byte("{}")) })
+	written := strings.Replace(server.URL, "http://", "http://ann:s3cret@", 1) + "/files/Locked.Clip.mkv?copy=1"
+	if why := a.AddURL(written, "", ""); why != "" {
+		t.Fatal(why)
+	}
+	until("the written-in login used", func(v View) bool { return len(v.Rows) == 3 && !v.Rows[2].Off })
+	a.wait(func() {
+		if u := a.cfg.Queue[2].URL; strings.Contains(u, "s3cret") || strings.Contains(u, "ann@") {
+			t.Errorf("the login stayed in the link: %s", u)
+		}
+	})
+	// never over plain http to another machine
+	if why := a.AddURL("http://example.com/x.mkv", "ann", "s3cret"); !strings.Contains(why, "https") {
+		t.Errorf("a login over plain http: %q", why)
+	}
+}
+
+// A login goes only to its own site, over https or to this Mac: a redirect to another site goes without it
+func TestLoginTransport(t *testing.T) {
+	for host, want := range map[string]string{"members.easynews.com": "easynews.com", "iad-dl-08.easynews.com": "easynews.com",
+		"easynews.com": "easynews.com", "a.b.co.uk": "b.co.uk", "127.0.0.1": "127.0.0.1", "localhost": "localhost", "EXAMPLE.com.": "example.com"} {
+		if got := siteOf(host); got != want {
+			t.Errorf("siteOf(%q) = %q, not %q", host, got, want)
+		}
+	}
+	var sent []string
+	tr := withLogin{base: roundTrip(func(r *http.Request) (*http.Response, error) {
+		_, _, ok := r.BasicAuth()
+		sent = append(sent, r.URL.String()+" "+strconv.FormatBool(ok))
+		return &http.Response{StatusCode: 200, Body: http.NoBody, Request: r}, nil
+	}), site: "easynews.com", login: siteLogin{"ann", "s3cret"}}
+	for _, link := range []string{"https://members.easynews.com/dl/x.mkv", "https://cdn.easynews.com/x.mkv", "http://members.easynews.com/x.mkv",
+		"https://easynews.com.evil.example/x.mkv", "https://elsewhere.com/x.mkv"} {
+		req, _ := http.NewRequest("GET", link, nil)
+		tr.RoundTrip(req)
+	}
+	want := []string{"https://members.easynews.com/dl/x.mkv true", "https://cdn.easynews.com/x.mkv true", "http://members.easynews.com/x.mkv false",
+		"https://easynews.com.evil.example/x.mkv false", "https://elsewhere.com/x.mkv false"}
+	if strings.Join(sent, "\n") != strings.Join(want, "\n") {
+		t.Errorf("sent:\n%s", strings.Join(sent, "\n"))
+	}
+}
+
+type roundTrip func(*http.Request) (*http.Response, error)
+
+func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

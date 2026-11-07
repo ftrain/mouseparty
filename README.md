@@ -109,7 +109,12 @@ Terminal to read it.
   the file is all here it's a movie like any other, in
   `~/Library/Caches/Mouse Party/downloads`, played from there as often as you
   like. Quit in the middle, and it goes on from where it was next time; a link
-  that didn't work is tried again when its row is double-clicked. Remove the
+  that didn't work is tried again when its row is double-clicked. A site that
+  wants a login (Easynews's members' links do) gets the username and password
+  given with the link (or written into it, `https://user:pass@…`): kept for
+  that site in the party file (encrypted when it's sealed, never in Settings),
+  sent with every request to it and to no other, over https only, so a link
+  never depends on a browser's login running out. Remove the
   row and its download is deleted. The cache keeps at most `cache_gb` (a
   setting, 20 GB to start with) of downloads: a link bigger than that is
   refused, and when one would take the cache past it, the downloads played

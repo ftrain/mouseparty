@@ -97,14 +97,30 @@ async function ask(mode) {
 	} else if (mode === "link") show({
 		title: "Add Download Link",
 		words: "A link that downloads a movie (or a song, a document or a database). It goes in the list and is downloaded to this Mac, playing once it’s all here; removing it from the list deletes the download.",
-		fields: [{
-			name: "link",
-			label: "Link",
-			kind: "line"
-		}],
+		fields: [
+			{
+				name: "link",
+				label: "Link",
+				kind: "line"
+			},
+			{
+				name: "user",
+				label: "Username",
+				kind: "line"
+			},
+			{
+				name: "pass",
+				label: "Password",
+				kind: "password"
+			}
+		],
 		go: "Add",
-		check: (v) => v.link.trim() ? "" : "Paste a link",
-		done: (v) => App().AddURL(v.link)
+		check: (v) => !v.link.trim() ? "Paste a link" : v.pass && !v.user.trim() ? "The password wants its username" : "",
+		done: (v) => App().AddURL(v.link, v.user, v.pass),
+		more: el("p", {
+			className: "sheet-words",
+			textContent: "A username and password only if the site asks for them (Easynews does): they’re kept for that site, used for every link to it and sent only to it, over https. They’re kept in the party file, encrypted when it’s sealed (Party > Use Encryption…)."
+		})
 	});
 	else if (mode === "clear") {
 		const held = await App().CacheText();

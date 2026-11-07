@@ -61,7 +61,7 @@ export interface App {
     ShowPage(page: number): Promise<void>;
     TurnPage(step: number): Promise<void>;
     AddPaths(paths: string[], row: number, at: number): Promise<void>;
-    AddURL(link: string): Promise<string>; // Party > Add Download Link: "" when it's in the list, or why not
+    AddURL(link: string, user: string, pass: string): Promise<string>; // Party > Add Download Link: "" when it's in the list, or why not; a username is kept as the login for the link's site
     CacheText(): Promise<string>; // what the download cache holds: "3 downloads, 4.2 GB" ("" for nothing)
     ClearCache(): Promise<string>; // Party > Clear Download Cache: every download deleted, the rows kept; "" or why not
     // the party file (party.go): each "" when it worked, or why not

@@ -73,14 +73,21 @@ func downloadKey(link string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// checkLink: a web link, as the sheet should have it, or why not
-func checkLink(link string) (*url.URL, string) {
+// checkLink: a web link, as the sheet should have it, or why not; a login written into it
+// (https://user:pass@…) is taken out, and said apart
+func checkLink(link string) (*url.URL, *siteLogin, string) {
 	u, err := url.Parse(strings.TrimSpace(link))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
-		return nil, "That isn't a web link: it starts with http:// or https://"
+		return nil, nil, "That isn't a web link: it starts with http:// or https://"
 	}
 	u.Fragment = ""
-	return u, ""
+	var login *siteLogin
+	if u.User != nil {
+		pass, _ := u.User.Password()
+		login = &siteLogin{User: u.User.Username(), Pass: pass}
+		u.User = nil
+	}
+	return u, login, ""
 }
 
 // linkName: a file name for the link: the last part of its path, as the server would name it
@@ -122,7 +129,7 @@ func dispositionName(resp *http.Response) string {
 // can be played as it comes, going on from where an earlier try stopped. It says each step:
 // the path, once the server has named the file (which may change it), and the bytes as
 // they come. Returns the path.
-func fetch(ctx context.Context, link, path string, step func(path string, got, total int64)) (string, error) {
+func fetch(ctx context.Context, link, path string, login *siteLogin, step func(path string, got, total int64)) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return path, err
 	}
@@ -140,7 +147,11 @@ func fetch(ctx context.Context, link, path string, step func(path string, got, t
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = downloadStall
-	resp, err := (&http.Client{Transport: transport}).Do(req)
+	client := &http.Client{Transport: transport}
+	if login != nil {
+		client.Transport = withLogin{transport, siteOf(req.URL.Hostname()), *login}
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return path, errors.New(shortNetError(err))
 	}
@@ -148,10 +159,14 @@ func fetch(ctx context.Context, link, path string, step func(path string, got, t
 	switch {
 	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && start > 0: // what's there is stale: from the top
 		os.Remove(path)
-		return fetch(ctx, link, path, step)
+		return fetch(ctx, link, path, login, step)
 	case resp.StatusCode == http.StatusPartialContent && start > 0:
 	case resp.StatusCode == http.StatusOK:
 		start = 0
+	case resp.StatusCode == http.StatusUnauthorized && login == nil:
+		return path, fmt.Errorf("%s wants a login: add the link again with its username and password", siteOf(req.URL.Hostname()))
+	case resp.StatusCode == http.StatusUnauthorized:
+		return path, fmt.Errorf("%s turned down the login for %s: add the link again with the right username and password", siteOf(req.URL.Hostname()), login.User)
 	default:
 		return path, fmt.Errorf("the server said %s", resp.Status)
 	}
@@ -251,11 +266,19 @@ func shortNetError(err error) string {
 
 // ---------- the app's side ----------
 
-// AddURL: Party > Add Download Link…: the link's file as a row at the end of the list, downloading; "" or why not
-func (a *App) AddURL(link string) string {
-	u, why := checkLink(link)
+// AddURL: Party > Add Download Link…: the link's file as a row at the end of the list, downloading;
+// "" or why not. A username (and its password), or one written into the link, is kept as the login for
+// the link's site (logins.go); a link already in the list given one is tried again with it.
+func (a *App) AddURL(link, user, pass string) string {
+	u, login, why := checkLink(link)
 	if why != "" {
 		return why
+	}
+	if user = strings.TrimSpace(user); user != "" {
+		login = &siteLogin{User: user, Pass: pass}
+	}
+	if login != nil && !loginSafe(u) {
+		return "A login goes only over https: the link starts with http://, so its password would cross the network as it is"
 	}
 	result := ""
 	a.wait(func() {
@@ -265,8 +288,17 @@ func (a *App) AddURL(link string) string {
 		case downloadsDir() == "":
 			result = "There's no cache folder to download into"
 		default:
+			if login != nil {
+				a.setLogin(siteOf(u.Hostname()), *login)
+				a.log("Kept the login for " + siteOf(u.Hostname()) + " (" + login.User + ")")
+			}
 			for _, it := range a.cfg.Queue {
 				if it.URL == u.String() {
+					if login != nil && it.downloading() { // added again with a login: tried again with it
+						a.stopDownload(it)
+						a.retryDownload(it)
+						return
+					}
 					result = "That link is in the list already"
 					return
 				}
@@ -306,10 +338,11 @@ func (a *App) startDownload(it *Item) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &download{cancel: cancel}
+	login := a.loginFor(it.URL)
 	it.dl, it.Note, it.Cleared = d, "", false
 	go func() {
 		ready, lookAt := false, int64(-1) // whether it plays yet, and the bytes at which to look next
-		path, err := fetch(ctx, it.URL, it.Path, func(path string, got, total int64) {
+		path, err := fetch(ctx, it.URL, it.Path, login, func(path string, got, total int64) {
 			if !ready && got > 0 && lookAt < 0 {
 				lookAt = max(16<<10, min(4<<20, total/20)) // a few MB in, or a twentieth of a small one
 			}
