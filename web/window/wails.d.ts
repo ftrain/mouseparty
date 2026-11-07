@@ -29,11 +29,15 @@ export interface View {
 
 export interface Row {
     title: string;
-    length: string;
+    icon: Icon; // what it is, for the icon column
+    length: string; // how long, how many pages, how big; a download's progress
     now: boolean; // playing
     played: boolean; // above the one playing, or next to play
     off: boolean; // can't play: its file is gone (a drive unplugged) or unreadable
 }
+
+// what a row is: a movie, a song, a PDF, another document, a database, or a download link not yet down
+export type Icon = 'video' | 'audio' | 'pdf' | 'text' | 'db' | 'download';
 
 // the playhead (seconds into the movie), or a PDF's pages
 export interface Slider {
@@ -57,6 +61,7 @@ export interface App {
     ShowPage(page: number): Promise<void>;
     TurnPage(step: number): Promise<void>;
     AddPaths(paths: string[], row: number, at: number): Promise<void>;
+    AddURL(link: string): Promise<string>; // Party > Add Download Link: "" when it's in the list, or why not
     // the party file (party.go): each "" when it worked, or why not
     Unlock(passcode: string): Promise<string>;
     StartOver(): Promise<string>;
@@ -66,7 +71,7 @@ export interface App {
 }
 
 // what the Party menu asks the window for (party.go's ask)
-export type Ask = 'on' | 'change' | 'off' | 'settings';
+export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link';
 
 // as much of the Wails runtime as the window uses
 export interface Runtime {

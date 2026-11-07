@@ -43,7 +43,8 @@ type View struct {
 
 type Row struct {
 	Title  string `json:"title"`
-	Length string `json:"length"`
+	Icon   string `json:"icon"`   // what it is: video, audio, pdf, text, db, or download (a link not yet down)
+	Length string `json:"length"` // how long, how many pages, how big; a download's progress
 	Now    bool   `json:"now"`    // playing
 	Played bool   `json:"played"` // above the one playing, or next to play
 	Off    bool   `json:"off"`    // can't play: its file is gone (a drive unplugged) or unreadable
@@ -179,6 +180,7 @@ func (a *App) startup(ctx context.Context) {
 
 // started: the list is known (at startup, or once the party is unlocked)
 func (a *App) started() {
+	a.syncDownloads()
 	a.scanSubtitles()
 	if len(a.cfg.Queue) > 0 { // movies waiting from last time: start making their link
 		a.hostStart()
@@ -289,8 +291,10 @@ func (a *App) view() View {
 		if it.Note != "" {
 			title += "  (" + it.Note + ")"
 		}
-		length := ""
-		if it.kind() == "pdf" {
+		length, icon := "", it.kind()
+		if it.downloading() {
+			icon, length = "download", downloadNote(it)
+		} else if it.kind() == "pdf" {
 			length = fmt.Sprintf("%d pages", it.Pages)
 		} else if it.kind() == "db" {
 			length = formatBytes(it.Size)
@@ -299,7 +303,7 @@ func (a *App) view() View {
 		} else if it.Duration > 0 {
 			length = formatTime(it.Duration)
 		}
-		v.Rows = append(v.Rows, Row{Title: title, Length: length, Now: a.playing && i == a.cfg.Position,
+		v.Rows = append(v.Rows, Row{Title: title, Icon: icon, Length: length, Now: a.playing && i == a.cfg.Position,
 			Played: i < a.cfg.Position, Off: off(it)})
 	}
 	v.Slider = a.slider(state)
@@ -453,42 +457,9 @@ func (a *App) addPaths(paths []string, row, at int) {
 	}
 	var items []*Item
 	for _, p := range files {
-		if kindOf(p) == "db" {
-			size, note := sqliteSize(p)
-			if note == "not a SQLite database" { // Thumbs.db and the like
-				a.log("Not a SQLite database, skipped: " + filepath.Base(p))
-				continue
-			}
-			items = append(items, &Item{Path: p, Kind: "db", Size: size, Note: note})
-			a.log(fmt.Sprintf("Queued %s (%s)", filepath.Base(p), formatBytes(size)))
-			continue
-		}
-		if kindOf(p) == "pdf" {
-			it := &Item{Path: p, Kind: "pdf", Pages: pdfPages(p), Page: 1}
-			if it.Pages == 0 {
-				it.Note = "can't open it"
-			}
+		if it := fileItem(p, a.log); it != nil {
 			items = append(items, it)
-			a.log(fmt.Sprintf("Queued %s (%d pages)", filepath.Base(p), it.Pages))
-			continue
 		}
-		if kindOf(p) == "text" { // read by pandoc when it's up (session.go)
-			items = append(items, &Item{Path: p, Kind: "text"})
-			a.log("Queued " + filepath.Base(p))
-			continue
-		}
-		info := probe(p)
-		it := &Item{Path: p, Kind: "video", Duration: info.Duration}
-		if info.Audio != "" && info.Video == "" {
-			it.Kind = "audio"
-		}
-		if info.Error != "" {
-			it.Note = info.Error
-			a.log(filepath.Base(p) + ": " + info.Error)
-		}
-		applyFound(it, findTracks(it))
-		items = append(items, it)
-		a.log(fmt.Sprintf("Queued %s (%s)", filepath.Base(p), formatTime(it.Duration)))
 	}
 	a.do(func() {
 		for _, s := range subs {
@@ -517,10 +488,55 @@ func (a *App) addPaths(paths []string, row, at int) {
 	})
 }
 
+// fileItem: a row for a file that can be shown, looked at (ffmpeg, the PDF's pages, the
+// database's header) off the app's goroutine; nil for one that can't be (a Thumbs.db)
+func fileItem(p string, log func(string)) *Item {
+	switch kindOf(p) {
+	case "db":
+		size, note := sqliteSize(p)
+		if note == "not a SQLite database" { // Thumbs.db and the like
+			log("Not a SQLite database, skipped: " + filepath.Base(p))
+			return nil
+		}
+		log(fmt.Sprintf("Queued %s (%s)", filepath.Base(p), formatBytes(size)))
+		return &Item{Path: p, Kind: "db", Size: size, Note: note}
+	case "pdf":
+		it := &Item{Path: p, Kind: "pdf", Pages: pdfPages(p), Page: 1}
+		if it.Pages == 0 {
+			it.Note = "can't open it"
+		}
+		log(fmt.Sprintf("Queued %s (%d pages)", filepath.Base(p), it.Pages))
+		return it
+	case "text": // read by pandoc when it's up (session.go)
+		log("Queued " + filepath.Base(p))
+		return &Item{Path: p, Kind: "text"}
+	}
+	info := probe(p)
+	it := &Item{Path: p, Kind: "video", Duration: info.Duration}
+	if info.Audio != "" && info.Video == "" {
+		it.Kind = "audio"
+	}
+	if info.Error != "" {
+		it.Note = info.Error
+		log(filepath.Base(p) + ": " + info.Error)
+	}
+	applyFound(it, findTracks(it))
+	log(fmt.Sprintf("Queued %s (%s)", filepath.Base(p), formatTime(it.Duration)))
+	return it
+}
+
 // playRow: a double-click. Not playing: play it. Playing: stop what's on, at any
 // moment (a seek or a switch under way, the gap between two), and play it next.
+// A download that failed is tried again.
 func (a *App) playRow(i int) {
-	if i < 0 || i >= len(a.cfg.Queue) || off(a.cfg.Queue[i]) {
+	if i < 0 || i >= len(a.cfg.Queue) {
+		return
+	}
+	if it := a.cfg.Queue[i]; it.downloading() {
+		a.retryDownload(it)
+		return
+	}
+	if off(a.cfg.Queue[i]) {
 		return
 	}
 	switch {
@@ -547,6 +563,7 @@ func (a *App) remove() {
 		return
 	}
 	streaming := a.player.Running() && i == a.cfg.Position
+	a.removeDownload(a.cfg.Queue[i])                                               // a download: its folder goes with it
 	a.editQueue(func(q []*Item) []*Item { return append(q[:i], q[i+1:]...) }, nil) // position now points at the one after
 	if len(a.cfg.Queue) == 0 {                                                     // nothing left to play: whatever was going on stops
 		a.seekTo, a.jumpTo = nil, -1
@@ -884,7 +901,7 @@ func (a *App) tracks(it *Item) []Track {
 func (a *App) scanSubtitles() {
 	var todo []*Item
 	for _, it := range a.cfg.Queue {
-		if it.Subtitles == nil && !it.isDoc() {
+		if it.Subtitles == nil && !it.isDoc() && !it.downloading() {
 			todo = append(todo, it)
 		}
 	}
@@ -1123,9 +1140,10 @@ func (a *App) hostReady(err error) {
 
 // ---------- files that can't be played now ----------
 
-// off: a row that can't play, greyed out: its file is gone, or ffmpeg couldn't read it when it was added
+// off: a row that can't play, greyed out: its file is gone, or ffmpeg couldn't read it when
+// it was added, or it's a download not yet down
 func off(it *Item) bool {
-	return it.Missing || (it.Note != "" && it.Note != "didn't play")
+	return it.Missing || it.downloading() || (it.Note != "" && it.Note != "didn't play")
 }
 
 // watchFiles looks every few seconds for files that have gone, or come back (a

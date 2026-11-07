@@ -25,8 +25,9 @@ function show(opts) {
 			input = area;
 		} else {
 			const field = document.createElement("input");
-			field.type = "password";
+			field.type = f.kind === "line" ? "text" : "password";
 			field.autocomplete = "off";
+			field.spellcheck = false;
 			input = field;
 		}
 		input.name = f.name;
@@ -93,7 +94,19 @@ async function ask(mode) {
 			done: (v) => App().SetSettingsText(v.text)
 		});
 		inputs.text.value = text;
-	} else if (mode === "on") show({
+	} else if (mode === "link") show({
+		title: "Add Download Link",
+		words: "A link that downloads a movie (or a song, a document or a database). It goes in the list and is downloaded to this Mac, playing once it’s all here; removing it from the list deletes the download.",
+		fields: [{
+			name: "link",
+			label: "Link",
+			kind: "line"
+		}],
+		go: "Add",
+		check: (v) => v.link.trim() ? "" : "Paste a link",
+		done: (v) => App().AddURL(v.link)
+	});
+	else if (mode === "on") show({
 		title: "Use Encryption",
 		words: `The party file is sealed with this passcode, and Mouse Party asks for it each time it starts. ${FORGET}`,
 		fields: [{

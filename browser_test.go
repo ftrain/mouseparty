@@ -163,8 +163,9 @@ func TestBrowser(t *testing.T) {
 		writeJSON(w, true)
 	})
 	mux.HandleFunc("GET /files", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, files) })
-	mux.HandleFunc("GET /commands", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, apps.Commands) }) // for the robots
-	mux.HandleFunc("GET /viewer", func(w http.ResponseWriter, r *http.Request) {                                  // the link, once there is one
+	mux.Handle("GET /served/", http.StripPrefix("/served/", http.FileServer(http.Dir(filepath.Dir(files["clip"]))))) // for a download link
+	mux.HandleFunc("GET /commands", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, apps.Commands) })    // for the robots
+	mux.HandleFunc("GET /viewer", func(w http.ResponseWriter, r *http.Request) {                                     // the link, once there is one
 		link, a := "", current.Load()
 		a.wait(func() { link = a.link() })
 		writeJSON(w, link)

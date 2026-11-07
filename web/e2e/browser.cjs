@@ -46,6 +46,7 @@ async function windowMatches(page, what) {
             const r = v.rows[i],
                 el = rows[i];
             if (el.querySelector('.title').textContent !== r.title) return `row ${i} says ${el.querySelector('.title').textContent}`;
+            if (el.querySelector('.icon').dataset.icon !== r.icon) return `row ${i} shows ${el.querySelector('.icon').dataset.icon}, not ${r.icon}`;
             for (const [cls, on] of [
                 ['now', r.now],
                 ['played', r.played],
@@ -383,6 +384,21 @@ async function fillSheet(page, values) {
 const viewIs = (page, what, fn) => until(page, what, fn, null, 30000);
 
 async function party(page) {
+    // Add Download Link: nothing, not a link, then a clip the test serves: a row downloading, then a movie
+    const files = await (await fetch(`${base}/files`)).json();
+    await page.evaluate(() => window.__ask('link'));
+    await sheetUp(page, 'Add Download Link');
+    await fillSheet(page, { link: ' ' });
+    await sheetSays(page, 'no link', 'Paste a link');
+    await fillSheet(page, { link: 'Some.Clip.mkv' });
+    await sheetSays(page, 'not a link', "isn't a web link");
+    await fillSheet(page, { link: `${base}/served/${files.clip.split('/').pop()}` });
+    await sheetGone(page, 'adding a link');
+    await viewIs(page, 'the link downloaded, a movie now', () => {
+        const last = window.__view.rows[window.__view.rows.length - 1];
+        return last && last.icon === 'video' && !last.off;
+    });
+    await windowMatches(page, 'a download link added');
     const rows = await page.evaluate(() => window.__view.rows.length);
     // Settings: not while playing; not JSON that won't read; then saved
     const wasPlaying = await page.evaluate(() => window.__view.play === 'stop');

@@ -113,7 +113,7 @@ body {
 
 .row {
     display: grid;
-    grid-template-columns: 28px 1fr auto;
+    grid-template-columns: 28px 24px 1fr auto;
     align-items: center;
     height: 32px;
     padding-right: 12px;
@@ -123,6 +123,9 @@ body {
 
 .row:nth-child(even of .row) { background: var(--row-alt); }
 .row .mark { text-align: center; font-size: 11px; }
+.row .icon { display: flex; color: var(--muted); }
+.row .icon svg { width: 16px; height: 16px; }
+.row.selected .icon { color: rgba(255, 255, 255, 0.85); }
 .row .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .length { color: var(--muted); font-variant-numeric: tabular-nums; padding-left: 8px; }
 .row.played { color: var(--played); }
@@ -141,6 +144,9 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 0 32px;
+    text-align: center;
+    line-height: 1.4;
     color: var(--muted);
     font-size: 16px;
 }

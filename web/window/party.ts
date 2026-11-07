@@ -1,13 +1,14 @@
 // The party file's screens (party.go), as a sheet over the window: the
 // passcode it asks for while the party is sealed, the Party menu's encryption
-// (on, change the passcode, off), and its Settings, the settings as JSON text.
-// Nothing here is kept: each sheet asks the Go side, which says "" or why not.
+// (on, change the passcode, off), its Settings, the settings as JSON text, and
+// Add Download Link, a link for a row (download.go). Nothing here is kept: each
+// sheet asks the Go side, which says "" or why not.
 import type { Ask, View } from './wails.d.ts';
 
 const App = () => window.go.main.App;
 const sheet = document.getElementById('sheet') as HTMLElement;
 
-type Field = { name: string; label: string; kind: 'password' | 'text' };
+type Field = { name: string; label: string; kind: 'password' | 'text' | 'line' };
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]) => {
     const e = Object.assign(document.createElement(tag), props);
@@ -41,8 +42,9 @@ function show(opts: {
             input = area;
         } else {
             const field = document.createElement('input');
-            field.type = 'password';
+            field.type = f.kind === 'line' ? 'text' : 'password';
             field.autocomplete = 'off';
+            field.spellcheck = false;
             input = field;
         }
         input.name = f.name;
@@ -104,6 +106,15 @@ export async function ask(mode: Ask) {
             done: (v) => App().SetSettingsText(v.text),
         });
         inputs.text.value = text;
+    } else if (mode === 'link') {
+        show({
+            title: 'Add Download Link',
+            words: 'A link that downloads a movie (or a song, a document or a database). It goes in the list and is downloaded to this Mac, playing once it’s all here; removing it from the list deletes the download.',
+            fields: [{ name: 'link', label: 'Link', kind: 'line' }],
+            go: 'Add',
+            check: (v) => (v.link.trim() ? '' : 'Paste a link'),
+            done: (v) => App().AddURL(v.link),
+        });
     } else if (mode === 'on') {
         show({
             title: 'Use Encryption',

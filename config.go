@@ -20,7 +20,8 @@ type Config struct {
 	Position        int     `json:"position"` // queue row now playing, or next to play
 }
 
-// Item is one row: a movie, a song, a PDF, a database or another document.
+// Item is one row: a movie, a song, a PDF, a database or another document, from
+// a file or from a download link.
 type Item struct {
 	Path      string        `json:"path"`
 	Kind      string        `json:"kind,omitempty"` // video, audio (played over a still of its cover), pdf or text (a document pandoc reads: read together) or db (SQLite, looked through together)
@@ -33,7 +34,10 @@ type Item struct {
 	Subtitles *[]Track      `json:"subtitles,omitempty"` // what was found; nil until looked for
 	Subs      *SubsSettings `json:"subs,omitempty"`      // what to do with them
 	Audio     *[]AudioTrack `json:"audio,omitempty"`     // its sound tracks; nil until looked at
+	URL       string        `json:"url,omitempty"`       // a download link (download.go): Path is its download, in the cache
+	Got       bool          `json:"got,omitempty"`       // the download is complete; until then the row is off, counting bytes
 	Missing   bool          `json:"-"`                   // its file isn't there now (App.watchFiles)
+	dl        *download     // the download under way (download.go); nil otherwise
 }
 
 // isDoc: a PDF, a database or another document, which viewers' pages show themselves (the stream carries a card)

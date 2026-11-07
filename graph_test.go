@@ -79,8 +79,8 @@ func merge(ms ...map[string][]string) map[string][]string {
 var windowGraph = []windowCommand{
 	{"PlayClicked", append([]string{"ready"}, playing...), merge(each([]string{"ready"}, starting...), each(playing, stopped...)),
 		"Play, or Stop"},
-	{"PlayRow", append([]string{"ready"}, playing...), merge(each([]string{"ready"}, starting...), each([]string{"countdown", "movie", "doc"}, "same", "between"),
-		each([]string{"between"}, "between")), "a row double-clicked: play it, or switch to it"},
+	{"PlayRow", windowStates, merge(each(windowStates, "same"), each([]string{"ready"}, starting...), each([]string{"countdown", "movie", "doc"}, "same", "between"),
+		each([]string{"between"}, "between")), "a row double-clicked: play it, or switch to it; a failed download's, try it again"},
 	{"Seek", []string{"movie"}, each([]string{"movie"}, "movie", "between"), "the slider let go"},
 	{"ShowPage", []string{"doc"}, each([]string{"doc"}, "doc"), "a PDF's page, from the slider"},
 	{"TurnPage", []string{"doc"}, each([]string{"doc"}, "doc", "between", "stopping", "ready"), "the arrow keys; past the last page, on"},
@@ -90,6 +90,7 @@ var windowGraph = []windowCommand{
 	{"LinkClicked", windowStates, merge(each(windowStates, "same"), each([]string{"nolink"}, "linking", "nolink")), "copy the link, or try again for one"},
 	{"SetSettingsText", windowStates, nil, "Party > Settings: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first)"},
 	{"AddPaths", windowStates, nil, "files dropped (off the app's goroutine: no immediate state)"},
+	{"AddURL", windowStates, nil, "Party > Add Download Link: a row downloading from a link (off the app's goroutine: no immediate state)"},
 }
 
 // windowElsewhere: App methods that aren't walked here, and where they're tested
@@ -677,7 +678,9 @@ func windowWalk(t *testing.T, data []byte) {
 	defer a.shutdown(nil)
 	a.wait(func() { a.cfg.Countdown = 1 })
 	c := &choices{b: data}
-	kinds := []string{"clip", "clip2", "song", "pdf", "junk", "gone"}
+	kinds := []string{"clip", "clip2", "song", "pdf", "junk", "gone", "link"} // link: one of them by a download link
+	served := httptest.NewServer(http.FileServer(http.Dir(filepath.Dir(files["clip"]))))
+	defer served.Close()
 	// look: the state and the view, together, from the app's goroutine. Checks
 	// run here, after: a test that fails on the app's goroutine would end it,
 	// and leave the test waiting for it for ever.
@@ -727,12 +730,18 @@ func windowWalk(t *testing.T, data []byte) {
 		var name string
 		var fn func()
 		switch c.n(14) {
-		case 0, 1: // files dropped
+		case 0, 1: // files dropped, or a download link added
 			var paths []string
 			for range 1 + c.n(3) {
-				paths = append(paths, files[kinds[c.n(len(kinds))]])
+				if kind := kinds[c.n(len(kinds))]; kind == "link" {
+					a.AddURL(served.URL + "/" + filepath.Base(files[kinds[c.n(len(kinds)-1)]]))
+				} else {
+					paths = append(paths, files[kind])
+				}
 			}
-			a.addPaths(paths, -1, row())
+			if len(paths) > 0 {
+				a.addPaths(paths, -1, row())
+			}
 			continue
 		case 2:
 			name, fn = "PlayClicked", a.playClicked

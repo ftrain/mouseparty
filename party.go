@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/menu"
+	"github.com/wailsapp/wails/v2/pkg/menu/keys"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -140,15 +141,20 @@ func (a *App) SetSettingsText(text string) string {
 			return
 		}
 		cfg.Position = max(0, min(cfg.Position, len(cfg.Queue)))
+		for _, it := range a.cfg.Queue {
+			a.stopDownload(it) // the new list's rows are new: their downloads start afresh (syncDownloads)
+		}
 		a.cfg = cfg
 		a.selected = -1
 		a.save()
+		a.syncDownloads()
 		a.scanSubtitles()
 	})
 	return result
 }
 
-// ask: the Party menu's items ask the window for a passcode (mode "on", "change" or "off"), or show the settings ("settings")
+// ask: the Party menu's items ask the window for a passcode (mode "on", "change" or "off"), show the
+// settings ("settings"), or ask for a download link ("link")
 func (a *App) ask(mode string) {
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, "ask", mode)
@@ -160,6 +166,9 @@ func (a *App) menu() *menu.Menu {
 	m := menu.NewMenu()
 	m.Append(menu.AppMenu())
 	party := m.AddSubmenu("Party")
+	link := party.AddText("Add Download Link…", keys.CmdOrCtrl("l"), func(*menu.CallbackData) { a.ask("link") })
+	link.Disabled = a.locked
+	party.AddSeparator()
 	settings := party.AddText("Settings…", nil, func(*menu.CallbackData) { a.ask("settings") })
 	settings.Disabled = a.locked
 	party.AddSeparator()

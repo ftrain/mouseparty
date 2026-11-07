@@ -1,6 +1,6 @@
 // The window: it draws the View the Go side sends (app.go) and tells it what was
 // pressed. It keeps nothing of its own but a drag in progress and a held slider.
-import type { View } from './wails.d.ts';
+import type { Icon, View } from './wails.d.ts';
 import { ask, lock, sheetOpen } from './party.ts';
 
 const App = () => window.go.main.App;
@@ -14,6 +14,17 @@ const ICONS = {
         '<rect x="7" y="6" width="22" height="25" rx="4"/><rect x="17" y="15" width="22" height="25" rx="4" fill="var(--c)"/></svg>',
     spinner: '<svg class="spinner" viewBox="0 0 46 46"><path d="M23 6a17 17 0 1 1-16.2 11.8" fill="none" stroke="white" ' + 'stroke-width="4" stroke-linecap="round"/></svg>',
 };
+
+// the list's icon column: what each row is (Lucide icons, lucide 1.57.0, ISC: licenses/lucide/)
+const ROW_ICONS: Record<Icon, string> = {
+    video: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18M3 7.5h4M3 12h18M3 16.5h4M17 3v18M17 7.5h4M17 16.5h4"/>',
+    audio: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+    pdf: '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10 9H8M16 13H8M16 17H8"/>',
+    text: '<path d="M12 5v16"/><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/>',
+    db: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/>',
+    download: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+};
+const rowIcon = (icon: Icon) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ROW_ICONS[icon] || ''}</svg>`;
 
 let view: View | null = null;
 let dragFrom: number | null = null; // row being dragged to a new place
@@ -55,14 +66,19 @@ function render(v: View) {
         if (!row) {
             row = document.createElement('div');
             row.dataset.index = String(i);
-            row.innerHTML = '<span class="mark"></span><span class="title"></span><span class="length"></span>';
+            row.innerHTML = '<span class="mark"></span><span class="icon"></span><span class="title"></span><span class="length"></span>';
             list.appendChild(row);
         }
         row.className = 'row' + (r.played ? ' played' : '') + (r.now ? ' now' : '') + (r.off ? ' off' : '') + (i === v.selected ? ' selected' : '');
-        row.title = r.off ? "Can't play this now: its file isn't there, or can't be read" : '';
+        row.title = r.icon === 'download' ? 'Downloading; double-click one that gave up to try again' : r.off ? "Can't play this now: its file isn't there, or can't be read" : '';
         row.children[0].textContent = r.now ? '▶' : '';
-        if (row.children[1].textContent !== r.title) row.children[1].textContent = r.title;
-        row.children[2].textContent = r.length;
+        const icon = row.children[1] as HTMLElement;
+        if (icon.dataset.icon !== r.icon) {
+            icon.dataset.icon = r.icon;
+            icon.innerHTML = rowIcon(r.icon);
+        }
+        if (row.children[2].textContent !== r.title) row.children[2].textContent = r.title;
+        row.children[3].textContent = r.length;
     });
     $('hint').style.display = v.rows.length ? 'none' : '';
 }

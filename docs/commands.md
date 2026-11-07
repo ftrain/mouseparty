@@ -57,7 +57,7 @@ Besides those, the app moves on its own (the link made, a countdown over, a movi
 | Command | What it is | Acts in |
 |---|---|---|
 | `PlayClicked` | Play, or Stop | ready, countdown, movie, doc, between |
-| `PlayRow` | a row double-clicked: play it, or switch to it | ready, countdown, movie, doc, between |
+| `PlayRow` | a row double-clicked: play it, or switch to it; a failed download's, try it again | every state |
 | `Seek` | the slider let go | movie |
 | `ShowPage` | a PDF's page, from the slider | doc |
 | `TurnPage` | the arrow keys; past the last page, on | doc |
@@ -67,6 +67,7 @@ Besides those, the app moves on its own (the link made, a countdown over, a movi
 | `LinkClicked` | copy the link, or try again for one | every state |
 | `SetSettingsText` | Party > Settings: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first) | every state |
 | `AddPaths` | files dropped (off the app's goroutine: no immediate state) | every state |
+| `AddURL` | Party > Add Download Link: a row downloading from a link (off the app's goroutine: no immediate state) | every state |
 
 Not walked: `GetView`, a question, not a command: every step reads the view; `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz.
 

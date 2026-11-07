@@ -100,6 +100,14 @@ Terminal to read it.
   it, everyone goes.
 - **Zips:** dropped on the list, a zip is unpacked beside it, as the Finder
   would, and everything in it the app can show is added.
+- **Download links:** **Party > Add Download Link…** (⌘L) takes a link that
+  downloads a movie (or a song, a document or a database), as a file service
+  hands one out. The row goes in the list at once, greyed, counting its bytes,
+  and is a movie like any other once the file is all here: downloaded to
+  `~/Library/Caches/Mouse Party/downloads`, played from there as often as you
+  like. Quit in the middle, and it goes on from where it was next time; a link
+  that didn't work is tried again when its row is double-clicked. Remove the
+  row and its download is deleted.
 
 ### Subtitles
 
