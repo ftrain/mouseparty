@@ -1,8 +1,8 @@
 // The party file's screens (party.go), as a sheet over the window: the
 // passcode it asks for while the party is sealed, the Party menu's encryption
-// (on, change the passcode, off), its Settings, the settings as JSON text, and
-// Add Download Link, a link for a row (download.go). Nothing here is kept: each
-// sheet asks the Go side, which says "" or why not.
+// (on, change the passcode, off), its Settings, the settings as JSON text, Add
+// Download Link, a link for a row, and Clear Download Cache (download.go).
+// Nothing here is kept: each sheet asks the Go side, which says "" or why not.
 import type { Ask, View } from './wails.d.ts';
 
 const App = () => window.go.main.App;
@@ -114,6 +114,17 @@ export async function ask(mode: Ask) {
             go: 'Add',
             check: (v) => (v.link.trim() ? '' : 'Paste a link'),
             done: (v) => App().AddURL(v.link),
+        });
+    } else if (mode === 'clear') {
+        const held = await App().CacheText();
+        show({
+            title: 'Clear Download Cache',
+            words: held
+                ? `Delete what download links brought here (${held})? Their rows stay in the list, greyed; double-click one to download it again. The cache keeps at most cache_gb (in Settings) of downloads, the oldest going first.`
+                : 'Nothing is in the download cache. It keeps at most cache_gb (in Settings) of downloads, the oldest going first.',
+            fields: [],
+            go: held ? 'Clear' : 'OK',
+            done: () => (held ? App().ClearCache() : Promise.resolve('')),
         });
     } else if (mode === 'on') {
         show({

@@ -100,6 +100,8 @@ var windowElsewhere = map[string]string{
 	"StartOver":    "the sealed party (store_test.go)",
 	"SetPasscode":  "the sealed party (store_test.go)",
 	"SettingsText": "a question: SetSettingsText is walked",
+	"CacheText":    "a question: what the download cache holds",
+	"ClearCache":   "the download cache (download_test.go): every download deleted, the rows kept",
 }
 
 // socketDoc: the document up in a socket walk

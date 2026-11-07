@@ -106,7 +106,16 @@ async function ask(mode) {
 		check: (v) => v.link.trim() ? "" : "Paste a link",
 		done: (v) => App().AddURL(v.link)
 	});
-	else if (mode === "on") show({
+	else if (mode === "clear") {
+		const held = await App().CacheText();
+		show({
+			title: "Clear Download Cache",
+			words: held ? `Delete what download links brought here (${held})? Their rows stay in the list, greyed; double-click one to download it again. The cache keeps at most cache_gb (in Settings) of downloads, the oldest going first.` : "Nothing is in the download cache. It keeps at most cache_gb (in Settings) of downloads, the oldest going first.",
+			fields: [],
+			go: held ? "Clear" : "OK",
+			done: () => held ? App().ClearCache() : Promise.resolve("")
+		});
+	} else if (mode === "on") show({
 		title: "Use Encryption",
 		words: `The party file is sealed with this passcode, and Mouse Party asks for it each time it starts. ${FORGET}`,
 		fields: [{

@@ -134,6 +134,53 @@ func TestDownloadLink(t *testing.T) {
 	if entries, _ := os.ReadDir(downloadsDir()); len(entries) != 2 {
 		t.Fatalf("%d folders in the cache, not 2", len(entries))
 	}
+	a.wait(func() { it = a.cfg.Queue[0] })
+
+	// the cache limit: room is made by clearing the download played longest ago; a link bigger than it is refused
+	var size int64
+	a.wait(func() {
+		st, _ := os.Stat(it.Path)
+		size = st.Size()
+		a.cfg.CacheGB = Number(float64(size+size/2) / (1 << 30))
+	})
+	if why := a.AddURL(server.URL + "/files/Some.Clip.2026.mkv?again=1"); why != "" {
+		t.Fatal(why)
+	}
+	v = until("the newest down, the oldest cleared", func(v View) bool {
+		return len(v.Rows) == 3 && !v.Rows[2].Off && v.Rows[0].Off && v.Rows[0].Length == "not in the cache"
+	})
+	if cacheSize() > size+size/2 || !v.Rows[1].Off || v.Rows[1].Length != "not in the cache" {
+		t.Fatalf("after trimming: %s in the cache, %+v", formatBytes(cacheSize()), v.Rows)
+	}
+	a.wait(func() { a.cfg.CacheGB = Number(float64(size/2) / (1 << 30)) })
+	a.PlayRow(0)
+	v = until("too big for the cache", func(v View) bool { return strings.Contains(v.Rows[0].Title, "bigger than the cache limit") })
+	if _, err := os.Stat(filepath.Dir(it.Path)); err == nil {
+		if entries, _ := os.ReadDir(filepath.Dir(it.Path)); len(entries) != 0 {
+			t.Fatalf("a refused download left %d files", len(entries))
+		}
+	}
+	a.wait(func() { a.cfg.CacheGB = 0 })
+
+	// Clear Download Cache: every download gone, every row kept, each a double-click from coming back
+	if text := a.CacheText(); !strings.HasPrefix(text, "1 download, ") {
+		t.Fatalf("CacheText: %q", text)
+	}
+	if why := a.ClearCache(); why != "" {
+		t.Fatal(why)
+	}
+	v = a.GetView()
+	for i, r := range v.Rows {
+		if !r.Off || r.Icon != "download" || r.Length != "not in the cache" {
+			t.Fatalf("row %d after clearing: %+v", i, r)
+		}
+	}
+	if entries, _ := os.ReadDir(downloadsDir()); len(entries) != 0 || a.CacheText() != "" {
+		t.Fatalf("%d folders after clearing, %q", len(entries), a.CacheText())
+	}
+	a.PlayRow(0)
+	until("downloaded again after clearing", func(v View) bool { return !v.Rows[0].Off })
+	a.wait(func() { a.selectRow(2); a.remove(); a.selectRow(1); a.remove() })
 
 	// started again: a download that didn't finish goes on, and a stray folder is cleaned out
 	a.wait(func() {
@@ -146,10 +193,10 @@ func TestDownloadLink(t *testing.T) {
 	a = newApp()
 	defer a.shutdown(nil)
 	a.wait(a.started)
-	if entries, _ := os.ReadDir(downloadsDir()); len(entries) != 2 {
-		t.Fatalf("%d folders in the cache after a start, not 2", len(entries))
+	if entries, _ := os.ReadDir(downloadsDir()); len(entries) != 1 {
+		t.Fatalf("%d folders in the cache after a start, not 1", len(entries))
 	}
-	until("downloaded again after a start", func(v View) bool { return len(v.Rows) == 2 && !v.Rows[0].Off && !v.Rows[1].Off })
+	until("downloaded again after a start", func(v View) bool { return len(v.Rows) == 1 && !v.Rows[0].Off })
 }
 
 // fetch goes on from a part that's there (Range), takes the server's name, and says why when it can't

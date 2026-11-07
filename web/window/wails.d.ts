@@ -62,6 +62,8 @@ export interface App {
     TurnPage(step: number): Promise<void>;
     AddPaths(paths: string[], row: number, at: number): Promise<void>;
     AddURL(link: string): Promise<string>; // Party > Add Download Link: "" when it's in the list, or why not
+    CacheText(): Promise<string>; // what the download cache holds: "3 downloads, 4.2 GB" ("" for nothing)
+    ClearCache(): Promise<string>; // Party > Clear Download Cache: every download deleted, the rows kept; "" or why not
     // the party file (party.go): each "" when it worked, or why not
     Unlock(passcode: string): Promise<string>;
     StartOver(): Promise<string>;
@@ -71,7 +73,7 @@ export interface App {
 }
 
 // what the Party menu asks the window for (party.go's ask)
-export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link';
+export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear';
 
 // as much of the Wails runtime as the window uses
 export interface Runtime {

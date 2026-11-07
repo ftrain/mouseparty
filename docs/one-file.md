@@ -91,7 +91,7 @@ is an idea, not built.
 | Memory while running | Everything open | Unavoidable; gone when the app quits |
 | Pandoc's temporary folder for a document brought in | The uploaded file and its pictures, for about a second | Still on disk (pandoc writes its pictures out). An in-memory filesystem for wazero would remove it |
 | `~/Library/Caches/Mouse Party/wasm` | Compiled pandoc | Nothing of the user's (checked: no titles, names or paths in it) |
-| `~/Library/Caches/Mouse Party/downloads` | The files download links fetched, each in a folder named by a hash of its link | The movies themselves, as the list's own files are; deleted with their rows, and at start when no row names them |
+| `~/Library/Caches/Mouse Party/downloads` | The files download links fetched, each in a folder named by a hash of its link | The movies themselves, as the list's own files are; deleted with their rows, at start when no row names them, the oldest past `cache_gb`, and all by Party > Clear Download Cache… |
 | macOS swap | Whatever was paged out | Encrypted by macOS on Apple Silicon and T2 Macs |
 | The list's paths, inside the file | Film titles, folder names | Sealed with everything else |
 

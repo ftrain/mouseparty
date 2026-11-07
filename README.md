@@ -107,7 +107,11 @@ Terminal to read it.
   `~/Library/Caches/Mouse Party/downloads`, played from there as often as you
   like. Quit in the middle, and it goes on from where it was next time; a link
   that didn't work is tried again when its row is double-clicked. Remove the
-  row and its download is deleted.
+  row and its download is deleted. The cache keeps at most `cache_gb` (a
+  setting, 20 GB to start with) of downloads: a link bigger than that is
+  refused, and when one would take the cache past it, the downloads played
+  longest ago are deleted first, their rows staying, greyed, for a double-click
+  to fetch again. **Party > Clear Download Cache…** does that to all of them.
 
 ### Subtitles
 
@@ -136,6 +140,7 @@ one. Each movie's `subs` setting (**Party > Settings…**, in the list's entry f
 | `preset` | `"veryfast"` | x264's speed/quality trade |
 | `countdown` | `10` | seconds of "up next" card before each movie; 0 for none |
 | `skip` | `0` | minutes into the first movie played |
+| `cache_gb` | `20` | GB of download links' files kept in `~/Library/Caches/Mouse Party/downloads`; past it the oldest go; `0` for no limit |
 | `open_router_ports` | `true` | ask the router to let friends in; `false` keeps to your own network and the Cloudflare link |
 
 ## How hosting works

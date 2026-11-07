@@ -69,7 +69,7 @@ Besides those, the app moves on its own (the link made, a countdown over, a movi
 | `AddPaths` | files dropped (off the app's goroutine: no immediate state) | every state |
 | `AddURL` | Party > Add Download Link: a row downloading from a link (off the app's goroutine: no immediate state) | every state |
 
-Not walked: `GetView`, a question, not a command: every step reads the view; `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz.
+Not walked: `CacheText`, a question: what the download cache holds; `ClearCache`, the download cache (download_test.go): every download deleted, the rows kept; `GetView`, a question, not a command: every step reads the view; `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz.
 
 ## A viewer's page, on its socket
 

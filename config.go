@@ -16,6 +16,7 @@ type Config struct {
 	Preset          string  `json:"preset"`
 	Skip            Number  `json:"skip"`      // minutes into the first movie played
 	Countdown       Number  `json:"countdown"` // seconds of "up next" card before each movie; 0 for none
+	CacheGB         Number  `json:"cache_gb"`  // downloads kept, in GB: past it the oldest go (download.go); 0 for no limit
 	Queue           []*Item `json:"queue"`
 	Position        int     `json:"position"` // queue row now playing, or next to play
 }
@@ -36,6 +37,7 @@ type Item struct {
 	Audio     *[]AudioTrack `json:"audio,omitempty"`     // its sound tracks; nil until looked at
 	URL       string        `json:"url,omitempty"`       // a download link (download.go): Path is its download, in the cache
 	Got       bool          `json:"got,omitempty"`       // the download is complete; until then the row is off, counting bytes
+	Cleared   bool          `json:"cleared,omitempty"`   // cleared from the cache (the limit, or Clear Download Cache): fetched again only on a double-click
 	Missing   bool          `json:"-"`                   // its file isn't there now (App.watchFiles)
 	dl        *download     // the download under way (download.go); nil otherwise
 }
@@ -93,7 +95,7 @@ func dataDir() string {
 
 // loadConfig: the settings kept in the party, or the defaults (p nil: nothing kept)
 func loadConfig(p *party) *Config {
-	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, Queue: []*Item{}}
+	cfg := &Config{OpenRouterPorts: true, Bitrate: "1500k", Preset: "veryfast", Countdown: 10, CacheGB: 20, Queue: []*Item{}}
 	if p != nil {
 		if b, ok := p.setting("config"); ok {
 			json.Unmarshal(b, cfg)

@@ -148,13 +148,14 @@ func (a *App) SetSettingsText(text string) string {
 		a.selected = -1
 		a.save()
 		a.syncDownloads()
+		a.trimCache(a.cacheLimit())
 		a.scanSubtitles()
 	})
 	return result
 }
 
 // ask: the Party menu's items ask the window for a passcode (mode "on", "change" or "off"), show the
-// settings ("settings"), or ask for a download link ("link")
+// settings ("settings"), ask for a download link ("link"), or ask before clearing the download cache ("clear")
 func (a *App) ask(mode string) {
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, "ask", mode)
@@ -168,6 +169,8 @@ func (a *App) menu() *menu.Menu {
 	party := m.AddSubmenu("Party")
 	link := party.AddText("Add Download Link…", keys.CmdOrCtrl("l"), func(*menu.CallbackData) { a.ask("link") })
 	link.Disabled = a.locked
+	clear := party.AddText("Clear Download Cache…", nil, func(*menu.CallbackData) { a.ask("clear") })
+	clear.Disabled = a.locked
 	party.AddSeparator()
 	settings := party.AddText("Settings…", nil, func(*menu.CallbackData) { a.ask("settings") })
 	settings.Disabled = a.locked

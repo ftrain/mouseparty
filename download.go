@@ -14,6 +14,12 @@ package main
 // what's listed. A download the app quit in the middle of goes on from where
 // it was (Range) next time; one that failed is tried again at the next start,
 // or when its row is double-clicked.
+//
+// The cache has a limit, cache_gb in the settings (0: none): a link bigger than
+// it is refused, and when a download would take the cache past it, the oldest
+// downloads (by when they last played) are deleted first, their rows staying,
+// greyed, for a double-click to fetch again. Party > Clear Download Cache… does
+// that to every download at once.
 
 import (
 	"context"
@@ -27,6 +33,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -41,7 +48,8 @@ const (
 // download: one under way, on its Item (never kept)
 type download struct {
 	cancel     context.CancelFunc
-	got, total int64 // bytes so far, and the file's size (0: the server didn't say)
+	got, total int64  // bytes so far, and the file's size (0: the server didn't say)
+	refused    string // stopped by the app itself (too big for the cache): the row's note
 }
 
 // downloadsDir: where downloads live ("" when there's no cache folder)
@@ -282,17 +290,21 @@ func (a *App) startDownload(it *Item) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &download{cancel: cancel}
-	it.dl, it.Note = d, ""
+	it.dl, it.Note, it.Cleared = d, "", false
 	go func() {
 		path, err := fetch(ctx, it.URL, it.Path, func(path string, got, total int64) {
 			a.do(func() {
 				if it.dl != d {
 					return
 				}
+				sized := d.total == 0 && total > 0
 				d.got, d.total = got, total
 				if it.Path != path { // the server named it: the part is under that name now
 					it.Path = path
 					a.save()
+				}
+				if sized { // the first word of its size: room for it, or not
+					a.makeRoom(it, total)
 				}
 			})
 		})
@@ -305,7 +317,10 @@ func (a *App) startDownload(it *Item) {
 				return
 			}
 			it.dl, it.Path = nil, path
-			if err != nil {
+			if err != nil && d.refused != "" { // too big for the cache: nothing of it kept
+				it.Note = d.refused
+				os.RemoveAll(filepath.Dir(path))
+			} else if err != nil {
 				it.Note = "couldn't download: " + err.Error()
 				a.log("Couldn't download " + filepath.Base(path) + ": " + err.Error())
 			} else {
@@ -365,10 +380,12 @@ func (a *App) syncDownloads() {
 		keep[downloadKey(it.URL)] = true
 		if it.Got {
 			if _, err := os.Stat(it.Path); err != nil {
-				it.Got = false // the cache was cleared: again
+				it.Got = false // the cache was cleared by hand: again
 			}
 		}
-		a.startDownload(it)
+		if !it.Cleared {
+			a.startDownload(it)
+		}
 	}
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
@@ -393,6 +410,8 @@ func (a *App) removeDownload(it *Item) {
 func downloadNote(it *Item) string {
 	d := it.dl
 	switch {
+	case d == nil && it.Cleared:
+		return "not in the cache"
 	case d == nil:
 		return "not downloaded"
 	case d.total > 0:
@@ -401,4 +420,128 @@ func downloadNote(it *Item) string {
 		return formatBytes(d.got)
 	}
 	return "connecting"
+}
+
+// ---------- the cache's size ----------
+
+// cacheLimit: the bytes the downloads may take (0: as many as there are)
+func (a *App) cacheLimit() int64 { return int64(float64(a.cfg.CacheGB) * (1 << 30)) }
+
+// cacheSize: what the downloads take now, parts included
+func cacheSize() int64 {
+	var total int64
+	filepath.WalkDir(downloadsDir(), func(_ string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			if st, err := d.Info(); err == nil {
+				total += st.Size()
+			}
+		}
+		return nil
+	})
+	return total
+}
+
+// CacheText: what's in the cache, for the Clear Download Cache sheet: "3 downloads, 4.2 GB" ("" for none)
+func (a *App) CacheText() string {
+	text := ""
+	a.wait(func() {
+		n := 0
+		for _, it := range a.cfg.Queue {
+			if it.URL != "" && (it.Got || it.dl != nil) {
+				n++
+			}
+		}
+		if size := cacheSize(); n > 0 || size > 0 {
+			text = fmt.Sprintf("%d download%s, %s", n, map[bool]string{true: "s"}[n != 1], formatBytes(size))
+		}
+	})
+	return text
+}
+
+// makeRoom: a download's size just came: refused when bigger than the cache limit, else the
+// oldest downloads go until it fits
+func (a *App) makeRoom(it *Item, total int64) {
+	limit := a.cacheLimit()
+	if limit <= 0 {
+		return
+	}
+	if total > limit {
+		it.dl.refused = fmt.Sprintf("bigger than the cache limit (%s; cache_gb in Settings)", formatBytes(limit))
+		a.log(fmt.Sprintf("%s is %s, bigger than the cache limit of %s (cache_gb in Party > Settings).", filepath.Base(it.Path), formatBytes(total), formatBytes(limit)))
+		it.dl.cancel()
+		return
+	}
+	part := int64(0)
+	if st, err := os.Stat(it.Path + ".part"); err == nil {
+		part = st.Size()
+	}
+	a.trimCache(limit - (total - part))
+}
+
+// trimCache deletes the oldest downloads (the one playing never) until the cache is within limit bytes
+func (a *App) trimCache(limit int64) {
+	if a.cacheLimit() <= 0 {
+		return
+	}
+	var kept []*Item
+	for _, it := range a.cfg.Queue {
+		if it.URL != "" && it.Got && it != a.current {
+			kept = append(kept, it)
+		}
+	}
+	modified := func(it *Item) time.Time {
+		st, err := os.Stat(it.Path)
+		if err != nil {
+			return time.Time{}
+		}
+		return st.ModTime()
+	}
+	sort.SliceStable(kept, func(i, j int) bool { return modified(kept[i]).Before(modified(kept[j])) })
+	for _, it := range kept {
+		if cacheSize() <= limit {
+			break
+		}
+		a.clearDownload(it)
+		a.log("Cleared " + filepath.Base(it.Path) + " from the cache to make room (cache_gb in Party > Settings).")
+	}
+	a.save()
+}
+
+// clearDownload deletes the item's download, its row staying for a double-click
+func (a *App) clearDownload(it *Item) {
+	a.stopDownload(it)
+	if dir := downloadsDir(); dir != "" {
+		os.RemoveAll(filepath.Join(dir, downloadKey(it.URL)))
+	}
+	it.Got, it.Cleared, it.Note = false, true, ""
+}
+
+// ClearCache: Party > Clear Download Cache…: every download deleted (the one playing stays until
+// it's done), their rows kept; "" or why not
+func (a *App) ClearCache() string {
+	result := ""
+	a.wait(func() {
+		if a.locked {
+			result = "The party is sealed: open it first"
+			return
+		}
+		for _, it := range a.cfg.Queue {
+			if it.URL == "" || (it == a.current && a.player.Running()) {
+				continue
+			}
+			a.clearDownload(it)
+		}
+		a.syncDownloads() // strays, and the rows kept out of it
+		a.save()
+		a.log("The download cache is cleared.")
+	})
+	return result
+}
+
+// touchDownload marks a download as played now: the last to go when the cache is trimmed
+func touchDownload(it *Item) {
+	if it.URL != "" && it.Got {
+		now := time.Now()
+		os.Chtimes(it.Path, now, now)
+	}
 }

@@ -623,6 +623,7 @@ func (a *App) play(index int) {
 	if a.current.Note == "didn't play" {
 		a.current.Note = ""
 	}
+	touchDownload(a.current)
 	a.save()
 	a.offerSubtitles(a.current)
 	skip := 0.0
