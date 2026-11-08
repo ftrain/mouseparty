@@ -157,6 +157,16 @@ as it's made:
 - **Security:** encrypting the party file, and **Edit as Text…**: the list and the settings
   as JSON, for what has no control (a movie's `subs`).
 
+**Updates:** a release of Mouse Party (from this repo's releases) looks for a newer one at
+start and once a day, and downloads it, when **Settings > General** says to (it does to start
+with); **Party > Check for Updates…** looks now. A download is checked (the SHA-256 its release
+gives, its signature, that it's Mouse Party and the version it says) and goes in when Mouse Party
+quits, never in the middle of a party, or at once with **Party > Restart to Update**. It can't
+update itself where macOS runs a read-only copy of it (opened straight from Downloads): move it to
+Applications first. A build made from the source says it's a development build, and never updates.
+A release is made by pushing a tag, `git tag v3.1.0 && git push origin v3.1.0`: the workflow builds
+it with that version and publishes the zip and its SHA-256.
+
 As text, the settings are:
 
 | Setting | Default | |
@@ -166,6 +176,8 @@ As text, the settings are:
 | `countdown` | `10` | seconds of "up next" card before each movie; 0 for none |
 | `skip` | `0` | minutes into the first movie played |
 | `cache_gb` | `20` | GB of download links' files kept in `~/Library/Caches/Mouse Party/downloads`; past it the oldest go; `0` for no limit |
+| `check_updates` | `true` | look for a newer Mouse Party at start and once a day |
+| `install_updates` | `true` | and download it, to go in when the app quits |
 | `open_router_ports` | `true` | ask the router to let friends in; `false` keeps to your own network and the Cloudflare link |
 
 ## How hosting works

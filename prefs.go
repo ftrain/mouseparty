@@ -35,15 +35,18 @@ func nearestBitrate(k int) int {
 
 // Prefs: the settings, as the Settings window shows them
 type Prefs struct {
-	Countdown       float64   `json:"countdown"`       // seconds of "up next" card before each movie
-	Skip            float64   `json:"skip"`            // minutes into the first movie played
-	Bitrate         int       `json:"bitrate"`         // the video's, in kbit/s
-	Preset          string    `json:"preset"`          // x264's preset: one of presets
-	OpenRouterPorts bool      `json:"openRouterPorts"` // ask the router to let friends in
-	CacheGB         float64   `json:"cacheGB"`         // downloads kept; 0 for no limit
-	Cache           string    `json:"cache"`           // what the download cache holds now ("" for nothing); only shown
-	Accounts        []Account `json:"accounts"`        // only shown: changed by SaveAccount and RemoveAccount
-	Sealed          bool      `json:"sealed"`          // only shown: the party file is encrypted
+	Countdown       float64      `json:"countdown"`       // seconds of "up next" card before each movie
+	Skip            float64      `json:"skip"`            // minutes into the first movie played
+	Bitrate         int          `json:"bitrate"`         // the video's, in kbit/s
+	Preset          string       `json:"preset"`          // x264's preset: one of presets
+	OpenRouterPorts bool         `json:"openRouterPorts"` // ask the router to let friends in
+	CacheGB         float64      `json:"cacheGB"`         // downloads kept; 0 for no limit
+	Cache           string       `json:"cache"`           // what the download cache holds now ("" for nothing); only shown
+	Accounts        []Account    `json:"accounts"`        // only shown: changed by SaveAccount and RemoveAccount
+	Sealed          bool         `json:"sealed"`          // only shown: the party file is encrypted
+	CheckUpdates    bool         `json:"checkUpdates"`    // look for a newer Mouse Party once a day
+	InstallUpdates  bool         `json:"installUpdates"`  // and download it, to go in when the app quits
+	Update          UpdateStatus `json:"update"`          // only shown: this version, and where updating has got to
 }
 
 // Account: a site's kept login, as the window lists it (never its password)
@@ -82,7 +85,8 @@ func (a *App) Prefs() Prefs {
 	a.wait(func() {
 		p = Prefs{Countdown: float64(a.cfg.Countdown), Skip: float64(a.cfg.Skip), Bitrate: kbps(a.cfg.Bitrate), Preset: a.cfg.Preset,
 			OpenRouterPorts: a.cfg.OpenRouterPorts, CacheGB: float64(a.cfg.CacheGB), Accounts: a.accounts(),
-			Sealed: a.party != nil && a.party.sealed}
+			Sealed: a.party != nil && a.party.sealed, CheckUpdates: a.cfg.CheckUpdates, InstallUpdates: a.cfg.InstallUpdates,
+			Update: a.updateStatus()}
 	})
 	p.Cache = a.CacheText()
 	return p
@@ -113,6 +117,7 @@ func (a *App) SetPrefs(p Prefs) string {
 		smaller := p.CacheGB > 0 && (a.cfg.CacheGB == 0 || Number(p.CacheGB) < a.cfg.CacheGB)
 		a.cfg.Countdown, a.cfg.Skip, a.cfg.Bitrate, a.cfg.Preset = Number(p.Countdown), Number(p.Skip), fmt.Sprintf("%dk", p.Bitrate), p.Preset
 		a.cfg.OpenRouterPorts, a.cfg.CacheGB = p.OpenRouterPorts, Number(p.CacheGB)
+		a.cfg.CheckUpdates, a.cfg.InstallUpdates = p.CheckUpdates, p.InstallUpdates
 		a.save()
 		if smaller {
 			a.trimCache(a.cacheLimit())

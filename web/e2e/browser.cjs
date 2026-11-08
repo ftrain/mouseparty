@@ -404,6 +404,8 @@ async function settingsWindow(page) {
         if (process.env.BROWSER_SHOTS) await page.screenshot({ path: `${process.env.BROWSER_SHOTS}/settings-${t}.png` });
     }
     await page.click('#sheet .pref-tab[data-tab="general"]');
+    const general = await page.textContent('#sheet .pref-body');
+    if (!general.includes('A development build') || !general.includes('Check for updates automatically')) fail(`General, its updates: ${general}`);
     await page.fill('#sheet .pref-number >> nth=0', '3');
     await page.press('#sheet .pref-number >> nth=0', 'Tab');
     await until(page, 'kept the countdown', () => window.go.main.App.Prefs().then((p) => p.countdown === 3));
@@ -478,12 +480,19 @@ async function party(page) {
     });
     await windowMatches(page, 'a download link added');
     // Clear Download Cache: the download gone, and its row (unless it's the one playing, which stays until it's done)
-    const before = await page.evaluate(() => window.__view.rows.length);
+    // the walk's drops are added off the app's goroutine: the list settled first, so that one landing now isn't counted
+    let before = -1;
+    for (let n = await page.evaluate(() => window.__view.rows.length); n !== before; n = await page.evaluate(() => window.__view.rows.length)) {
+        before = n;
+        await sleep(1500);
+    }
     await page.evaluate(() => window.__ask('clear'));
     await sheetUp(page, 'Clear Download Cache');
     await page.click('#sheet .go');
     await sheetGone(page, 'clearing the cache');
     await until(page, 'the download cleared, its row gone', (n) => window.__view.rows.length === n - 1 || window.__view.rows[n - 1]?.now, before, 30000);
+    if (!(await page.evaluate(() => window.__view.rows[window.__view.rows.length - 1]?.now)) && (await page.evaluate(() => window.go.main.App.CacheText())) !== '')
+        fail('the download cache isn’t empty after clearing it');
     await windowMatches(page, 'the cache cleared');
     const rows = await page.evaluate(() => window.__view.rows.length);
     // Settings: not while playing; not JSON that won't read; then saved

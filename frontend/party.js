@@ -109,6 +109,7 @@ const FORGET = "If it is forgotten, nothing in the party can be recovered.";
 async function ask(mode) {
 	back = null;
 	if (mode === "prefs") await openPrefs();
+	else if (mode === "updates") await openPrefs("general");
 	else if (mode === "settings") {
 		const text = await App().SettingsText();
 		const inputs = show({

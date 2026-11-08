@@ -106,7 +106,11 @@ const TABS = [
 		id: "general",
 		label: "General",
 		icon: "settings",
-		draw: (p) => [row("Countdown", number(p.countdown, 0, 600, 1, (q, n) => q.countdown = n, "seconds"), "An “up next” card before each movie, so everyone is ready. 0 for none; songs in a row never have one."), row("First movie", number(p.skip, 0, 600, 1, (q, n) => q.skip = n, "minutes in"), "Where the first movie played starts, to skip what comes before it. 0 for the beginning.")]
+		draw: (p) => [
+			row("Countdown", number(p.countdown, 0, 600, 1, (q, n) => q.countdown = n, "seconds"), "An “up next” card before each movie, so everyone is ready. 0 for none; songs in a row never have one."),
+			row("First movie", number(p.skip, 0, 600, 1, (q, n) => q.skip = n, "minutes in"), "Where the first movie played starts, to skip what comes before it. 0 for the beginning."),
+			...updates(p)
+		]
 	},
 	{
 		id: "streaming",
@@ -146,6 +150,31 @@ const TABS = [
 		}
 	}
 ];
+function updates(p) {
+	const u = p.update;
+	const status = el("p", {
+		className: "pref-note pref-update",
+		textContent: u.text
+	});
+	const controls = [
+		checkbox("Check for updates automatically", p.checkUpdates, (q, on) => q.checkUpdates = on),
+		checkbox("Download and install updates automatically", p.installUpdates, (q, on) => q.installUpdates = on),
+		el("span", { className: "pref-inline" }, button("Check Now", () => void App().CheckForUpdates().then(follow)))
+	];
+	if (u.ready) controls.push(button("Restart to Update", () => void App().RestartToUpdate(), "go-button"));
+	controls.push(status);
+	if (u.busy) follow();
+	return [row("Version", el("span", { textContent: u.version === "dev" ? "A development build" : `Mouse Party ${u.version}` })), row("Updates", controls, "An update downloads quietly and goes in when Mouse Party quits, never in the middle of a party.")];
+}
+let following = 0;
+function follow() {
+	clearTimeout(following);
+	following = window.setTimeout(async () => {
+		if (current !== "general" || sheet.hidden || !sheet.querySelector(".prefs")) return;
+		prefs = await App().Prefs();
+		draw();
+	}, 700);
+}
 function accounts(p) {
 	const box = el("div", { className: "pref-accounts" });
 	const list = el("div", { className: "pref-list" });

@@ -108,6 +108,8 @@ var windowElsewhere = map[string]string{
 	"LoginFor":      "a question: the login the Add Download Link sheet fills in (download_test.go)",
 	"SaveAccount":   "the Settings window's accounts (prefs_test.go)",
 	"RemoveAccount": "the Settings window's accounts (prefs_test.go)",
+	"CheckForUpdates": "updates (updates_test.go): looked for, downloaded, checked and put in, from a stand-in GitHub",
+	"RestartToUpdate": "updates (updates_test.go): it quits the app, so it isn't walked",
 }
 
 // socketDoc: the document up in a socket walk

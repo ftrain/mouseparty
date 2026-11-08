@@ -123,6 +123,8 @@ export async function ask(mode: Ask) {
     back = null;
     if (mode === 'prefs') {
         await openPrefs();
+    } else if (mode === 'updates') {
+        await openPrefs('general'); // Party > Check for Updates…: where it says how that's going
     } else if (mode === 'settings') {
         const text = await App().SettingsText();
         const inputs = show({

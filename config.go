@@ -15,9 +15,11 @@ type Config struct {
 	OpenRouterPorts bool    `json:"open_router_ports"` // ask the router (NAT-PMP/UPnP) to let friends in; false = this network only
 	Bitrate         string  `json:"bitrate"`
 	Preset          string  `json:"preset"`
-	Skip            Number  `json:"skip"`      // minutes into the first movie played
-	Countdown       Number  `json:"countdown"` // seconds of "up next" card before each movie; 0 for none
-	CacheGB         Number  `json:"cache_gb"`  // downloads kept, in GB: past it the oldest go (download.go); 0 for no limit
+	Skip            Number  `json:"skip"`            // minutes into the first movie played
+	Countdown       Number  `json:"countdown"`       // seconds of "up next" card before each movie; 0 for none
+	CacheGB         Number  `json:"cache_gb"`        // downloads kept, in GB: past it the oldest go (download.go); 0 for no limit
+	CheckUpdates    bool    `json:"check_updates"`   // look for a newer Mouse Party once a day (updates.go)
+	InstallUpdates  bool    `json:"install_updates"` // and download it, to go in when the app quits
 	Queue           []*Item `json:"queue"`
 	Position        int     `json:"position"` // queue row now playing, or next to play
 }
@@ -96,7 +98,7 @@ func dataDir() string {
 
 // loadConfig: the settings kept in the party, or the defaults (p nil: nothing kept)
 func loadConfig(p *party) *Config {
-	cfg := &Config{OpenRouterPorts: true, Bitrate: "2500k", Preset: "veryfast", Countdown: 10, CacheGB: 20, Queue: []*Item{}}
+	cfg := &Config{OpenRouterPorts: true, Bitrate: "2500k", Preset: "veryfast", Countdown: 10, CacheGB: 20, CheckUpdates: true, InstallUpdates: true, Queue: []*Item{}}
 	if p != nil {
 		if b, ok := p.setting("config"); ok {
 			json.Unmarshal(b, cfg)

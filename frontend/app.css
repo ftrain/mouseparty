@@ -288,3 +288,6 @@ body {
     .pref-add { grid-template-columns: 1fr; }
     .pref-tab { min-width: 0; }
 }
+.pref-control .pref-check { flex-basis: 100%; }
+.pref-button.go-button { background: var(--play); border-color: var(--play); color: white; }
+.pref-update { color: var(--text); }

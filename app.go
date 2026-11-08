@@ -115,6 +115,8 @@ type App struct {
 	cueMu      sync.Mutex
 	cueCache   map[cueKey][]Cue
 	tempLogins map[string]siteLogin // logins given for a link but not saved, by site: only until the app quits (logins.go)
+	update     updater              // a newer Mouse Party, looked for and fetched (updates.go)
+	bundlePath string               // the app this is, when tests say (updates.go thisBundle); "" for the real one
 
 	openMu   sync.Mutex // files dropped on the Dock icon, gathered (openFile)
 	opening  []string
@@ -177,6 +179,8 @@ func (a *App) startup(ctx context.Context) {
 	go a.run()
 	a.every(500*time.Millisecond, func() {})            // the playhead moves
 	a.every(2*time.Second, func() { a.sendSchedule() }) // and the guide follows
+	a.every(time.Hour, a.autoUpdate)                    // a newer Mouse Party, once a day (updates.go)
+	a.after(20*time.Second, a.autoUpdate)
 	go a.watchFiles()
 	a.do(func() {
 		a.checkTools()
@@ -1332,6 +1336,19 @@ func (a *App) shutdown(ctx context.Context) {
 		a.party.close()
 		a.party = nil
 	})
+	var restart bool
+	var bundle string
+	a.wait(func() { // a newer Mouse Party downloaded: in its place now (updates.go)
+		restart = a.update.restart
+		bundle, _ = a.thisBundle()
+		if err := a.installUpdate(); err != nil {
+			a.log("Couldn't put the update in: " + err.Error())
+			restart = false
+		}
+	})
+	if restart && ctx != nil {
+		reopen(bundle)
+	}
 	if ctx != nil && len(links) > 0 { // and the link not left on the clipboard either
 		if text, err := runtime.ClipboardGetText(ctx); err == nil {
 			for _, l := range links {

@@ -76,6 +76,9 @@ export interface App {
     SetPrefs(p: Prefs): Promise<string>;
     SaveAccount(site: string, user: string, pass: string): Promise<string>; // site: its name, or a link to it
     RemoveAccount(site: string): Promise<string>;
+    // updates (updates.go)
+    CheckForUpdates(): Promise<void>; // looks, and downloads a newer one
+    RestartToUpdate(): Promise<void>; // quits, puts the update in, opens it
 }
 
 // prefs.go's Prefs: the settings, as the Settings window shows them
@@ -89,6 +92,19 @@ export interface Prefs {
     cache: string; // only shown: what the cache holds now ("" for nothing)
     accounts: Account[]; // only shown
     sealed: boolean; // only shown
+    checkUpdates: boolean; // look for a newer Mouse Party once a day
+    installUpdates: boolean; // and download it, to go in when the app quits
+    update: UpdateStatus; // only shown
+}
+
+// updates.go's UpdateStatus
+export interface UpdateStatus {
+    version: string; // this app's ("dev" for a build made here)
+    state: '' | 'checking' | 'current' | 'available' | 'downloading' | 'ready' | 'error';
+    latest: string;
+    text: string; // what Settings says
+    ready: boolean; // Restart to Update would install it
+    busy: boolean; // checking or downloading
 }
 
 export interface Account {
@@ -105,7 +121,7 @@ export interface LinkLogin {
 }
 
 // what the Party menu asks the window for (party.go's ask)
-export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear' | 'prefs';
+export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear' | 'prefs' | 'updates';
 
 // as much of the Wails runtime as the window uses
 export interface Runtime {

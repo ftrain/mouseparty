@@ -66,7 +66,10 @@ scripts/fetch_pandoc.sh   # pandoc as WebAssembly, run in-process (wasm.go): doc
 scripts/fetch_python.sh --or-build   # CPython as WebAssembly, with Datasette (datasette.go): its published build
 scripts/build_web.sh      # the pages, from their TypeScript, into host_web/ and frontend/ (Node 24)
 
-go run "$WAILS" build -platform darwin/arm64 -skipbindings -trimpath -clean
+# its version: VERSION (a release's tag, v3.1.0 or 3.1.0), else "dev", a build that never updates itself (updates.go)
+VERSION=${VERSION:-dev}
+VERSION=${VERSION#v}
+go run "$WAILS" build -platform darwin/arm64 -skipbindings -trimpath -clean -ldflags "-X main.version=$VERSION"
 rm -rf "$DIST/$APP_NAME.app"
 mkdir -p "$DIST"
 ditto "packaging/bin/$BIN.app" "$DIST/$APP_NAME.app"
@@ -84,6 +87,9 @@ ditto host_web "$APP/Contents/Resources/host_web"
 mkdir -p "$APP/Contents/Resources/Licenses"
 cp LICENSE "$APP/Contents/Resources/Licenses/MouseParty-LICENSE"
 ditto licenses "$APP/Contents/Resources/Licenses"
+if [ "$VERSION" != dev ]; then   # what Finder, About and an update's check (updates.go checkBundle) read
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" -c "Set :CFBundleVersion $VERSION" "$APP/Contents/Info.plist"
+fi
 [ -n "${BUNDLE_FFMPEG:-}" ] && /usr/libexec/PlistBuddy -c 'Set :NSHumanReadableCopyright "ffmpeg is GPL; see https://ffmpeg.org/legal.html"' "$APP/Contents/Info.plist"
 
 if [ -n "${SIGN_IDENTITY:-}" ]; then
@@ -104,4 +110,5 @@ if [ -n "${SIGN_IDENTITY:-}" ] && [ -n "${NOTARY_PROFILE:-}" ]; then
     xcrun stapler staple "$APP"
     rm -f "$ZIP" && ditto -c -k --keepParent "$APP" "$ZIP"   # re-zip with the ticket stapled
 fi
+shasum -a 256 "$ZIP" | cut -d' ' -f1 > "$ZIP.sha256"   # a release's, checked by an update before it goes in
 echo "Built $APP and $ZIP"

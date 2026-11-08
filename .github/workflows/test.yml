@@ -83,7 +83,7 @@ jobs:
         if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         env:
           NO_SKIPS: 1 # everything is here: a test that skips is a layer gone missing (scripts/testreport)
-          ALLOW_SKIPS: ^TestPreviewAudioCard$
+          ALLOW_SKIPS: ^(TestPreviewAudioCard|TestUpdate)$ # TestUpdate needs macOS's ditto and codesign: the Mac app's workflow runs it
         run: scripts/test.sh
 
       - name: Fuzz the command graph

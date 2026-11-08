@@ -123,6 +123,7 @@ const TABS: Tab[] = [
                 number(p.skip, 0, 600, 1, (q, n) => (q.skip = n), 'minutes in'),
                 'Where the first movie played starts, to skip what comes before it. 0 for the beginning.',
             ),
+            ...updates(p),
         ],
     },
     {
@@ -207,6 +208,39 @@ const TABS: Tab[] = [
         },
     },
 ];
+
+// Updates, on General: this version, whether to look for a newer one and download it, Check Now, and how it's going
+function updates(p: Prefs) {
+    const u = p.update;
+    const status = el('p', { className: 'pref-note pref-update', textContent: u.text });
+    const controls: HTMLElement[] = [
+        checkbox('Check for updates automatically', p.checkUpdates, (q, on) => (q.checkUpdates = on)),
+        checkbox('Download and install updates automatically', p.installUpdates, (q, on) => (q.installUpdates = on)),
+        el(
+            'span',
+            { className: 'pref-inline' },
+            button('Check Now', () => void App().CheckForUpdates().then(follow)),
+        ),
+    ];
+    if (u.ready) controls.push(button('Restart to Update', () => void App().RestartToUpdate(), 'go-button'));
+    controls.push(status);
+    if (u.busy) follow();
+    return [
+        row('Version', el('span', { textContent: u.version === 'dev' ? 'A development build' : `Mouse Party ${u.version}` })),
+        row('Updates', controls, 'An update downloads quietly and goes in when Mouse Party quits, never in the middle of a party.'),
+    ];
+}
+
+// while it checks or downloads, General follows it
+let following = 0;
+function follow() {
+    clearTimeout(following);
+    following = window.setTimeout(async () => {
+        if (current !== 'general' || sheet.hidden || !sheet.querySelector('.prefs')) return;
+        prefs = await App().Prefs();
+        draw();
+    }, 700);
+}
 
 // Accounts: the sites with a saved login, each one's username (never its password), and a way to add one
 function accounts(p: Prefs) {

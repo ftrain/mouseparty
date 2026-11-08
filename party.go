@@ -176,6 +176,11 @@ func (a *App) menu() *menu.Menu {
 	party.AddSeparator()
 	settings := party.AddText("Settings…", keys.CmdOrCtrl(","), func(*menu.CallbackData) { a.ask("prefs") })
 	settings.Disabled = a.locked
+	if a.update.state == "ready" {
+		party.AddText("Restart to Update to "+a.update.latest, nil, func(*menu.CallbackData) { go a.RestartToUpdate() })
+	} else {
+		party.AddText("Check for Updates…", nil, func(*menu.CallbackData) { a.CheckForUpdates(); a.ask("updates") })
+	}
 	party.AddSeparator()
 	switch {
 	case a.locked || a.party == nil:

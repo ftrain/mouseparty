@@ -84,6 +84,8 @@ jobs:
           key: ${{ steps.python.outputs.cache-primary-key }}
 
       - name: Build
+        env:
+          VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'dev' }} # a release knows its version, and updates itself (updates.go)
         run: BUNDLE_FFMPEG=1 scripts/build_mac_app.sh
 
       - name: The pages built are the ones checked in
@@ -116,6 +118,6 @@ jobs:
         run: |
           scripts/build_ffmpeg.sh --fetch
           scripts/fetch_pandoc.sh --fetch
-          gh release create "$GITHUB_REF_NAME" dist/MouseParty-macos-arm64.zip build/ffmpeg/src/* build/pandoc/src/* \
+          gh release create "$GITHUB_REF_NAME" dist/MouseParty-macos-arm64.zip dist/MouseParty-macos-arm64.zip.sha256 build/ffmpeg/src/* build/pandoc/src/* \
             --title "Mouse Party $GITHUB_REF_NAME" \
             --notes "MouseParty-macos-arm64.zip is the app: Apple Silicon Macs, macOS 13 or later. Unzip, move to Applications, and the first time: System Settings > Privacy & Security > Open Anyway. The other files are the exact sources of the ffmpeg inside it (GPL), which scripts/build_ffmpeg.sh builds from, and of its pandoc (GPL; its own WebAssembly release build, scripts/fetch_pandoc.sh)."
