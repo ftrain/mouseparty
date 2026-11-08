@@ -141,11 +141,12 @@ type Host struct {
 	MapPorts       bool // false: LAN (and tunnel) only, the router is left alone
 	CleanLeftovers bool // false: a check running beside a real session leaves it alone
 	Standby        []byte
-	Party          *party          // where apps (apps.Keeper) and the pictures they name are kept (store.go); nil nowhere
-	DocAt          func(at string) // viewers went to another page of the database up (SetAt)
-	DocPages       func(pages int) // viewers laid out the document up as this many pages (SetPages)
-	Turned         func(page int)  // a viewer turned everyone's page (Turn); without it, SetPage
-	Paced          func()          // the pace says turn the page everyone is on (pace.go)
+	Party          *party            // where apps (apps.Keeper) and the pictures they name are kept (store.go); nil nowhere
+	DocAt          func(at string)   // viewers went to another page of the database up (SetAt)
+	DocPages       func(pages int)   // viewers laid out the document up as this many pages (SetPages)
+	Turned         func(page int)    // a viewer turned everyone's page (Turn); without it, SetPage
+	Paced          func()            // the pace says turn the page everyone is on (pace.go)
+	Arrived        func(name string) // a friend gave their name: they're here
 
 	mu        sync.Mutex
 	key       string
@@ -230,6 +231,11 @@ func (h *Host) start() error {
 	h.chat.hello = h.greeting
 	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
 	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
+	h.chat.arrived = func(name string) {
+		if h.Arrived != nil {
+			h.Arrived(name)
+		}
+	}
 	h.chat.docAt = h.SetAt
 	h.chat.docPage, h.chat.docRead, h.chat.docPages, h.chat.docPace = h.Turn, h.Reading, h.SetPages, h.SetPace
 	h.ports = map[string]int{"api": freePort(), "rtsp": freePort(), "hls": freePort(), "webrtc": freePort()}

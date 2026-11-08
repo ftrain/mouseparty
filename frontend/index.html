@@ -12,13 +12,13 @@
         <button id="link" class="tile" aria-label="Copy link"></button>
     </div>
     <div class="bar">
-        <input id="slider" type="range" min="0" max="1" step="any" value="0" disabled>
+        <input id="slider" aria-label="Playhead" type="range" min="0" max="1" step="any" value="0" disabled>
         <span id="time"></span>
     </div>
-    <div id="list" class="list" tabindex="0">
+    <div id="list" class="list" tabindex="0" role="listbox" aria-label="The list">
         <div id="hint" class="hint">Drag videos, sound, documents, databases or zips here, or add a download link (Party menu)</div>
     </div>
-    <div id="sheet" class="sheet" hidden></div>
+    <div id="sheet" class="sheet" role="dialog" aria-modal="true" hidden></div>
     <script type="module" src="app.js"></script>
 </body>
 </html>

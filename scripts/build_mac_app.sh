@@ -13,8 +13,13 @@
 #   SIGN_IDENTITY="Developer ID Application: ..." NOTARY_PROFILE=mouseparty \
 #       BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   for other Macs: signed + notarized
 #
-# NOTARY_PROFILE is a keychain profile from `xcrun notarytool store-credentials`.
-# Output: dist/Mouse Party.app and dist/MouseParty-macos-arm64.zip (DIST=<dir> to put them elsewhere)
+# Notarizing takes NOTARY_PROFILE, a keychain profile from `xcrun notarytool store-credentials`,
+# or an App Store Connect API key (as .github/workflows/mac-app.yml does): NOTARY_KEY (the .p8
+# file), NOTARY_KEY_ID and NOTARY_ISSUER. Signed, the app has the hardened runtime, with
+# packaging/darwin/entitlements.plist.
+# Output: dist/Mouse Party.app, dist/MouseParty-macos-arm64.zip (what updates download; its
+# .sha256 beside it) and dist/MouseParty-macos-arm64.dmg (to install from: the app and a link
+# to Applications to drag it to). DIST=<dir> puts them elsewhere; NO_DMG=1 makes no disk image.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -92,23 +97,52 @@ if [ "$VERSION" != dev ]; then   # what Finder, About and an update's check (upd
 fi
 [ -n "${BUNDLE_FFMPEG:-}" ] && /usr/libexec/PlistBuddy -c 'Set :NSHumanReadableCopyright "ffmpeg is GPL; see https://ffmpeg.org/legal.html"' "$APP/Contents/Info.plist"
 
-if [ -n "${SIGN_IDENTITY:-}" ]; then
-    # Inside out: every tool, then the bundle, all with the hardened runtime
-    find "$APP/Contents/Resources/bin" -type f -print0 |
-        xargs -0 codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY"
-    codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$APP"
-else
-    codesign --force --deep --sign - "$APP"     # ad-hoc: the tools added after Wails signed it
-fi
+# Inside out: every tool, then the bundle, all with the hardened runtime (and the app its
+# entitlements), with a Developer ID or ad hoc, so every build runs as a signed release does
+# (the self-test, run on it in CI, finds an entitlement missing: without its one, Datasette is killed)
+SIGN=(--sign -)
+if [ -n "${SIGN_IDENTITY:-}" ]; then SIGN=(--timestamp --sign "$SIGN_IDENTITY"); fi
+find "$APP/Contents/Resources/bin" -type f -print0 | xargs -0 codesign --force --options runtime "${SIGN[@]}"
+codesign --force --options runtime --entitlements packaging/darwin/entitlements.plist "${SIGN[@]}" "$APP"
 codesign --verify --deep --strict "$APP"
+
+NOTARY=()
+if [ -n "${NOTARY_PROFILE:-}" ]; then
+    NOTARY=(--keychain-profile "$NOTARY_PROFILE")
+elif [ -n "${NOTARY_KEY:-}" ]; then
+    NOTARY=(--key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER")
+fi
+# notarize: Apple's notary service looks the file over; accepted, its ticket is stapled to what it holds
+notarize() {
+    local out
+    out=$(xcrun notarytool submit "$1" "${NOTARY[@]}" --wait 2>&1) || { echo "$out"; exit 1; }
+    echo "$out"
+    grep -q 'status: Accepted' <<<"$out" || { echo "Notarizing $1 wasn't accepted"; exit 1; }
+    xcrun stapler staple "$2"
+}
 
 ZIP="$DIST/MouseParty-macos-arm64.zip"
 rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
-if [ -n "${SIGN_IDENTITY:-}" ] && [ -n "${NOTARY_PROFILE:-}" ]; then
-    xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
-    xcrun stapler staple "$APP"
+if [ -n "${SIGN_IDENTITY:-}" ] && [ ${#NOTARY[@]} -gt 0 ]; then
+    notarize "$ZIP" "$APP"
     rm -f "$ZIP" && ditto -c -k --keepParent "$APP" "$ZIP"   # re-zip with the ticket stapled
 fi
 shasum -a 256 "$ZIP" | cut -d' ' -f1 > "$ZIP.sha256"   # a release's, checked by an update before it goes in
+
+# the disk image people install from: the app, and Applications to drag it to
+DMG="$DIST/MouseParty-macos-arm64.dmg"
+rm -f "$DMG"
+if [ -z "${NO_DMG:-}" ]; then
+    STAGE=$(mktemp -d)
+    ditto "$APP" "$STAGE/$APP_NAME.app"
+    ln -s /Applications "$STAGE/Applications"
+    hdiutil create -quiet -volname "$APP_NAME" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG"
+    rm -rf "$STAGE"
+    if [ -n "${SIGN_IDENTITY:-}" ]; then
+        codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
+        if [ ${#NOTARY[@]} -gt 0 ]; then notarize "$DMG" "$DMG"; fi
+    fi
+fi
 echo "Built $APP and $ZIP"
+if [ -f "$DMG" ]; then echo "and $DMG"; fi

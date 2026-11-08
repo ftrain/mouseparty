@@ -60,6 +60,7 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: frontend},
 		BackgroundColour: &options.RGBA{R: 236, G: 236, B: 236, A: 255},
 		OnStartup:        func(c context.Context) { ctx = c; app.startup(c) },
+		OnDomReady:       func(context.Context) { nativeKeepFrame() }, // where it was last time (native_darwin.go)
 		OnBeforeClose:    app.beforeClose,
 		OnShutdown:       app.shutdown,
 		DragAndDrop:      &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: true},
@@ -70,9 +71,6 @@ func main() {
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) { runtime.WindowUnminimise(ctx); runtime.Show(ctx) }},
 		Mac: &mac.Options{
 			OnFileOpen: app.openFile, // dropped on the Dock icon (packaging/darwin/Info.plist says anything can be)
-			About: &mac.AboutInfo{Title: "Mouse Party", Message: "Have friends over: movies, chat and games, hosted from this Mac.\n\n" +
-				"MIT licence. It includes ffmpeg (GPL), MediaMTX, cloudflared and more, each under its own " +
-				"licence: see Contents/Resources/Licenses inside the app, and github.com/ftrain/mouseparty."},
 		},
 	})
 	if err != nil {

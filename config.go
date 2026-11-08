@@ -20,6 +20,8 @@ type Config struct {
 	CacheGB         Number  `json:"cache_gb"`        // downloads kept, in GB: past it the oldest go (download.go); 0 for no limit
 	CheckUpdates    bool    `json:"check_updates"`   // look for a newer Mouse Party once a day (updates.go)
 	InstallUpdates  bool    `json:"install_updates"` // and download it, to go in when the app quits
+	Notify          bool    `json:"notify"`          // a notification when a friend arrives or a download finishes, while the app is behind others (mac.go)
+	Welcomed        bool    `json:"welcomed"`        // the welcome has been shown (Help > Welcome to Mouse Party shows it again)
 	Queue           []*Item `json:"queue"`
 	Position        int     `json:"position"` // queue row now playing, or next to play
 }
@@ -98,7 +100,7 @@ func dataDir() string {
 
 // loadConfig: the settings kept in the party, or the defaults (p nil: nothing kept)
 func loadConfig(p *party) *Config {
-	cfg := &Config{OpenRouterPorts: true, Bitrate: "2500k", Preset: "veryfast", Countdown: 10, CacheGB: 20, CheckUpdates: true, InstallUpdates: true, Queue: []*Item{}}
+	cfg := &Config{OpenRouterPorts: true, Bitrate: "2500k", Preset: "veryfast", Countdown: 10, CacheGB: 20, CheckUpdates: true, InstallUpdates: true, Notify: true, Queue: []*Item{}}
 	if p != nil {
 		if b, ok := p.setting("config"); ok {
 			json.Unmarshal(b, cfg)

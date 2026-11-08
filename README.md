@@ -13,10 +13,11 @@ Quit, and the party, the chat and the link are gone.
 
 - **Download:** the app is on this repo's
   [Releases](https://github.com/ftrain/mouseparty/releases) page, for Apple Silicon
-  Macs on macOS 13 or later. Every push to `main` is also built, and its zip kept
-  under the run's Artifacts in the [Actions](https://github.com/ftrain/mouseparty/actions)
-  tab. It isn't signed by Apple yet, so the first time macOS says it can't verify
-  it: System Settings > Privacy & Security > **Open Anyway**.
+  Macs on macOS 13 or later: open the `.dmg` and drag Mouse Party to Applications.
+  Every push to `main` is also built, kept under the run's Artifacts in the
+  [Actions](https://github.com/ftrain/mouseparty/actions) tab. Until releases are
+  signed with a Developer ID, the first time macOS says it can't verify it: System
+  Settings > Privacy & Security > **Open Anyway**. From then on it updates itself.
 - **Build it:** see [Building](#building) below.
 
 Everything the app needs is inside it: its own ffmpeg, MediaMTX and cloudflared.
@@ -27,9 +28,10 @@ The window is two big buttons over a list.
 
 - **Add:** drag videos, sound files or PDFs (or folders of them) from Finder
   into the list: anything ffmpeg plays. Drag rows up and down to reorder; select
-  one and press Backspace to take it out, or **Party > Clear Played Files** (⌘R)
-  to take out everything already played (a download's file goes with its row;
-  your own files stay where they are). A row goes grey while its file can't be
+  one (a click, or ↑/↓) and press Backspace to take it out, or **Party > Clear Played
+  Files** (⌘R) to take out everything already played (a download's file goes with
+  its row; your own files stay where they are); **Edit > Undo** (⌘Z) puts them back.
+  Return plays the selected row. A row goes grey while its file can't be
   played (a drive unplugged); it's skipped, and comes back when the file does.
 - **The link:** adding something starts hosting. The right-hand button says
   "Making link" while it gets one, then becomes a copy button: press it and
@@ -79,9 +81,11 @@ have. Words are checked against ENABLE. You join in by opening the link
 yourself. They're wireframes, there to try the idea; in the browser player's
 full screen they don't show.
 
-That's all of it. The few settings are under **Party > Settings…** (⌘,; below), and the log
-goes to stderr: run `"/Applications/Mouse Party.app/Contents/MacOS/MouseParty"` from
-Terminal to read it.
+That's all of it. The few settings are under **Mouse Party > Settings…** (⌘,; below). **Help**
+has the shortcuts (⌘/), the welcome again, and **Show Log** (⌥⌘L): what the app has done since it
+started, kept in memory only (it goes to stderr too). While Mouse Party is behind other apps it
+notifies you when a friend arrives or a download finishes, and the Dock icon shows how far the
+downloads have got. The window opens where it was last time.
 
 ### What it plays
 
@@ -146,10 +150,11 @@ one. Each movie's `subs` setting (**Settings > Security > Edit as Text…**, in 
 
 ### Settings
 
-**Party > Settings…** (⌘,) opens the Settings window, its tabs as a Mac app's are; a change is kept
+**Mouse Party > Settings…** (⌘,) opens the Settings window, its tabs as a Mac app's are; a change is kept
 as it's made:
 
-- **General:** the countdown before each movie, and how far into the first movie to start.
+- **General:** the countdown before each movie, how far into the first movie to start,
+  notifications, and updates.
 - **Streaming:** the bandwidth each friend is sent, and how hard this Mac works at the picture.
 - **Network:** whether to ask the router to let friends in.
 - **Downloads:** how much the download cache keeps, what's in it, and clearing it.
@@ -159,13 +164,14 @@ as it's made:
 
 **Updates:** a release of Mouse Party (from this repo's releases) looks for a newer one at
 start and once a day, and downloads it, when **Settings > General** says to (it does to start
-with); **Party > Check for Updates…** looks now. A download is checked (the SHA-256 its release
+with); **Mouse Party > Check for Updates…** looks now. A download is checked (the SHA-256 its release
 gives, its signature, that it's Mouse Party and the version it says) and goes in when Mouse Party
-quits, never in the middle of a party, or at once with **Party > Restart to Update**. It can't
+quits, never in the middle of a party, or at once with **Mouse Party > Restart to Update**. It can't
 update itself where macOS runs a read-only copy of it (opened straight from Downloads): move it to
 Applications first. A build made from the source says it's a development build, and never updates.
 A release is made by pushing a tag, `git tag v3.1.0 && git push origin v3.1.0`: the workflow builds
-it with that version and publishes the zip and its SHA-256.
+it with that version and publishes the disk image, the zip and its SHA-256. A release signed with a
+Developer ID takes only updates signed by the same developer.
 
 As text, the settings are:
 
@@ -178,6 +184,7 @@ As text, the settings are:
 | `cache_gb` | `20` | GB of download links' files kept in `~/Library/Caches/Mouse Party/downloads`; past it the oldest go; `0` for no limit |
 | `check_updates` | `true` | look for a newer Mouse Party at start and once a day |
 | `install_updates` | `true` | and download it, to go in when the app quits |
+| `notify` | `true` | notifications while Mouse Party is behind other apps: a friend arriving, a download finished |
 | `open_router_ports` | `true` | ask the router to let friends in; `false` keeps to your own network and the Cloudflare link |
 
 ## How hosting works
@@ -262,7 +269,7 @@ Linux.
 ```bash
 scripts/setup.sh                           # everything, pinned and checked; says what's ready and what isn't
 scripts/test.sh                            # the pages, vet, every test, the self-test
-BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # -> dist/Mouse Party.app and dist/MouseParty-macos-arm64.zip
+BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # -> dist/Mouse Party.app, MouseParty-macos-arm64.dmg and .zip
 ```
 
 Nothing is a git submodule. Each piece from outside comes in through a
@@ -321,7 +328,9 @@ skips its tests); with `NO_SKIPS=1`, as CI sets, a skip fails it.
 - `.github/workflows/mac-app.yml`, on an Apple Silicon runner, on every push to
   `main` and every pull request: builds ffmpeg and the Python (each cached
   until its script changes), builds the app, runs the tests and the self-test
-  inside the built app, and keeps the zip as the run's artifact.
+  inside the built app, and keeps the disk image and the zip as the run's artifact. Every
+  build is signed with the hardened runtime (ad hoc, without a Developer ID), so the
+  self-test runs it as a signed release runs.
 
 A `v*` tag also makes a release:
 
@@ -329,7 +338,10 @@ A `v*` tag also makes a release:
 git tag v2.0.0 && git push origin v2.0.0
 ```
 
-The release carries the app and the exact sources of its ffmpeg and pandoc.
+The release carries the app (a disk image, and the zip updates download, with its SHA-256)
+and the exact sources of its ffmpeg and pandoc. With the repository secrets the workflow's
+first lines name (a Developer ID certificate and an App Store Connect API key), a tag's build
+is signed with the Developer ID and notarized, and opens without a warning.
 
 ## Project structure
 

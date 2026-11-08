@@ -1,7 +1,7 @@
 // The window: it draws the View the Go side sends (app.go) and tells it what was
 // pressed. It keeps nothing of its own but a drag in progress and a held slider.
 import type { Icon, View } from './wails.d.ts';
-import { ask, lock, sheetOpen } from './party.ts';
+import { ask, edit, lock, sheetOpen } from './party.ts';
 
 const App = () => window.go.main.App;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -44,6 +44,7 @@ function render(v: View) {
     tile($('play'), v.play, v.playOn, v.playOn, '', v.play === 'stop' ? 'stop' : '');
     $('play').setAttribute('aria-label', v.play === 'stop' ? 'Stop' : 'Play');
     tile($('link'), v.link, v.linkOn, v.linkPress, v.linkNote);
+    $('link').setAttribute('aria-label', v.linkNote ? `Copy link: ${v.linkNote}` : 'Copy link');
 
     const s = v.slider,
         slider = $<HTMLInputElement>('slider');
@@ -54,6 +55,7 @@ function render(v: View) {
         slider.value = String(s.value);
         slider.disabled = !s.on;
         $('time').textContent = s.label;
+        slider.setAttribute('aria-valuetext', s.label);
     }
 
     // the rows, changed in place: the view comes twice a second while playing, and
@@ -69,6 +71,9 @@ function render(v: View) {
             row.innerHTML = '<span class="mark"></span><span class="icon"></span><span class="title"></span><span class="length"></span>';
             list.appendChild(row);
         }
+        row.setAttribute('role', 'option');
+        row.setAttribute('aria-selected', String(i === v.selected));
+        row.setAttribute('aria-label', [r.title, r.length, r.now ? 'playing' : r.played ? 'played' : '', r.off ? 'unavailable' : ''].filter(Boolean).join(', '));
         row.className = 'row' + (r.played ? ' played' : '') + (r.now ? ' now' : '') + (r.off ? ' off' : '') + (i === v.selected ? ' selected' : '');
         row.title = r.icon === 'download' ? 'Downloading; double-click one that gave up to try again' : r.off ? "Can't play this now: its file isn't there, or can't be read" : '';
         row.children[0].textContent = r.now ? '▶' : '';
@@ -140,10 +145,17 @@ window.addEventListener('mouseup', () => {
     dragFrom = null;
 });
 
-// keys: Backspace removes the selected one; arrows and Page Up/Down turn a PDF's pages
+// keys: ↑/↓ select, Return plays, Backspace removes the selected one; ←/→ and Page Up/Down turn a PDF's pages
 window.addEventListener('keydown', (e) => {
-    if (sheetOpen()) return; // typing a passcode, or the settings
-    if (e.key === 'Backspace' || e.key === 'Delete') App().Remove();
+    if (sheetOpen() || e.metaKey || e.ctrlKey || e.altKey) return; // typing a passcode, or the settings; the menus' keys
+    const rows = view?.rows.length ?? 0;
+    const sel = view?.selected ?? -1;
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && rows) {
+        const next = e.key === 'ArrowDown' ? (sel < 0 ? 0 : Math.min(rows - 1, sel + 1)) : sel < 0 ? rows - 1 : Math.max(0, sel - 1);
+        App().Select(next);
+        $('list').querySelectorAll('.row')[next]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && sel >= 0 && document.activeElement?.tagName !== 'BUTTON') App().PlayRow(sel);
+    else if (e.key === 'Backspace' || e.key === 'Delete') App().Remove();
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') App().TurnPage(-1);
     else if (e.key === 'ArrowRight' || e.key === 'PageDown') App().TurnPage(1);
     else return;
@@ -175,5 +187,7 @@ window.addEventListener('load', async () => {
     }, false);
     window.runtime.EventsOn('view', render);
     window.runtime.EventsOn('ask', ask); // the Party menu
+    window.runtime.EventsOn('edit', edit); // Edit > Undo, Redo
     render(await App().GetView());
+    if (await App().Welcome()) void ask('welcome'); // someone new
 });

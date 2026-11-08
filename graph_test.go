@@ -88,6 +88,9 @@ var windowGraph = []windowCommand{
 	{"Move", windowStates, each(windowStates, "same"), "a row dragged"},
 	{"Remove", windowStates, each(windowStates, "same", "empty", "stopping", "between"), "Backspace: the selected row"},
 	{"ClearPlayed", windowStates, each(windowStates, "same", "empty", "stopping", "between"), "Party > Clear Played Files (⌘R): every row above the one playing, or next to play"},
+	{"UndoRemove", windowStates, merge(each(windowStates, "same"), each([]string{"empty"}, "empty", "linking", "nolink", "ready")),
+		"Edit > Undo (⌘Z): the rows last taken out, back where they were (hosting again if the list was empty)"},
+	{"RedoRemove", windowStates, each(windowStates, "same", "empty", "stopping", "between"), "Edit > Redo (⇧⌘Z): out again"},
 	{"LinkClicked", windowStates, merge(each(windowStates, "same"), each([]string{"nolink"}, "linking", "nolink")), "copy the link, or try again for one"},
 	{"SetSettingsText", windowStates, nil, "Party > Settings: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first)"},
 	{"AddPaths", windowStates, nil, "files dropped (off the app's goroutine: no immediate state)"},
@@ -97,19 +100,21 @@ var windowGraph = []windowCommand{
 
 // windowElsewhere: App methods that aren't walked here, and where they're tested
 var windowElsewhere = map[string]string{
-	"GetView":       "a question, not a command: every step reads the view",
-	"Unlock":        "the sealed party (store_test.go): Argon2 is too slow to fuzz",
-	"StartOver":     "the sealed party (store_test.go)",
-	"SetPasscode":   "the sealed party (store_test.go)",
-	"SettingsText":  "a question: SetSettingsText is walked",
-	"CacheText":     "a question: what the download cache holds",
-	"ClearCache":    "the download cache (download_test.go): every download deleted, the rows kept",
-	"Prefs":         "a question: SetPrefs is walked",
-	"LoginFor":      "a question: the login the Add Download Link sheet fills in (download_test.go)",
-	"SaveAccount":   "the Settings window's accounts (prefs_test.go)",
-	"RemoveAccount": "the Settings window's accounts (prefs_test.go)",
+	"GetView":         "a question, not a command: every step reads the view",
+	"Unlock":          "the sealed party (store_test.go): Argon2 is too slow to fuzz",
+	"StartOver":       "the sealed party (store_test.go)",
+	"SetPasscode":     "the sealed party (store_test.go)",
+	"SettingsText":    "a question: SetSettingsText is walked",
+	"CacheText":       "a question: what the download cache holds",
+	"ClearCache":      "the download cache (download_test.go): every download deleted, and its row",
+	"Prefs":           "a question: SetPrefs is walked",
+	"LoginFor":        "a question: the login the Add Download Link sheet fills in (download_test.go)",
+	"SaveAccount":     "the Settings window's accounts (prefs_test.go)",
+	"RemoveAccount":   "the Settings window's accounts (prefs_test.go)",
 	"CheckForUpdates": "updates (updates_test.go): looked for, downloaded, checked and put in, from a stand-in GitHub",
 	"RestartToUpdate": "updates (updates_test.go): it quits the app, so it isn't walked",
+	"LogText":         "a question: Help > Show Log",
+	"Welcome":         "a question, asked once at load (the browser walk answers it)",
 }
 
 // socketDoc: the document up in a socket walk
@@ -775,8 +780,13 @@ func windowWalk(t *testing.T, data []byte) {
 			name, fn = "Move", func() { a.move(i, j) }
 		case 9:
 			name, fn = "Remove", a.remove
-			if c.n(3) == 0 {
+			switch c.n(5) {
+			case 0:
 				name, fn = "ClearPlayed", a.clearPlayed
+			case 1:
+				name, fn = "UndoRemove", a.undoRemove
+			case 2:
+				name, fn = "RedoRemove", a.redoRemove
 			}
 		case 10:
 			name, fn = "LinkClicked", a.linkClicked

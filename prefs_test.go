@@ -108,8 +108,10 @@ func TestPrefs(t *testing.T) {
 	}
 }
 
-// Clear Played Files: the rows above the one next to play go, a download's file with its row, a file of
-// one's own staying where it is; the one next to play stays next; with nothing played, nothing changes
+// Clear Played Files: the rows above the one next to play go, a file of one's own staying where it is; the
+// one next to play stays next; with nothing played, nothing changes. Edit > Undo puts them back where they
+// were, played still, and Redo takes them out again; a download's file stays while they can come back,
+// and goes once they can't
 func TestClearPlayed(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // never the real party file, nor the real cache
 	t.Setenv("XDG_CACHE_HOME", "")
@@ -136,13 +138,64 @@ func TestClearPlayed(t *testing.T) {
 	if _, err := os.Stat(mine); err != nil {
 		t.Error("a file of one's own went:", err)
 	}
-	if _, err := os.Stat(filepath.Dir(got)); !os.IsNotExist(err) {
-		t.Error("the played download's folder is still there:", err)
+	if _, err := os.Stat(got); err != nil {
+		t.Error("the played download went while it could come back:", err)
 	}
+	a.UndoRemove()
+	a.wait(func() {
+		if len(a.cfg.Queue) != 4 || a.cfg.Queue[0].Path != mine || a.cfg.Queue[1].Path != got || a.cfg.Queue[2] != next || a.cfg.Position != 2 {
+			t.Errorf("undone: %d rows, position %d", len(a.cfg.Queue), a.cfg.Position)
+		}
+		if a.undo != nil || a.redo == nil || a.redo.name != "Clear Played Files" {
+			t.Errorf("undone, undo %v, redo %v", a.undo, a.redo)
+		}
+	})
+	a.RedoRemove()
+	a.wait(func() {
+		if len(a.cfg.Queue) != 2 || a.cfg.Queue[0] != next || a.cfg.Position != 0 || a.undo == nil {
+			t.Errorf("redone: %d rows, position %d", len(a.cfg.Queue), a.cfg.Position)
+		}
+	})
 	a.ClearPlayed() // nothing played now
 	a.wait(func() {
-		if len(a.cfg.Queue) != 2 || a.cfg.Position != 0 {
+		if len(a.cfg.Queue) != 2 || a.cfg.Position != 0 || a.undo == nil {
 			t.Errorf("nothing played, yet: %d rows, position %d", len(a.cfg.Queue), a.cfg.Position)
+		}
+		a.forget()
+	})
+	if _, err := os.Stat(filepath.Dir(got)); !os.IsNotExist(err) {
+		t.Error("the played download's folder is still there, past undoing:", err)
+	}
+}
+
+// Backspace with nothing playing, everything played: undone, the row comes back played; the one
+// unplayed row taken out of a list played to its end comes back to play next
+func TestUndoRemove(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", "")
+	a := NewApp(standby)
+	go a.run()
+	defer a.shutdown(nil)
+	one, two := &Item{Path: "/nowhere/One.mkv"}, &Item{Path: "/nowhere/Two.mkv"}
+	a.wait(func() {
+		a.cfg.Queue, a.cfg.Position, a.selected = []*Item{one, two}, 2, 0
+		a.remove()
+		if len(a.cfg.Queue) != 1 || a.cfg.Position != 1 || a.undo.name != "Remove" {
+			t.Errorf("removed: %d rows, position %d", len(a.cfg.Queue), a.cfg.Position)
+		}
+		a.undoRemove()
+		if len(a.cfg.Queue) != 2 || a.cfg.Queue[0] != one || a.cfg.Position != 2 || a.selected != 0 {
+			t.Errorf("undone: %d rows, position %d, selected %d", len(a.cfg.Queue), a.cfg.Position, a.selected)
+		}
+		a.cfg.Queue, a.cfg.Position, a.selected = []*Item{one, two}, 1, 1
+		a.remove() // the one next to play, the last
+		a.undoRemove()
+		if len(a.cfg.Queue) != 2 || a.cfg.Queue[1] != two || a.cfg.Position != 1 {
+			t.Errorf("next one undone: %d rows, position %d", len(a.cfg.Queue), a.cfg.Position)
+		}
+		a.undoRemove() // nothing to undo: nothing happens
+		if len(a.cfg.Queue) != 2 {
+			t.Errorf("undoing nothing: %d rows", len(a.cfg.Queue))
 		}
 	})
 }

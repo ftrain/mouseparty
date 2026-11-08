@@ -299,7 +299,7 @@ func fetchUpdate(rel *release, bundle string, step func(got, total int64)) (stri
 	if _, err := os.Stat(app); err != nil {
 		app = filepath.Join(stage, "Mouse Party.app")
 	}
-	if why := checkBundle(app, rel.Version); why != "" {
+	if why := checkBundle(app, rel.Version, teamOf(bundle)); why != "" {
 		os.RemoveAll(stage)
 		return "", errors.New(why)
 	}
@@ -324,9 +324,15 @@ func fetchSum(link string) (string, error) {
 }
 
 // checkBundle: why the unpacked app isn't the update it should be ("" when it is): whole as signed, Mouse Party, that version
-func checkBundle(app, want string) string {
+func checkBundle(app, want, team string) string {
 	if out, err := exec.Command("/usr/bin/codesign", "--verify", "--deep", "--strict", app).CombinedOutput(); err != nil {
 		return "its signature doesn't check: " + strings.TrimSpace(string(out))
+	}
+	if team != "" { // this Mouse Party has a Developer ID: an update must be signed by the same developer
+		req := fmt.Sprintf(`=anchor apple generic and certificate leaf[subject.OU] = "%s"`, team)
+		if out, err := exec.Command("/usr/bin/codesign", "--verify", "--deep", "--strict", "-R", req, app).CombinedOutput(); err != nil {
+			return "it isn't signed by Mouse Party's developer (" + team + "): " + strings.TrimSpace(string(out))
+		}
 	}
 	plist := filepath.Join(app, "Contents", "Info.plist")
 	read := func(key string) string {
@@ -338,6 +344,17 @@ func checkBundle(app, want string) string {
 	}
 	if v := read("CFBundleShortVersionString"); v != want {
 		return fmt.Sprintf("it says it's version %q, not %s", v, want)
+	}
+	return ""
+}
+
+// teamOf: the Developer ID team that signed an app; "" when it's signed ad hoc (or not at all)
+func teamOf(app string) string {
+	out, _ := exec.Command("/usr/bin/codesign", "-dv", "--verbose=2", app).CombinedOutput()
+	for _, line := range strings.Split(string(out), "\n") {
+		if t, ok := strings.CutPrefix(line, "TeamIdentifier="); ok && t != "not set" {
+			return strings.TrimSpace(t)
+		}
 	}
 	return ""
 }

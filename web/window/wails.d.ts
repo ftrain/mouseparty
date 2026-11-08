@@ -64,7 +64,11 @@ export interface App {
     AddURL(link: string, user: string, pass: string, save: boolean): Promise<string>; // Party > Add Download Link: "" when it's in the list, or why not; a username is the login for the link's site, saved, or only until the app quits
     LoginFor(link: string): Promise<LinkLogin>; // the login the sheet fills in for a link
     CacheText(): Promise<string>; // what the download cache holds: "3 downloads, 4.2 GB" ("" for nothing)
-    ClearCache(): Promise<string>; // Party > Clear Download Cache: every download deleted, the rows kept; "" or why not
+    ClearCache(): Promise<string>; // Party > Clear Download Cache: every download deleted, and its row; "" or why not
+    UndoRemove(): Promise<void>; // Edit > Undo: the rows last taken out, back where they were
+    RedoRemove(): Promise<void>; // Edit > Redo: out again
+    LogText(): Promise<string>; // Help > Show Log: what's been logged since the app started
+    Welcome(): Promise<boolean>; // at load: whether to welcome someone new (asked once)
     // the party file (party.go): each "" when it worked, or why not
     Unlock(passcode: string): Promise<string>;
     StartOver(): Promise<string>;
@@ -94,6 +98,7 @@ export interface Prefs {
     sealed: boolean; // only shown
     checkUpdates: boolean; // look for a newer Mouse Party once a day
     installUpdates: boolean; // and download it, to go in when the app quits
+    notify: boolean; // notifications while the app is behind others
     update: UpdateStatus; // only shown
 }
 
@@ -121,11 +126,13 @@ export interface LinkLogin {
 }
 
 // what the Party menu asks the window for (party.go's ask)
-export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear' | 'prefs' | 'updates';
+export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear' | 'prefs' | 'updates' | 'keys' | 'welcome' | 'log';
 
 // as much of the Wails runtime as the window uses
 export interface Runtime {
     OnFileDrop(callback: (x: number, y: number, paths: string[]) => void, useDropTarget: boolean): void;
     EventsOn(name: 'view', callback: (v: View) => void): () => void;
     EventsOn(name: 'ask', callback: (mode: Ask) => void): () => void;
+    EventsOn(name: 'edit', callback: (what: 'undo' | 'redo') => void): () => void; // Edit > Undo, Redo (mac.go)
+    ClipboardSetText(text: string): Promise<boolean>;
 }

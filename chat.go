@@ -73,6 +73,7 @@ type Chat struct {
 	docPace    func(name, token string, seconds int)    // a viewer set everyone's pace
 	joined     func(v apps.Viewer)                      // a socket opened, or its viewer took a name
 	left       func(v apps.Viewer)                      // a socket closed
+	arrived    func(name string)                        // a viewer gave their name for the first time (a notification on the Mac)
 	mu         sync.Mutex
 	conns      map[*chatConn]bool
 	history    []map[string]any
@@ -230,6 +231,9 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 			c.mu.Unlock()
 			if old != name && c.joined != nil {
 				c.joined(apps.Viewer{ID: conn.id, Name: name})
+			}
+			if old == "" && c.arrived != nil {
+				c.arrived(name)
 			}
 			if old != name {
 				text := name + " joined"

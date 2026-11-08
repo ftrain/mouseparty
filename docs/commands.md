@@ -10,46 +10,49 @@ Its states are `App.state`'s; each command acts only in the states it leads from
 
 ```mermaid
 stateDiagram-v2
-    empty --> between: Remove, ClearPlayed
-    empty --> stopping: Remove, ClearPlayed
-    linking --> empty: Remove, ClearPlayed
-    linking --> between: Remove, ClearPlayed
-    linking --> stopping: Remove, ClearPlayed
-    nolink --> empty: Remove, ClearPlayed
+    empty --> linking: UndoRemove
+    empty --> nolink: UndoRemove
+    empty --> ready: UndoRemove
+    empty --> between: Remove, ClearPlayed, RedoRemove
+    empty --> stopping: Remove, ClearPlayed, RedoRemove
+    linking --> empty: Remove, ClearPlayed, RedoRemove
+    linking --> between: Remove, ClearPlayed, RedoRemove
+    linking --> stopping: Remove, ClearPlayed, RedoRemove
+    nolink --> empty: Remove, ClearPlayed, RedoRemove
     nolink --> linking: LinkClicked
-    nolink --> between: Remove, ClearPlayed
-    nolink --> stopping: Remove, ClearPlayed
-    ready --> empty: Remove, ClearPlayed
+    nolink --> between: Remove, ClearPlayed, RedoRemove
+    nolink --> stopping: Remove, ClearPlayed, RedoRemove
+    ready --> empty: Remove, ClearPlayed, RedoRemove
     ready --> countdown: PlayClicked, PlayRow
     ready --> movie: PlayClicked, PlayRow
     ready --> doc: PlayClicked, PlayRow
-    ready --> between: Remove, ClearPlayed
-    ready --> stopping: Remove, ClearPlayed
-    countdown --> empty: PlayClicked, Remove, ClearPlayed
+    ready --> between: Remove, ClearPlayed, RedoRemove
+    ready --> stopping: Remove, ClearPlayed, RedoRemove
+    countdown --> empty: PlayClicked, Remove, ClearPlayed, RedoRemove
     countdown --> linking: PlayClicked
     countdown --> nolink: PlayClicked
     countdown --> ready: PlayClicked
-    countdown --> between: PlayRow, Remove, ClearPlayed
-    countdown --> stopping: PlayClicked, Remove, ClearPlayed
-    movie --> empty: PlayClicked, Remove, ClearPlayed
+    countdown --> between: PlayRow, Remove, ClearPlayed, RedoRemove
+    countdown --> stopping: PlayClicked, Remove, ClearPlayed, RedoRemove
+    movie --> empty: PlayClicked, Remove, ClearPlayed, RedoRemove
     movie --> linking: PlayClicked
     movie --> nolink: PlayClicked
     movie --> ready: PlayClicked
-    movie --> between: PlayRow, Seek, Remove, ClearPlayed
-    movie --> stopping: PlayClicked, Remove, ClearPlayed
-    doc --> empty: PlayClicked, Remove, ClearPlayed
+    movie --> between: PlayRow, Seek, Remove, ClearPlayed, RedoRemove
+    movie --> stopping: PlayClicked, Remove, ClearPlayed, RedoRemove
+    doc --> empty: PlayClicked, Remove, ClearPlayed, RedoRemove
     doc --> linking: PlayClicked
     doc --> nolink: PlayClicked
     doc --> ready: PlayClicked, TurnPage
-    doc --> between: PlayRow, TurnPage, Remove, ClearPlayed
-    doc --> stopping: PlayClicked, TurnPage, Remove, ClearPlayed
-    between --> empty: PlayClicked, Remove, ClearPlayed
+    doc --> between: PlayRow, TurnPage, Remove, ClearPlayed, RedoRemove
+    doc --> stopping: PlayClicked, TurnPage, Remove, ClearPlayed, RedoRemove
+    between --> empty: PlayClicked, Remove, ClearPlayed, RedoRemove
     between --> linking: PlayClicked
     between --> nolink: PlayClicked
     between --> ready: PlayClicked
-    between --> stopping: PlayClicked, Remove, ClearPlayed
-    stopping --> empty: Remove, ClearPlayed
-    stopping --> between: Remove, ClearPlayed
+    between --> stopping: PlayClicked, Remove, ClearPlayed, RedoRemove
+    stopping --> empty: Remove, ClearPlayed, RedoRemove
+    stopping --> between: Remove, ClearPlayed, RedoRemove
 ```
 
 Besides those, the app moves on its own (the link made, a countdown over, a movie ended, a file gone).
@@ -65,13 +68,15 @@ Besides those, the app moves on its own (the link made, a countdown over, a movi
 | `Move` | a row dragged | every state |
 | `Remove` | Backspace: the selected row | every state |
 | `ClearPlayed` | Party > Clear Played Files (⌘R): every row above the one playing, or next to play | every state |
+| `UndoRemove` | Edit > Undo (⌘Z): the rows last taken out, back where they were (hosting again if the list was empty) | every state |
+| `RedoRemove` | Edit > Redo (⇧⌘Z): out again | every state |
 | `LinkClicked` | copy the link, or try again for one | every state |
 | `SetSettingsText` | Party > Settings: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first) | every state |
 | `AddPaths` | files dropped (off the app's goroutine: no immediate state) | every state |
 | `SetPrefs` | Party > Settings (⌘,): a setting changed in the Settings window, kept at once (off the app's goroutine: no immediate state) | every state |
 | `AddURL` | Party > Add Download Link: a row downloading from a link (off the app's goroutine: no immediate state) | every state |
 
-Not walked: `CacheText`, a question: what the download cache holds; `CheckForUpdates`, updates (updates_test.go): looked for, downloaded, checked and put in, from a stand-in GitHub; `ClearCache`, the download cache (download_test.go): every download deleted, the rows kept; `GetView`, a question, not a command: every step reads the view; `LoginFor`, a question: the login the Add Download Link sheet fills in (download_test.go); `Prefs`, a question: SetPrefs is walked; `RemoveAccount`, the Settings window's accounts (prefs_test.go); `RestartToUpdate`, updates (updates_test.go): it quits the app, so it isn't walked; `SaveAccount`, the Settings window's accounts (prefs_test.go); `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz.
+Not walked: `CacheText`, a question: what the download cache holds; `CheckForUpdates`, updates (updates_test.go): looked for, downloaded, checked and put in, from a stand-in GitHub; `ClearCache`, the download cache (download_test.go): every download deleted, and its row; `GetView`, a question, not a command: every step reads the view; `LogText`, a question: Help > Show Log; `LoginFor`, a question: the login the Add Download Link sheet fills in (download_test.go); `Prefs`, a question: SetPrefs is walked; `RemoveAccount`, the Settings window's accounts (prefs_test.go); `RestartToUpdate`, updates (updates_test.go): it quits the app, so it isn't walked; `SaveAccount`, the Settings window's accounts (prefs_test.go); `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz; `Welcome`, a question, asked once at load (the browser walk answers it).
 
 ## A viewer's page, on its socket
 

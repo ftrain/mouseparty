@@ -123,6 +123,11 @@ const TABS: Tab[] = [
                 number(p.skip, 0, 600, 1, (q, n) => (q.skip = n), 'minutes in'),
                 'Where the first movie played starts, to skip what comes before it. 0 for the beginning.',
             ),
+            row(
+                'Notifications',
+                checkbox('When a friend arrives or a download finishes', p.notify, (q, on) => (q.notify = on)),
+                'Only while Mouse Party is behind other apps. macOS asks the first time.',
+            ),
             ...updates(p),
         ],
     },

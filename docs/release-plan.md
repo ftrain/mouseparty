@@ -30,22 +30,31 @@ You, once:
 - [ ] Create an **App Store Connect API key** for notarization (key, key ID, issuer ID).
 - [ ] Add all of these as GitHub repository secrets.
 
+- [ ] Add them as the secrets `.github/workflows/mac-app.yml`'s first lines name
+      (`MACOS_CERTIFICATE_P12` as base64, `MACOS_CERTIFICATE_PASSWORD`,
+      `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`), and push a tag.
+
 Me:
-- [ ] Release workflow: import the certificate into a temporary keychain on the
-      runner; sign every binary inside (Mouse Party, MediaMTX, cloudflared, ffmpeg) with
-      the hardened runtime and a timestamp, then the app; notarize with
-      `notarytool` using the API key; staple the ticket. `scripts/build_mac_app.sh`
-      already has `SIGN_IDENTITY`/`NOTARY_PROFILE`; adapt it to the API key on CI.
-- [ ] A signed, notarized **`.dmg`** (drag to Applications) instead of a bare zip.
-- [ ] `NSLocalNetworkUsageDescription` in Info.plist: macOS 15 asks before an app
-      talks to the router (the NAT-PMP/UPnP port request); say why.
+- [x] Release workflow: imports the certificate into a temporary keychain on the
+      runner when the secrets are there; `scripts/build_mac_app.sh` signs every binary
+      inside with the hardened runtime and a timestamp, then the app (with
+      `packaging/darwin/entitlements.plist`: wazero's compiled code needs
+      allow-unsigned-executable-memory), notarizes with `notarytool` and the API key,
+      and staples the ticket. Every build has the hardened runtime, ad hoc without a
+      certificate, so CI's self-test runs it as a signed release runs.
+- [x] A **`.dmg`** (drag to Applications), signed and notarized with the rest; the zip
+      stays beside it for updates.
+- [x] `NSLocalNetworkUsageDescription` in Info.plist: macOS 15 asks before an app
+      talks to the router (the NAT-PMP/UPnP port request); it says why.
+- [x] Updates take only an app signed by the same Developer ID team as the one
+      running, once that has one (`updates.go` `teamOf`, `checkBundle`).
 - [ ] **Intel Macs:** a second build on an Intel runner (all bundled tools have
       x86-64 builds), or one universal build.
 - [ ] Verify on a clean Mac: opens with no Gatekeeper warning; the firewall's
       "accept incoming connections?" answer survives an update (it doesn't with
       today's ad-hoc signing).
 
-Later, maybe: in-app updates (Sparkle, or a check against GitHub releases).
+- [x] In-app updates: a check against this repo's releases (`updates.go`).
 
 ## 2. Linux: AppImage
 

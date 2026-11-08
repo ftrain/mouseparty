@@ -291,3 +291,16 @@ body {
 .pref-control .pref-check { flex-basis: 100%; }
 .pref-button.go-button { background: var(--play); border-color: var(--play); color: white; }
 .pref-update { color: var(--text); }
+
+/* Help's sheets (party.ts) */
+.keys { border-collapse: collapse; width: 100%; }
+.keys td { padding: 5px 0; border-bottom: 1px solid rgba(127,127,127,.2); }
+.keys td.key { width: 9em; font: 13px ui-monospace, Menlo, monospace; color: var(--muted); white-space: pre; }
+.welcome { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 10px; }
+.welcome li { line-height: 1.4; }
+.welcome strong { display: block; }
+.welcome span { color: var(--muted); }
+.log-box { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.log { margin: 0; width: 100%; box-sizing: border-box; height: 300px; overflow: auto; padding: 8px; border-radius: 6px;
+       background: rgba(127,127,127,.12); font: 11px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; user-select: text; }
+.sheet-box:has(.log) { width: min(100%, 640px); }

@@ -49,13 +49,16 @@ const call = (method) => async (...args) => {
     return r.json();
 };
 window.go = { main: { App: new Proxy({}, { get: (_, method) => call(method) }) } };
-const viewers = [], asks = [];
+const on = { view: [], ask: [], edit: [] };
+const viewers = on.view;
 let drop = null;
 window.runtime = {
     OnFileDrop(callback) { drop = callback; },
-    EventsOn(name, callback) { (name === 'view' ? viewers : asks).push(callback); return () => {}; },
+    EventsOn(name, callback) { on[name].push(callback); return () => {}; },
+    ClipboardSetText: async (text) => ((window.__clipboard = text), true),
 };
-window.__ask = (mode) => asks.forEach((f) => f(mode)); // the Party menu
+window.__ask = (mode) => on.ask.forEach((f) => f(mode)); // the menus
+window.__edit = (what) => on.edit.forEach((f) => f(what)); // Edit > Undo, Redo
 // Wails sends the view after every change; here it's asked for, five times a second
 window.__view = null;
 setInterval(async () => {

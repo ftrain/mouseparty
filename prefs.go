@@ -46,6 +46,7 @@ type Prefs struct {
 	Sealed          bool         `json:"sealed"`          // only shown: the party file is encrypted
 	CheckUpdates    bool         `json:"checkUpdates"`    // look for a newer Mouse Party once a day
 	InstallUpdates  bool         `json:"installUpdates"`  // and download it, to go in when the app quits
+	Notify          bool         `json:"notify"`          // notifications while the app is behind others
 	Update          UpdateStatus `json:"update"`          // only shown: this version, and where updating has got to
 }
 
@@ -86,7 +87,7 @@ func (a *App) Prefs() Prefs {
 		p = Prefs{Countdown: float64(a.cfg.Countdown), Skip: float64(a.cfg.Skip), Bitrate: kbps(a.cfg.Bitrate), Preset: a.cfg.Preset,
 			OpenRouterPorts: a.cfg.OpenRouterPorts, CacheGB: float64(a.cfg.CacheGB), Accounts: a.accounts(),
 			Sealed: a.party != nil && a.party.sealed, CheckUpdates: a.cfg.CheckUpdates, InstallUpdates: a.cfg.InstallUpdates,
-			Update: a.updateStatus()}
+			Notify: a.cfg.Notify, Update: a.updateStatus()}
 	})
 	p.Cache = a.CacheText()
 	return p
@@ -117,7 +118,7 @@ func (a *App) SetPrefs(p Prefs) string {
 		smaller := p.CacheGB > 0 && (a.cfg.CacheGB == 0 || Number(p.CacheGB) < a.cfg.CacheGB)
 		a.cfg.Countdown, a.cfg.Skip, a.cfg.Bitrate, a.cfg.Preset = Number(p.Countdown), Number(p.Skip), fmt.Sprintf("%dk", p.Bitrate), p.Preset
 		a.cfg.OpenRouterPorts, a.cfg.CacheGB = p.OpenRouterPorts, Number(p.CacheGB)
-		a.cfg.CheckUpdates, a.cfg.InstallUpdates = p.CheckUpdates, p.InstallUpdates
+		a.cfg.CheckUpdates, a.cfg.InstallUpdates, a.cfg.Notify = p.CheckUpdates, p.InstallUpdates, p.Notify
 		a.save()
 		if smaller {
 			a.trimCache(a.cacheLimit())

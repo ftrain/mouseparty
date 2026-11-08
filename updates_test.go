@@ -16,7 +16,7 @@ import (
 
 func TestVersions(t *testing.T) {
 	for _, c := range []struct {
-		a, b string
+		a, b  string
 		newer bool
 	}{{"3.1.0", "3.0.9", true}, {"v3.0.10", "3.0.9", true}, {"3.0.0", "3.0.0", false}, {"2.9.9", "3.0.0", false},
 		{"3.1", "3.0.0", false}, {"3.1.0-beta", "3.0.0", false}, {"3.01.0", "3.0.0", false}, {"4.0.0", "dev", false}} {
@@ -182,14 +182,21 @@ func TestUpdate(t *testing.T) {
 
 	// an app that isn't Mouse Party, or isn't the version its release says, is refused
 	other := fakeApp(t, filepath.Join(dir, "other"), "9.9.0", "com.example.notit")
-	if why := checkBundle(other, "9.9.0"); !strings.Contains(why, "isn't Mouse Party") {
+	if why := checkBundle(other, "9.9.0", ""); !strings.Contains(why, "isn't Mouse Party") {
 		t.Errorf("another app: %q", why)
 	}
-	if why := checkBundle(installed, "9.9.1"); !strings.Contains(why, "version") {
+	if why := checkBundle(installed, "9.9.1", ""); !strings.Contains(why, "version") {
 		t.Errorf("the wrong version: %q", why)
 	}
+	// signed ad hoc, it has no team; a Mouse Party with a Developer ID takes only an update from the same one
+	if team := teamOf(installed); team != "" {
+		t.Errorf("an ad hoc app's team: %q", team)
+	}
+	if why := checkBundle(installed, "3.0.0", "ABCDE12345"); !strings.Contains(why, "developer") {
+		t.Errorf("not the developer's: %q", why)
+	}
 	os.WriteFile(filepath.Join(other, "Contents", "MacOS", "MouseParty"), []byte("#!/bin/sh\necho changed\n"), 0o755)
-	if why := checkBundle(other, "9.9.0"); !strings.Contains(why, "signature") {
+	if why := checkBundle(other, "9.9.0", ""); !strings.Contains(why, "signature") {
 		t.Errorf("changed after signing: %q", why)
 	}
 }

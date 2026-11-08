@@ -118,6 +118,14 @@ type App struct {
 	update     updater              // a newer Mouse Party, looked for and fetched (updates.go)
 	bundlePath string               // the app this is, when tests say (updates.go thisBundle); "" for the real one
 
+	undo, redo *undoStep // the last rows removed, to put back (Edit > Undo), and put back, to take out again
+
+	logMu      sync.Mutex // the log, for Help > Show Log (mac.go)
+	logLines   []string
+	badgeShown string    // the Dock icon's badge now
+	notifyOnce sync.Once // notifications asked for, the first time one's wanted
+	notifyOK   bool
+
 	openMu   sync.Mutex // files dropped on the Dock icon, gathered (openFile)
 	opening  []string
 	openSoon *time.Timer
@@ -133,8 +141,6 @@ func NewApp(standby []byte) *App {
 		OnExit:     func(code int) { a.do(func() { a.finished(code) }) }}
 	return a
 }
-
-func (a *App) log(text string) { fmt.Fprintln(os.Stderr, text) } // run it from Terminal to read this
 
 // ---------- the one goroutine ----------
 
@@ -171,6 +177,7 @@ func (a *App) publish() {
 		a.lastView = b
 		runtime.EventsEmit(a.ctx, "view", v)
 	}
+	a.badge()
 }
 
 // startup is Wails's OnStartup
@@ -188,6 +195,20 @@ func (a *App) startup(ctx context.Context) {
 			a.started()
 		}
 	})
+}
+
+// Welcome: whether the window should welcome someone new (the first time, with an empty list); asked once, at load
+func (a *App) Welcome() bool {
+	show := false
+	a.wait(func() {
+		if a.locked || a.cfg.Welcomed {
+			return
+		}
+		show = len(a.cfg.Queue) == 0
+		a.cfg.Welcomed = true
+		a.save()
+	})
+	return show
 }
 
 // started: the list is known (at startup, or once the party is unlocked)
@@ -576,12 +597,8 @@ func (a *App) remove() {
 		return
 	}
 	streaming := a.player.Running() && i == a.cfg.Position
-	a.removeDownload(a.cfg.Queue[i])                                               // a download: its folder goes with it
-	a.editQueue(func(q []*Item) []*Item { return append(q[:i], q[i+1:]...) }, nil) // position now points at the one after
-	a.pruneCache()                                                                 // and nothing stays in the cache that no row names
-	if len(a.cfg.Queue) == 0 {                                                     // nothing left to play: whatever was going on stops
-		a.seekTo, a.jumpTo = nil, -1
-		a.stop()
+	a.takeOut("Remove", map[*Item]bool{a.cfg.Queue[i]: true}) // position now points at the one after
+	if len(a.cfg.Queue) == 0 {
 		return
 	}
 	a.selected = min(i, len(a.cfg.Queue)-1) // the one that moved up, to keep removing
@@ -597,7 +614,7 @@ func (a *App) remove() {
 }
 
 // clearPlayed: Party > Clear Played Files: every row above the one playing (or next to play) out of the
-// list, as Backspace takes one (a download's file goes with its row; a file of one's own stays where it is)
+// list, as Backspace takes one (a file of one's own stays where it is)
 func (a *App) clearPlayed() {
 	n := min(a.cfg.Position, len(a.cfg.Queue))
 	if n == 0 {
@@ -607,19 +624,121 @@ func (a *App) clearPlayed() {
 	for _, it := range a.cfg.Queue[:n] {
 		gone[it] = true
 	}
-	a.removeItems(gone)
+	a.takeOut("Clear Played Files", gone)
 	a.log(fmt.Sprintf("Cleared %d played from the list", n))
 }
 
-// removeItems takes these rows out of the list, a download's file with each (never the one
-// streaming: callers leave it out), and anything else in the cache that no row names
+// ---------- undo ----------
+
+// undoStep: rows taken out of the list, and where each was, to put back (Edit > Undo). Their
+// downloads stay in the cache while they can come back; any other undo, or a removal to make
+// room, deletes them (forget), and so does the next start, no row naming them
+type undoStep struct {
+	name string // the menu's "Undo <name>"
+	rows []undoRow
+}
+
+type undoRow struct {
+	item   *Item
+	at     int  // its row
+	played bool // above the position: put back, it's played still
+}
+
+// takeOut: these rows out of the list (Backspace, Clear Played Files), to be put back by Edit > Undo
+func (a *App) takeOut(name string, gone map[*Item]bool) {
+	if len(gone) == 0 {
+		return
+	}
+	step := &undoStep{name: name}
+	for i, it := range a.cfg.Queue {
+		if gone[it] {
+			step.rows = append(step.rows, undoRow{item: it, at: i, played: i < a.cfg.Position})
+			a.stopDownload(it) // its part kept, to go on from if it comes back
+		}
+	}
+	a.forget()
+	a.undo = step
+	a.cut(gone)
+	a.setMenu()
+}
+
+// UndoRemove, RedoRemove: Edit > Undo and Redo, when no sheet's field has them (party.ts)
+func (a *App) UndoRemove() { a.do(a.undoRemove) }
+func (a *App) RedoRemove() { a.do(a.redoRemove) }
+
+func (a *App) undoRemove() {
+	u := a.undo
+	if u == nil || a.locked {
+		return
+	}
+	a.undo, a.redo = nil, u
+	atEnd := a.cfg.Position >= len(a.cfg.Queue) // nothing next: the position goes after those played
+	a.editQueue(func(q []*Item) []*Item {
+		q = slices.Clone(q)
+		for _, r := range u.rows { // in order, each where it was
+			q = slices.Insert(q, min(r.at, len(q)), r.item)
+		}
+		return q
+	}, nil)
+	if atEnd {
+		a.cfg.Position = len(a.cfg.Queue)
+		for _, r := range u.rows {
+			if !r.played {
+				a.cfg.Position = min(a.cfg.Position, slices.Index(a.cfg.Queue, r.item))
+			}
+		}
+	}
+	a.selected = slices.Index(a.cfg.Queue, u.rows[0].item)
+	for _, r := range u.rows {
+		a.startDownload(r.item) // one that was coming goes on
+	}
+	a.save()
+	a.setMenu()
+	if len(a.cfg.Queue) > 0 && !a.locked {
+		a.hostStart()
+	}
+}
+
+func (a *App) redoRemove() {
+	r := a.redo
+	if r == nil || a.locked {
+		return
+	}
+	gone := map[*Item]bool{}
+	for _, row := range r.rows {
+		if slices.Contains(a.cfg.Queue, row.item) && !(row.item == a.current && a.player.Running()) {
+			gone[row.item] = true
+		}
+	}
+	a.redo = nil
+	a.takeOut(r.name, gone)
+}
+
+// forget: no more undoing; the downloads of rows that could have come back are deleted
+func (a *App) forget() {
+	if a.undo == nil && a.redo == nil {
+		return
+	}
+	a.undo, a.redo = nil, nil
+	a.pruneCache()
+	a.setMenu()
+}
+
+// removeItems takes these rows out of the list for good, a download's file with each (never the one
+// streaming: callers leave it out): to make room in the cache, or clearing it
 func (a *App) removeItems(gone map[*Item]bool) {
 	if len(gone) == 0 {
 		return
 	}
+	a.forget()
 	for it := range gone {
 		a.removeDownload(it)
 	}
+	a.cut(gone)
+}
+
+// cut: the rows out of the list, and anything in the cache that no row (nor an undo) names
+func (a *App) cut(gone map[*Item]bool) {
 	a.editQueue(func(q []*Item) []*Item {
 		return slices.DeleteFunc(slices.Clone(q), func(it *Item) bool { return gone[it] })
 	}, nil)
@@ -1180,6 +1299,7 @@ func (a *App) hostStart() {
 	h.DocPages = func(pages int) { a.do(func() { a.docPages(pages) }) }
 	h.Paced = func() { a.do(a.pacedTurn) }
 	h.Turned = func(page int) { a.do(func() { a.showPage(page) }) }
+	h.Arrived = func(name string) { a.do(func() { a.notify(name+" is here", "They joined the party.") }) }
 	if a.hostSetup != nil {
 		a.hostSetup(h)
 	}

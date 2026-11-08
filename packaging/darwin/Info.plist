@@ -19,6 +19,9 @@
         <string>iconfile</string>
         <key>LSMinimumSystemVersion</key>
         <string>13.0</string>
+        <!-- macOS 15 asks before an app talks to the router; Mouse Party asks it to let friends in (portmap.go) -->
+        <key>NSLocalNetworkUsageDescription</key>
+        <string>Mouse Party asks your router to let friends reach the party hosted on this Mac.</string>
         <key>NSHighResolutionCapable</key>
         <string>true</string>
         <key>NSHumanReadableCopyright</key>

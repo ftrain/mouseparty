@@ -11,8 +11,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/menu"
-	"github.com/wailsapp/wails/v2/pkg/menu/keys"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -145,6 +143,7 @@ func (a *App) SetSettingsText(text string) string {
 			a.stopDownload(it) // the new list's rows are new: their downloads start afresh (syncDownloads)
 		}
 		a.cfg = cfg
+		a.forget() // the rows that could have come back are another list's
 		a.selected = -1
 		a.save()
 		a.syncDownloads()
@@ -159,48 +158,5 @@ func (a *App) SetSettingsText(text string) string {
 func (a *App) ask(mode string) {
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, "ask", mode)
-	}
-}
-
-// menu: the Mac's menu bar, with the Party menu
-func (a *App) menu() *menu.Menu {
-	m := menu.NewMenu()
-	m.Append(menu.AppMenu())
-	party := m.AddSubmenu("Party")
-	link := party.AddText("Add Download Link…", keys.CmdOrCtrl("l"), func(*menu.CallbackData) { a.ask("link") })
-	link.Disabled = a.locked
-	played := party.AddText("Clear Played Files", keys.CmdOrCtrl("r"), func(*menu.CallbackData) { a.ClearPlayed() })
-	played.Disabled = a.locked
-	clear := party.AddText("Clear Download Cache…", nil, func(*menu.CallbackData) { a.ask("clear") })
-	clear.Disabled = a.locked
-	party.AddSeparator()
-	settings := party.AddText("Settings…", keys.CmdOrCtrl(","), func(*menu.CallbackData) { a.ask("prefs") })
-	settings.Disabled = a.locked
-	if a.update.state == "ready" {
-		party.AddText("Restart to Update to "+a.update.latest, nil, func(*menu.CallbackData) { go a.RestartToUpdate() })
-	} else {
-		party.AddText("Check for Updates…", nil, func(*menu.CallbackData) { a.CheckForUpdates(); a.ask("updates") })
-	}
-	party.AddSeparator()
-	switch {
-	case a.locked || a.party == nil:
-		party.AddText("Use Encryption…", nil, nil).Disabled = true
-	case a.party.sealed:
-		party.AddCheckbox("Encryption Is On", true, nil, nil).Disabled = true
-		party.AddText("Change Passcode…", nil, func(*menu.CallbackData) { a.ask("change") })
-		party.AddText("Stop Using Encryption…", nil, func(*menu.CallbackData) { a.ask("off") })
-	default:
-		party.AddText("Use Encryption…", nil, func(*menu.CallbackData) { a.ask("on") })
-	}
-	m.Append(menu.EditMenu())
-	m.Append(menu.WindowMenu())
-	return m
-}
-
-// setMenu shows the Party menu as things are now
-func (a *App) setMenu() {
-	if a.ctx != nil {
-		runtime.MenuSetApplicationMenu(a.ctx, a.menu())
-		runtime.MenuUpdateApplicationMenu(a.ctx)
 	}
 }

@@ -74,6 +74,10 @@ async function walkWindow(browser) {
     const page = await browser.newPage({ viewport: { width: 420, height: 640 } });
     watch(page, 'window');
     await page.goto(`${base}/window/`);
+    // someone new, with nothing in the list: welcomed, once
+    await sheetUp(page, 'Welcome to Mouse Party');
+    await page.keyboard.press('Escape');
+    await sheetGone(page, 'Escape from the welcome');
     const files = await (await fetch(`${base}/files`)).json();
     const kinds = ['clip', 'clip2', 'song', 'pdf', 'junk', 'gone'];
     // first, something to play
@@ -81,6 +85,10 @@ async function walkWindow(browser) {
     const steps = [
         ['drop', async () => page.evaluate((paths) => window.__drop(10, 300, paths), [files[pick(kinds)], files[pick(kinds)]])],
         ['Play', async () => page.click('#play')],
+        ['the arrow keys', async () => page.keyboard.press(pick(['ArrowDown', 'ArrowUp', 'ArrowDown']))],
+        ['Return', async () => page.keyboard.press('Enter')],
+        ['Edit > Undo', async () => page.evaluate(() => window.__edit('undo'))],
+        ['Edit > Redo', async () => page.evaluate(() => window.__edit('redo'))],
         ['the link', async () => page.click('#link')],
         [
             'a click on a row',
@@ -456,6 +464,18 @@ async function settingsWindow(page) {
     await page.keyboard.press('Escape');
     await sheetGone(page, 'Escape from Settings');
     await windowMatches(page, 'the Settings window used');
+    // Help's sheets: the shortcuts, and the log, which has what the app said and copies it
+    await page.evaluate(() => window.__ask('keys'));
+    await sheetUp(page, 'Keyboard Shortcuts');
+    await page.click('#sheet .go');
+    await sheetGone(page, 'Done');
+    await page.evaluate(() => window.__ask('log'));
+    await sheetUp(page, 'Log');
+    await until(page, 'showed the log', () => (document.querySelector('#sheet .log')?.textContent || '').length > 20);
+    await page.click('#sheet .log-box button');
+    await until(page, 'copied the log', () => (window.__clipboard || '').length > 20);
+    await page.keyboard.press('Escape');
+    await sheetGone(page, 'Escape from the log');
 }
 
 async function party(page) {

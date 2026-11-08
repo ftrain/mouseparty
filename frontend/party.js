@@ -82,11 +82,11 @@ function show(opts) {
 		} else close();
 	});
 	form.addEventListener("keydown", (e) => {
-		if (e.key === "Escape" && opts.cancel !== false) close();
+		if (e.key === "Escape" && (opts.cancel !== false || opts.dismiss)) close();
 	});
 	sheet.append(form);
 	sheet.hidden = false;
-	Object.values(inputs)[0]?.focus();
+	(Object.values(inputs)[0] ?? go).focus();
 	return {
 		...inputs,
 		labels
@@ -97,6 +97,7 @@ function askFrom(mode, then) {
 	ask(mode).then(() => back = then);
 }
 function close() {
+	stopLog();
 	sheet.hidden = true;
 	sheet.textContent = "";
 	const then = back;
@@ -125,6 +126,9 @@ async function ask(mode) {
 		});
 		inputs.text.value = text;
 	} else if (mode === "link") linkSheet();
+	else if (mode === "keys") info("Keyboard Shortcuts", "", shortcuts());
+	else if (mode === "welcome") info("Welcome to Mouse Party", "Have friends over to watch movies together, hosted from this Mac: nothing to sign up for, and nothing left behind when you quit.", welcome(), "Get Started");
+	else if (mode === "log") await logSheet();
 	else if (mode === "clear") {
 		const held = await App().CacheText();
 		show({
@@ -185,6 +189,73 @@ async function ask(mode) {
 		go: "Stop",
 		done: (v) => App().SetPasscode(v.current, "")
 	});
+}
+function info(title, words, more, go = "Done") {
+	show({
+		title,
+		words,
+		fields: [],
+		go,
+		cancel: false,
+		dismiss: true,
+		more,
+		done: () => Promise.resolve("")
+	});
+}
+const KEYS = [
+	["↑ ↓", "Select the row above or below"],
+	["Return", "Play the selected row"],
+	["⌫", "Remove the selected row"],
+	["⌘Z  ⇧⌘Z", "Undo or redo removing rows"],
+	["← →", "Turn a document’s page (everyone’s)"],
+	["⌘L", "Add a download link"],
+	["⌘R", "Clear played files"],
+	["⌘,", "Settings"],
+	["⌥⌘L", "Show the log"],
+	["⌘?", "Mouse Party Help"]
+];
+function shortcuts() {
+	return el("table", { className: "keys" }, ...KEYS.map(([k, what]) => el("tr", {}, el("td", {
+		className: "key",
+		textContent: k
+	}), el("td", { textContent: what }))));
+}
+function welcome() {
+	return el("ol", { className: "welcome" }, ...[
+		["Drag in something to watch", "Movies, music, PDFs, documents, databases or a zip, from Finder, or a download link from the Party menu."],
+		["Copy the link, and send it to friends", "They open it in a browser: no app, no account. Video, chat and games are all on that page."],
+		["Press Play", "Everyone watches together. Quit, and the link, the chat and the session are gone."]
+	].map(([head, text]) => el("li", {}, el("strong", { textContent: head }), el("span", { textContent: text }))));
+}
+let logTimer = 0;
+const stopLog = () => {
+	clearInterval(logTimer);
+	logTimer = 0;
+};
+async function logSheet() {
+	const pre = el("pre", { className: "log" });
+	const copy = el("button", {
+		type: "button",
+		className: "quiet",
+		textContent: "Copy Log"
+	});
+	copy.onclick = () => void window.runtime.ClipboardSetText(pre.textContent ?? "");
+	info("Log", "What Mouse Party has done since it started. It’s kept only until it quits.", el("div", { className: "log-box" }, pre, copy));
+	const fill = async () => {
+		const text = await App().LogText();
+		if (pre.textContent === text) return;
+		const atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+		pre.textContent = text || "Nothing yet.";
+		if (atEnd) pre.scrollTop = pre.scrollHeight;
+	};
+	await fill();
+	pre.scrollTop = pre.scrollHeight;
+	logTimer = window.setInterval(() => void fill(), 1e3);
+}
+function edit(what) {
+	const f = document.activeElement;
+	if (f instanceof HTMLInputElement || f instanceof HTMLTextAreaElement) document.execCommand(what);
+	else if (!sheetOpen()) what === "undo" ? App().UndoRemove() : App().RedoRemove();
 }
 function linkSheet() {
 	let site = "";
@@ -289,4 +360,4 @@ function lock(v) {
 		more: startOver
 	});
 }
-export { ask, askFrom, close, el, lock, sheetOpen, show };
+export { ask, askFrom, close, edit, el, lock, sheetOpen, show };

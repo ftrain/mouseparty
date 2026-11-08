@@ -123,9 +123,13 @@ func TestDownloadLink(t *testing.T) {
 	a.PlayRow(2)
 	until("tried again, and down", func(v View) bool { return !v.Rows[2].Off && v.Rows[2].Icon == "video" })
 
-	// removing a row removes its folder; the others stay
+	// removing a row removes its folder, once it can't be undone; the others stay
 	var removed *Item
 	a.wait(func() { removed = a.cfg.Queue[1]; a.selectRow(1); a.remove() })
+	if _, err := os.Stat(removed.Path); err != nil {
+		t.Fatal("the removed row's download went while Undo could bring it back:", err)
+	}
+	a.wait(a.forget)
 	if _, err := os.Stat(filepath.Dir(removed.Path)); !os.IsNotExist(err) {
 		t.Fatal("the removed row's folder is still there:", err)
 	}

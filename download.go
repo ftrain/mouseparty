@@ -22,8 +22,7 @@ package main
 //
 // The cache has a limit, cache_gb in the settings (0: none): a link bigger than
 // it is refused, and when a download would take the cache past it, the oldest
-// downloads (by when they last played) are deleted first, their rows staying,
-// and their rows with them. Party > Clear Download Cache… does that to every
+// downloads (by when they last played) are deleted first, and their rows with them. Party > Clear Download Cache… does that to every
 // download at once. The cache holds the list's downloads and nothing else:
 // whatever no row names is deleted (pruneCache).
 
@@ -39,6 +38,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -412,6 +412,7 @@ func (a *App) startDownload(it *Item) {
 					it.Subs = made.Subs
 				}
 				a.log(fmt.Sprintf("Downloaded %s (%s)", filepath.Base(path), formatBytes(d.got)))
+				a.notify("Downloaded", displayTitle(path))
 			}
 			a.save()
 		})
@@ -480,7 +481,15 @@ func (a *App) pruneCache() {
 		return
 	}
 	keep := map[string]bool{}
-	for _, it := range a.cfg.Queue {
+	named := slices.Clone(a.cfg.Queue)
+	for _, u := range []*undoStep{a.undo, a.redo} { // rows that can come back: theirs too
+		if u != nil {
+			for _, r := range u.rows {
+				named = append(named, r.item)
+			}
+		}
+	}
+	for _, it := range named {
 		if it.URL != "" {
 			keep[downloadKey(it.URL)] = true
 		}
@@ -582,6 +591,9 @@ func (a *App) makeRoom(it *Item, total int64) {
 func (a *App) trimCache(limit int64) {
 	if a.cacheLimit() <= 0 {
 		return
+	}
+	if cacheSize() > limit {
+		a.forget() // rows that might have come back go first
 	}
 	var kept []*Item
 	for _, it := range a.cfg.Queue {

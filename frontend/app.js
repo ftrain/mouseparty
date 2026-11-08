@@ -1,5 +1,5 @@
 // Built from web/window/app.ts by `npm run build` (vite.config.ts): change it there.
-import { ask, lock, sheetOpen } from "./party.js";
+import { ask, edit, lock, sheetOpen } from "./party.js";
 const App = () => window.go.main.App;
 const $ = (id) => document.getElementById(id);
 const ICONS = {
@@ -39,6 +39,7 @@ function render(v) {
 	tile($("play"), v.play, v.playOn, v.playOn, "", v.play === "stop" ? "stop" : "");
 	$("play").setAttribute("aria-label", v.play === "stop" ? "Stop" : "Play");
 	tile($("link"), v.link, v.linkOn, v.linkPress, v.linkNote);
+	$("link").setAttribute("aria-label", v.linkNote ? `Copy link: ${v.linkNote}` : "Copy link");
 	const s = v.slider, slider = $("slider");
 	if (!sliderHeld) {
 		slider.min = String(s.min);
@@ -47,6 +48,7 @@ function render(v) {
 		slider.value = String(s.value);
 		slider.disabled = !s.on;
 		$("time").textContent = s.label;
+		slider.setAttribute("aria-valuetext", s.label);
 	}
 	const list = $("list");
 	const rows = list.querySelectorAll(".row");
@@ -59,6 +61,14 @@ function render(v) {
 			row.innerHTML = "<span class=\"mark\"></span><span class=\"icon\"></span><span class=\"title\"></span><span class=\"length\"></span>";
 			list.appendChild(row);
 		}
+		row.setAttribute("role", "option");
+		row.setAttribute("aria-selected", String(i === v.selected));
+		row.setAttribute("aria-label", [
+			r.title,
+			r.length,
+			r.now ? "playing" : r.played ? "played" : "",
+			r.off ? "unavailable" : ""
+		].filter(Boolean).join(", "));
 		row.className = "row" + (r.played ? " played" : "") + (r.now ? " now" : "") + (r.off ? " off" : "") + (i === v.selected ? " selected" : "");
 		row.title = r.icon === "download" ? "Downloading; double-click one that gave up to try again" : r.off ? "Can't play this now: its file isn't there, or can't be read" : "";
 		row.children[0].textContent = r.now ? "▶" : "";
@@ -126,8 +136,15 @@ window.addEventListener("mouseup", () => {
 	dragFrom = null;
 });
 window.addEventListener("keydown", (e) => {
-	if (sheetOpen()) return;
-	if (e.key === "Backspace" || e.key === "Delete") App().Remove();
+	if (sheetOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
+	const rows = view?.rows.length ?? 0;
+	const sel = view?.selected ?? -1;
+	if ((e.key === "ArrowDown" || e.key === "ArrowUp") && rows) {
+		const next = e.key === "ArrowDown" ? sel < 0 ? 0 : Math.min(rows - 1, sel + 1) : sel < 0 ? rows - 1 : Math.max(0, sel - 1);
+		App().Select(next);
+		$("list").querySelectorAll(".row")[next]?.scrollIntoView({ block: "nearest" });
+	} else if (e.key === "Enter" && sel >= 0 && document.activeElement?.tagName !== "BUTTON") App().PlayRow(sel);
+	else if (e.key === "Backspace" || e.key === "Delete") App().Remove();
 	else if (e.key === "ArrowLeft" || e.key === "PageUp") App().TurnPage(-1);
 	else if (e.key === "ArrowRight" || e.key === "PageDown") App().TurnPage(1);
 	else return;
@@ -155,5 +172,7 @@ window.addEventListener("load", async () => {
 	}, false);
 	window.runtime.EventsOn("view", render);
 	window.runtime.EventsOn("ask", ask);
+	window.runtime.EventsOn("edit", edit);
 	render(await App().GetView());
+	if (await App().Welcome()) ask("welcome");
 });
