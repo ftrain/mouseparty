@@ -83,8 +83,10 @@
             <div class="messages" id="chatMessagesOverlay"></div>
             <div class="composer">
                 <div class="picker" id="picker" hidden></div>
+                <!-- the name, asked as a question over its box: in the chat box's place, it was taken for it ("hi") -->
+                <label class="join-ask" id="joinAsk" for="usernameInput">First, your name: it's how you'll show in the chat.</label>
                 <div class="row" id="joinOverlay">
-                    <input type="text" id="usernameInput" placeholder="Your name..." maxlength="30" autocomplete="nickname" />
+                    <input type="text" id="usernameInput" placeholder="Your name" maxlength="30" autocomplete="given-name" enterkeyhint="done" />
                     <button id="joinBtn" class="btn">Join chat</button>
                     <button class="btn plus" title="Open an app for everyone" aria-label="Open an app">+</button>
                 </div>

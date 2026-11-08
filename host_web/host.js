@@ -288,9 +288,77 @@ function connectChat() {
 function send(m) {
 	if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
 }
-function join(name) {
-	name = name.trim().slice(0, 30);
-	if (!name) return;
+const GREETINGS = /* @__PURE__ */ new Set([
+	..."hi hey hello helo hallo hola howdy yo sup wassup hiya heya hai greetings morning evening ok okay lol lmao haha hm test testing".split(" "),
+	...[
+		"hi all",
+		"hi everyone",
+		"hi everybody",
+		"hi guys",
+		"hi there",
+		"hi hi",
+		"hey all",
+		"hey everyone",
+		"hey guys",
+		"hey there"
+	],
+	...[
+		"hey hey",
+		"hello all",
+		"hello everyone",
+		"hello there",
+		"whats up",
+		"what's up",
+		"yo yo",
+		"good morning",
+		"good evening"
+	]
+]);
+const STANDINS = /* @__PURE__ */ new Set([
+	"me",
+	"name",
+	"my name",
+	"your name",
+	"guest",
+	"user",
+	"anon",
+	"anonymous",
+	"nobody",
+	"someone",
+	"username",
+	"nickname"
+]);
+function nameFrom(typed) {
+	let t = typed.trim().replace(/\s+/g, " ");
+	const intro = t.match(/^(?:(?:hi|hey|hello|yo|hiya)\b[\s,!.]*)?(?:i'?m|i am|im|my name is|my name's|this is|it'?s|call me)\s+(.+)$/i);
+	if (intro) t = intro[1].replace(/[\s,!.]+(?:here|lol)?[!.]*$/i, "").trim();
+	t = t.replace(/^(\S+(?: \S+)?) here[!.]*$/i, "$1");
+	const bare = t.toLowerCase().replace(/[^\p{L}\p{N}' ]+/gu, " ").replace(/\s+/g, " ").trim();
+	if (!bare) return {};
+	if (GREETINGS.has(bare) || GREETINGS.has(bare.replace(/(.)\1+$/u, "$1"))) return { said: typed.trim() };
+	if (STANDINS.has(bare)) return {};
+	const hiThen = t.match(/^(hi|hey|hello|hiya|yo)[\s,!.]+(\S+(?: \S+)?)$/i);
+	if (hiThen && !intro) return {
+		name: hiThen[2].replace(/[!.,]+$/, ""),
+		said: hiThen[1]
+	};
+	if (/[?]/.test(t) || bare.split(" ").length > 4) return { said: typed.trim() };
+	return { name: t.slice(0, 30) };
+}
+let toSay = "";
+if (myName && !nameFrom(myName).name) myName = null;
+function join(typed) {
+	const ask = byId("joinAsk");
+	const input = byId("usernameInput");
+	const { name, said } = nameFrom(typed);
+	if (said) toSay = said;
+	if (!name) {
+		ask.textContent = said ? `Your “${said.length > 24 ? said.slice(0, 22) + "…" : said}” goes to the chat in a moment. First, what's your name?` : "What should everyone call you? A first name or a nickname.";
+		ask.classList.add("nudge");
+		input.value = "";
+		input.focus();
+		return;
+	}
 	myName = name;
 	try {
 		store.setItem("mousepartyName", name);
@@ -299,9 +367,18 @@ function join(name) {
 		type: "join",
 		name
 	});
+	if (toSay) send({
+		type: "say",
+		text: toSay
+	});
+	toSay = "";
 	showChatInput();
 }
 function showChatInput() {
+	const ask = byId("joinAsk");
+	ask.style.display = "none";
+	ask.classList.remove("nudge");
+	ask.textContent = "First, your name: it's how you'll show in the chat.";
 	byId("joinOverlay").style.display = "none";
 	byId("chatInputBox").style.display = "";
 	byId("currentUserDisplay").textContent = myName;
@@ -384,6 +461,8 @@ messageInput.addEventListener("keydown", (e) => {
 byId("nameBtn").addEventListener("click", () => {
 	byId("chatInputBox").style.display = "none";
 	byId("joinOverlay").style.display = "";
+	byId("joinAsk").style.display = "";
+	byId("joinAsk").textContent = "Your name in the chat:";
 	byId("usernameInput").value = myName || "";
 	byId("usernameInput").focus();
 });

@@ -179,6 +179,14 @@ async function viewer(browser, url, name, device = {}) {
     page.on('dialog', (d) => d.dismiss().catch(() => {})); // a link's address asked for, say: no
     page.on('filechooser', () => {}); // a document to bring in: none
     await page.goto(url);
+    if (name === 'Ann') {
+        // "hi" in the name box (it's where the chat box goes) isn't taken for a name: it's asked again, the hi kept
+        await page.fill('#usernameInput', 'hi');
+        await page.press('#usernameInput', 'Enter');
+        await sleep(200);
+        if (await page.isVisible('#chatInputBox')) fail('"hi" was taken for a name');
+        if (!(await page.locator('#joinAsk.nudge').isVisible())) fail('"hi" in the name box asked nothing more');
+    }
     await page.fill('#usernameInput', name);
     await page.press('#usernameInput', 'Enter');
     await page.waitForSelector('#chatInputBox', { state: 'visible' });
@@ -300,6 +308,13 @@ async function viewers(browser) {
         bob = await viewer(browser, url, 'Bob', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }); // a phone, upright
     const commands = await (await fetch(`${base}/commands`)).json();
     const bots = await Promise.all(['Robo', 'Bolt', 'Gizmo', 'Sprocket'].map((n) => robot(link.replace(/^http:\/\/[^:/]+/, 'http://127.0.0.1'), n)));
+
+    // Ann's "hi", typed where her name went, said once she gave it
+    await bob
+        .waitForFunction(() => [...document.querySelectorAll('.msg')].some((m) => m.querySelector('.name')?.textContent.includes('Ann') && m.querySelector('.text')?.textContent === 'hi'), null, {
+            timeout: 5000,
+        })
+        .catch(() => fail("Ann's hi never reached the chat"));
 
     // a line of chat, from one to the other
     await bob.fill('#messageInput', 'hello from Bob');
