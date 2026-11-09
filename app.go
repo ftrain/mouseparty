@@ -336,6 +336,9 @@ func (a *App) view() View {
 			length = strings.ToUpper(strings.TrimPrefix(ext(it.Path), "."))
 		} else if it.Duration > 0 {
 			length = formatTime(it.Duration)
+			if it.Paused > 0 && !(a.playing && i == a.cfg.Position) {
+				length = formatTime(it.Paused) + " of " + length // where it'll play on from
+			}
 		}
 		v.Rows = append(v.Rows, Row{Title: title, Icon: icon, Length: length, Now: a.playing && i == a.cfg.Position,
 			Played: i < a.cfg.Position, Off: off(it)})
@@ -804,6 +807,10 @@ func (a *App) play(index int) {
 		countdown = 0 // an album plays straight through
 	}
 	a.afterAudio = false
+	if at := a.current.Paused; at > 0 && a.resume == nil { // stopped partway before: on from a little before there
+		skip = max(0, at-pausedBack) / 60
+		a.log("Playing on from " + formatTime(at))
+	}
 	if a.resume != nil { // on with a download, from where it ran out of file
 		skip, countdown = a.resume.at/60, 0
 	}
@@ -887,6 +894,36 @@ func (a *App) position(seconds float64) {
 	}
 }
 
+const (
+	pausedMin  = 15.0 // seconds in before a stopped video's place is kept
+	pausedEnd  = 60.0 // nor in its last minute: as good as finished
+	pausedBack = 5.0  // playing on starts this much before, to pick the thread up
+)
+
+// playedTo: how far into the movie up now, by ffmpeg's last position
+func (a *App) playedTo() float64 {
+	if a.moviePos == nil {
+		return 0
+	}
+	return max(0, a.moviePos.seconds+max(0, time.Since(a.moviePos.at).Seconds()))
+}
+
+// keepPlace: the video up now remembers how far it got (Stop, a quit, another row), so it plays on from there
+func (a *App) keepPlace() {
+	it := a.current
+	if a.phase != "movie" || it == nil || it.kind() != "video" {
+		return
+	}
+	at := a.playedTo()
+	if at < pausedMin || (it.Duration > 0 && at > it.Duration-pausedEnd) {
+		at = 0
+	}
+	if it.Paused != at {
+		it.Paused = at
+		a.save()
+	}
+}
+
 func (a *App) finished(code int) {
 	if a.phase == "countdown" && a.current != nil && !a.stopRequest && a.jumpTo < 0 {
 		// Countdown over: on to the movie. The card is only decoration, so a failed
@@ -904,6 +941,9 @@ func (a *App) finished(code int) {
 		return
 	}
 	a.seekTo = nil
+	if a.stopRequest || a.jumpTo >= 0 {
+		a.keepPlace() // Stop, or another row: where it was, for next time
+	}
 	a.phase = ""
 	it := a.current
 	a.current = nil
@@ -937,10 +977,7 @@ func (a *App) finished(code int) {
 		return
 	}
 	if it != nil && it.dl != nil && a.playing { // played to the end of what's downloaded: wait for more, then on from there
-		pos := 0.0
-		if a.moviePos != nil {
-			pos = a.moviePos.seconds + max(0, time.Since(a.moviePos.at).Seconds())
-		}
+		pos := a.playedTo()
 		a.resume = &resumePoint{max(0, pos-2), it.dl.got} // a little back: the last seconds were cut mid-cluster
 		a.log(fmt.Sprintf("%s has played to where its download is (%s); waiting for more.", name, formatTime(a.resume.at)))
 		a.after(2*time.Second, func() { a.resumeDownloading(it) })
@@ -956,6 +993,9 @@ func (a *App) finished(code int) {
 		return
 	}
 	a.log("Finished " + name + ".")
+	if it != nil {
+		it.Paused = 0 // played through: from the top next time
+	}
 	a.afterAudio = it != nil && it.kind() == "audio"
 	a.cfg.Position++
 	if a.cfg.Position >= len(a.cfg.Queue) {
@@ -1447,6 +1487,7 @@ func (a *App) beforeClose(ctx context.Context) bool {
 func (a *App) shutdown(ctx context.Context) {
 	var links map[string]string
 	a.wait(func() {
+		a.keepPlace() // quitting mid-movie: on from there next time
 		a.save()
 		a.player.Stop()
 		if a.host != nil {

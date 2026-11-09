@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -86,8 +87,67 @@ func TestPlayThroughTheList(t *testing.T) {
 		t.Fatalf("%+v", v)
 	}
 
-	a.PlayClicked() // from the top again, then Stop
+	a.wait(func() { a.cfg.Queue[0].Paused = 2 }) // stopped there once: on from there
+	if v := a.GetView(); v.Rows[0].Length != "0:00:02 of 0:00:04" {
+		t.Errorf("a row stopped partway says %q", v.Rows[0].Length)
+	}
+	a.PlayClicked() // from the top again (the first played on), then Stop
 	until("playing again", 10, func(v View) bool { return v.Play == "stop" && v.Rows[0].Now })
+	if !strings.Contains(a.LogText(), "Playing on from 0:00:02") {
+		t.Error("a video stopped partway didn't play on from there")
+	}
 	a.PlayClicked()
 	until("stopped", 15, func(v View) bool { return v.Play == "play" && v.PlayOn && state() == "ready" })
+}
+
+// Stop, a quit or another row keeps a video's place; played through, or barely started, it's from the top
+func TestKeepPlace(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // never the real party file
+	movie := &Item{Path: filepath.Join(t.TempDir(), "Movie.mkv"), Kind: "video", Duration: 3600}
+	a := NewApp(standby)
+	go a.run()
+	at := func(seconds float64) float64 {
+		var got float64
+		a.wait(func() {
+			a.cfg.Queue, a.current, a.phase = []*Item{movie}, movie, "movie"
+			a.moviePos = &moviePos{seconds, time.Now()}
+			a.keepPlace()
+			a.phase, a.current = "", nil
+			got = movie.Paused
+		})
+		return got
+	}
+	if got := at(600); got < 600 || got > 601 {
+		t.Errorf("stopped at 10 minutes, kept %v", got)
+	}
+	if got := at(5); got != 0 {
+		t.Errorf("stopped 5 seconds in, kept %v", got)
+	}
+	if got := at(3570); got != 0 {
+		t.Errorf("stopped in the last minute, kept %v", got)
+	}
+	song := &Item{Path: "Song.m4a", Kind: "audio", Duration: 600}
+	a.wait(func() {
+		a.current, a.phase, a.moviePos = song, "movie", &moviePos{120, time.Now()}
+		a.keepPlace()
+		a.phase, a.current = "", nil
+	})
+	if song.Paused != 0 {
+		t.Error("a song kept its place")
+	}
+
+	// quitting mid-movie keeps it in the party file
+	a.wait(func() {
+		a.cfg.Queue, a.current, a.phase = []*Item{movie}, movie, "movie"
+		a.moviePos = &moviePos{1234, time.Now()}
+	})
+	a.shutdown(nil)
+	b := NewApp(standby)
+	go b.run()
+	defer b.shutdown(nil)
+	b.wait(func() {
+		if len(b.cfg.Queue) != 1 || b.cfg.Queue[0].Paused < 1234 || b.cfg.Queue[0].Paused > 1235 {
+			t.Errorf("after a quit: %+v", b.cfg.Queue)
+		}
+	})
 }

@@ -41,6 +41,9 @@ The window is two big buttons over a list.
 - **Play:** select something and press **Play** to start there; with nothing
   selected it carries on down the list. It becomes **Stop** until you press it
   again or the list runs out. Double-click a row to jump to it, even mid-movie.
+  A video stopped partway (Stop, quitting, or switching to another row) plays on
+  from there next time, its row saying how far it got ("42:10 of 1:45:00");
+  drag the playhead back to start over.
 - **The slider** moves around in the movie playing. For a PDF it's the page,
   and so are the arrow keys (past the last page, the list moves on).
 - Between movies there's an "up next" countdown. Songs in a row play straight

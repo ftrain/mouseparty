@@ -37,6 +37,7 @@ type Item struct {
 	Page      int           `json:"page,omitempty"`
 	Size      int64         `json:"size,omitempty"`      // a database's bytes
 	At        string        `json:"at,omitempty"`        // the database's page viewers were last on (a path in Datasette)
+	Paused    float64       `json:"paused,omitempty"`    // seconds into a video where it was stopped (Stop, a quit, another row): it plays on from there
 	Subtitles *[]Track      `json:"subtitles,omitempty"` // what was found; nil until looked for
 	Subs      *SubsSettings `json:"subs,omitempty"`      // what to do with them
 	Audio     *[]AudioTrack `json:"audio,omitempty"`     // its sound tracks; nil until looked at
