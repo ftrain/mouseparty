@@ -76,7 +76,7 @@ jobs:
           path: build/ffmpeg/bin
           key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
 
-      - name: Python for Datasette (its published build, scripts/fetch_python.sh; built here, cached, only while none is)
+      - name: Python for Datasette, as WebAssembly (cached until scripts/build_python.sh or its packages change)
         id: python
         uses: actions/cache/restore@v4
         with:
@@ -85,7 +85,7 @@ jobs:
 
       - name: Build Python
         if: steps.python.outputs.cache-hit != 'true'
-        run: scripts/fetch_python.sh --or-build
+        run: scripts/build_python.sh
 
       - name: Keep Python for next time
         if: steps.python.outputs.cache-hit != 'true'
@@ -133,10 +133,20 @@ jobs:
         # TypeScript goes in with what it builds, so Go alone builds the app from a clone
         run: git diff --exit-code -- host_web frontend && test -z "$(git status --porcelain -- host_web frontend)"
 
+      - name: Playwright and Chromium, for the pages in a browser (browser_test.go)
+        # global, beside the pages' own pinned tools rather than in them: nothing of it is the app's
+        env:
+          PLAYWRIGHT: 1.63.0
+        run: |
+          npm install -g "playwright@$PLAYWRIGHT"
+          npx -y "playwright@$PLAYWRIGHT" install chromium
+          echo "NODE_PATH=$(npm root -g)" >> "$GITHUB_ENV"
+
       - name: Tests
         env:
-          NO_SKIPS: 1 # a test that skips is a layer gone missing (scripts/testreport); the browser's and ffprobe's are Linux's (test.yml)
-          ALLOW_SKIPS: ^(TestPreviewAudioCard|TestBrowser|TestInspectAgreesWithFFprobe)$
+          NO_SKIPS: 1 # a test that skips is a layer gone missing (scripts/testreport)
+          # the app has no ffprobe, so that comparison is the nightly fuzz.yml's, with Homebrew's
+          ALLOW_SKIPS: ^(TestPreviewAudioCard|TestInspectAgreesWithFFprobe)$
         run: scripts/test.sh
 
       - name: Self-test the built app
@@ -144,6 +154,22 @@ jobs:
         # stand-by stream and the WebRTC handshake, and publishes a countdown
         # with the bundled ffmpeg
         run: env -i HOME="$HOME" PATH=/usr/bin:/bin "dist/Mouse Party.app/Contents/MacOS/MouseParty" --selftest
+
+      - name: Fuzz the command graph, a minute of each fuzzer (fuzz.yml searches longer, nightly)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        env:
+          FUZZTIME: 1m
+        run: scripts/fuzz.sh
+
+      - name: Keep what the fuzzers found
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failures
+          path: |
+            testdata/fuzz
+            apps/testdata/fuzz
+          if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v4
         with:

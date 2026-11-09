@@ -1,0 +1,92 @@
+# Fuzz the command graph for longer than each push does (mac-app.yml: a minute of
+# each), every night, on the Mac like everything else (docs/testing.md): each
+# fuzzer, and the pages walked with new seeds, for FUZZTIME. And the one test the
+# app's own tools can't run: what ffmpeg says of a file against ffprobe's account
+# (the app has no ffprobe; Homebrew's is used here).
+#
+# A fuzzer that finds something fails the run, and the input it failed on is kept
+# as the run's artifact (testdata/fuzz/...): put it in the repo beside the fix,
+# and `go test` runs it from then on.
+name: Fuzz
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: How long each fuzzer runs (Go duration)
+        default: 15m
+
+jobs:
+  fuzz:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4 # the pages' TypeScript (scripts/build_web.sh)
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: MediaMTX and cloudflared
+        run: |
+          scripts/fetch_tools.sh
+          echo "$PWD/build/tools" >> "$GITHUB_PATH"
+
+      - name: ffmpeg, cut down (the Mac build's, cached)
+        id: ffmpeg
+        uses: actions/cache/restore@v4
+        with:
+          path: build/ffmpeg/bin
+          key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_ffmpeg.sh') }}
+
+      - name: Build ffmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: brew install meson ninja pkg-config && scripts/build_ffmpeg.sh
+
+      - name: Python for Datasette (the Mac build's, cached)
+        id: python
+        uses: actions/cache/restore@v4
+        with:
+          path: build/python/dist
+          key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_python.sh', 'scripts/python-requirements.txt', 'scripts/python-build-requirements.txt') }}
+
+      - name: Build Python
+        if: steps.python.outputs.cache-hit != 'true'
+        run: scripts/build_python.sh
+
+      - name: Playwright and Chromium, for the pages in a browser
+        env:
+          PLAYWRIGHT: 1.63.0
+        run: |
+          npm install -g "playwright@$PLAYWRIGHT"
+          npx -y "playwright@$PLAYWRIGHT" install chromium
+          echo "NODE_PATH=$(npm root -g)" >> "$GITHUB_ENV"
+
+      - name: ffmpeg's account of a file against ffprobe's (Homebrew's ffprobe)
+        run: |
+          brew install ffmpeg
+          NO_SKIPS=1 go test -count=1 -run '^TestInspectAgreesWithFFprobe$' -v . | tee inspect.log
+          grep -q -- '--- PASS: TestInspectAgreesWithFFprobe' inspect.log
+
+      - name: Fuzz the command graph
+        env:
+          FUZZTIME: ${{ github.event_name == 'workflow_dispatch' && inputs.fuzztime || '15m' }}
+        run: scripts/fuzz.sh
+
+      - name: Keep what the fuzzers found
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failures
+          path: |
+            testdata/fuzz
+            apps/testdata/fuzz
+          # a failing browser walk prints its BROWSER_SEED in the log
+          if-no-files-found: ignore

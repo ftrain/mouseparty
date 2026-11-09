@@ -88,9 +88,9 @@ failing one to the fewest steps.
   `ALLOW_SKIPS`. `scripts/setup.sh` gets every piece.
 - `scripts/fuzz.sh` searches further: two minutes each (`FUZZTIME=30m`;
   `FUZZWINDOWTIME` for the window's), or one (`scripts/fuzz.sh FuzzApps`).
-- CI (`.github/workflows/test.yml`): `scripts/test.sh` (with the browser
-  walk) and a minute of each fuzzer on every push and pull request; a quarter
-  of an hour of each, and of browser walks, every night. A failure keeps its input as the run's artifact: commit it to
+- CI, on a Mac: `scripts/test.sh` (with the browser walk) and a minute of each
+  fuzzer on every push and pull request (`.github/workflows/mac-app.yml`); a
+  quarter of an hour of each, and of browser walks, every night (`fuzz.yml`). A failure keeps its input as the run's artifact: commit it to
   `testdata/fuzz/` with the fix.
 
 `-fuzzminimizetime` matters: shrinking a new input replays it thousands of

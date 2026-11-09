@@ -10,9 +10,8 @@
 #   the pages' tools and build    scripts/build_web.sh     (Node 24, package-lock.json)
 #   MediaMTX and cloudflared      scripts/fetch_tools.sh   -> build/tools
 #   pandoc as WebAssembly         scripts/fetch_pandoc.sh  -> build/pandoc
-#   Python with Datasette, WASM   scripts/fetch_python.sh  -> build/python/dist (its published build;
-#                                 scripts/build_python.sh is the recipe)
-#   ffmpeg (the app's own; Mac)   scripts/build_ffmpeg.sh  -> build/ffmpeg/bin
+#   Python with Datasette, WASM   scripts/build_python.sh  -> build/python/dist
+#   ffmpeg (the app's own)        scripts/build_ffmpeg.sh  -> build/ffmpeg/bin
 # Then scripts/test.sh tests it all, and scripts/build_mac_app.sh builds the app.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -30,9 +29,9 @@ scripts/fetch_tools.sh
 echo "== pandoc"
 scripts/fetch_pandoc.sh
 if [ "$quick" != --quick ]; then
-    echo "== Python with Datasette (downloaded; built, a long while, only if none is published)"
-    scripts/fetch_python.sh --or-build
-    if [ "$(uname -s)" = Darwin ] && [ ! -x build/ffmpeg/bin/ffmpeg ]; then
+    echo "== Python with Datasette (the first time: a long while)"
+    scripts/build_python.sh
+    if [ ! -x build/ffmpeg/bin/ffmpeg ]; then
         echo "== ffmpeg, the app's own (the first time: about 10 minutes)"
         scripts/build_ffmpeg.sh
     fi
@@ -44,10 +43,10 @@ echo
 echo "Ready:"
 ok "MediaMTX, cloudflared" "$(cat build/tools/VERSION)"
 ok "pandoc" "$(cat build/pandoc/VERSION)"
-if [ -f build/python/dist/python.wasm ]; then ok "Python with Datasette" "build/python/dist"; else ok "Python with Datasette" "MISSING: scripts/fetch_python.sh (Datasette's tests skip)"; fi
+if [ -f build/python/dist/python.wasm ]; then ok "Python with Datasette" "build/python/dist"; else ok "Python with Datasette" "MISSING: scripts/build_python.sh (Datasette's tests skip)"; fi
 FF=$(PATH="$PWD/build/ffmpeg/bin:$PATH" command -v ffmpeg || true)
 if [ -z "$FF" ]; then
-    ok "ffmpeg" "MISSING: scripts/build_ffmpeg.sh on a Mac, or your system's (apt install ffmpeg)"
+    ok "ffmpeg" "MISSING: scripts/build_ffmpeg.sh"
 elif ! grep -q ' drawtext ' <<<"$("$FF" -hide_banner -filters 2>/dev/null)"; then   # read whole: grep -q stops early, and pipefail counts ffmpeg's broken pipe
     ok "ffmpeg" "$FF has no drawtext: the cards fail with it (scripts/build_ffmpeg.sh)"
 else

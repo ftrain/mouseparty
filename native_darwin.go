@@ -1,5 +1,3 @@
-//go:build darwin
-
 package main
 
 // What Wails v2 leaves out of a Mac app, asked of AppKit directly: the standard About panel,
