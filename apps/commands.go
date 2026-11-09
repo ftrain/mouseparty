@@ -26,7 +26,12 @@ type Command struct {
 
 var (
 	lobbyCommands  = []Command{{Kind: "join"}, {Kind: "leave"}, {Kind: "start"}}
-	strokeCommand  = Command{"line", []Field{{Name: "c", Type: "int", Hi: graffitiColors - 1}, {Name: "w", Type: "int", Hi: graffitiWidths - 1}, {Name: "p", Type: "points"}}}
+	strokeCommands = []Command{ // a drawing pad's (lib.ts sketch): Graffiti's and Sketch's
+		{"line", []Field{{Name: "n", Type: "int", Lo: 1, Hi: 5}, {Name: "c", Type: "int", Hi: graffitiColors - 1}, {Name: "w", Type: "int", Hi: graffitiWidths - 1}, {Name: "p", Type: "points"}}},
+		{"erase", []Field{{Name: "p", Type: "points"}}},
+		{Kind: "undo"},
+		{Kind: "clear"},
+	}
 	officeCommands = []Command{
 		{"edit", []Field{{Name: "base", Type: "int", Hi: 1000}, {Name: "eid", Type: "str", Max: 40}, {Name: "ops", Type: "ops"}}},
 		{"snap", []Field{{Name: "seq", Type: "int", Hi: 1000}, {Name: "text", Type: "str", Max: 2000}}},
@@ -37,7 +42,7 @@ var (
 
 // Commands: every app's, by its name
 var Commands = map[string][]Command{
-	"graffiti": {strokeCommand},
+	"graffiti": strokeCommands,
 	"stickies": {
 		{"add", []Field{{Name: "text", Type: "str", Max: stickyText}, {Name: "c", Type: "int", Hi: stickyColors - 1}, {Name: "x", Type: "num", Hi: 1}, {Name: "y", Type: "num", Hi: 1}, {Name: "at", Type: "num", Hi: 7200}, {Name: "page", Type: "int", Lo: 1, Hi: 30}}},
 		{"move", []Field{{Name: "sid", Type: "int", Lo: 1, Hi: 30}, {Name: "x", Type: "num", Hi: 1}, {Name: "y", Type: "num", Hi: 1}}},
@@ -54,7 +59,7 @@ var Commands = map[string][]Command{
 		{Kind: "pass"},
 	}, lobbyCommands...),
 	"anagram": {{"guess", []Field{{Name: "guess", Type: "str", Max: 10}}}},
-	"sketch":  append([]Command{strokeCommand, {Kind: "clear"}, {"guess", []Field{{Name: "guess", Type: "str", Max: 30}}}}, lobbyCommands...),
+	"sketch":  append(append([]Command{{"guess", []Field{{Name: "guess", Type: "str", Max: 30}}}}, strokeCommands...), lobbyCommands...),
 	"blanks":  {{"answer", []Field{{Name: "text", Type: "str", Max: 80}}}, {"vote", []Field{{Name: "i", Type: "int", Hi: 10}}}},
 	"spies": append([]Command{
 		{"pick", []Field{{Name: "i", Type: "int", Hi: 24}}},

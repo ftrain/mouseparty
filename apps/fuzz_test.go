@@ -417,7 +417,7 @@ func TestCommandsAreTheScripts(t *testing.T) {
 	}
 	lib := ts("lib")
 	lobby := kindsIn(regexp.MustCompile(`type LobbyMsg = [^;]*;`).FindString(lib))
-	stroke := kindsIn(regexp.MustCompile(`type StrokeMsg = [^;]*;`).FindString(lib))
+	stroke := kindsIn(regexp.MustCompile(`(?s)type StrokeMsg = .*?;\n`).FindString(lib))
 	for _, k := range Kinds {
 		cmds, ok := Commands[k.Name]
 		if !ok {

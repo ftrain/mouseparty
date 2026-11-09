@@ -6,7 +6,6 @@ const sketch = (ctx, view) => {
 	const pad = sketch$1(ctx, view.lines || [], {
 		paper: true,
 		canDraw: () => v.drawing && v.phase === "draw",
-		clear: () => ctx.send({ kind: "clear" }),
 		color: 5
 	});
 	const lobby$1 = mount(ctx, "cover", (v, kit) => v.phase === "lobby" ? lobby(v.lobby, kit, "Sketch", "Take turns drawing a word while everyone else guesses it. Sooner is more points; the artist scores for each right guess.") : [
@@ -37,10 +36,7 @@ const sketch = (ctx, view) => {
 	show(view);
 	return {
 		view: show,
-		message(e) {
-			if (e.kind === "line") pad.line(e.line);
-			else if (e.kind === "clear") pad.clear();
-		},
+		message: pad.event.bind(pad),
 		resize: pad.resize,
 		stop: pad.stop
 	};

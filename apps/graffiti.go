@@ -34,68 +34,225 @@ const (
 )
 
 // Stroke is a piece of a line: the page sends one every few frames while the
-// pen is down, starting where the last left off
+// pen is down, starting where the last left off. The pieces of one line share
+// its ID, which the host gives it: erasing or undoing takes the whole line.
 type Stroke struct {
+	ID     int          `json:"i"`
 	Color  int          `json:"c"`
 	Width  int          `json:"w"`
 	Points [][2]float64 `json:"p"`
+	owner  int          // the viewer who drew it, this session (none once kept and loaded)
 }
 
 // ReadStroke: a stroke from a viewer's message, or false if it isn't a good one
 func ReadStroke(m Msg) (Stroke, bool) {
 	c, ok1 := m.Int("c", 0, graffitiColors-1)
 	w, ok2 := m.Int("w", 0, graffitiWidths-1)
-	raw, ok3 := m["p"].([]any)
-	if !ok1 || !ok2 || !ok3 || len(raw) < 2 || len(raw) > graffitiMaxPoints {
+	p, ok3 := readPoints(m)
+	if !ok1 || !ok2 || !ok3 {
 		return Stroke{}, false
 	}
-	s := Stroke{Color: c, Width: w}
+	return Stroke{Color: c, Width: w, Points: p}, true
+}
+
+// readPoints: a message's "p", [[x, y], ...] in the picture's 0-1, or false
+func readPoints(m Msg) ([][2]float64, bool) {
+	raw, ok := m["p"].([]any)
+	if !ok || len(raw) < 1 || len(raw) > graffitiMaxPoints {
+		return nil, false
+	}
+	var out [][2]float64
 	for _, p := range raw {
 		xy, ok := p.([]any)
 		if !ok || len(xy) != 2 {
-			return Stroke{}, false
+			return nil, false
 		}
 		x, okx := xy[0].(float64)
 		y, oky := xy[1].(float64)
 		if !okx || !oky || x != x || y != y {
-			return Stroke{}, false
+			return nil, false
 		}
-		s.Points = append(s.Points, [2]float64{min(max(x, 0), 1), min(max(y, 0), 1)})
+		out = append(out, [2]float64{min(max(x, 0), 1), min(max(y, 0), 1)})
 	}
-	return s, true
+	return out, true
+}
+
+// wall: the lines drawn on Graffiti or a Sketch pad, and what can be done to them:
+// draw, rub out with the eraser, take back your own last line, wipe it clean
+type wall struct {
+	lines  []Stroke
+	points int
+	next   int            // the next line's ID
+	open   map[int][2]int // each viewer's line being drawn: its number on their page, its ID
+}
+
+// draw adds a piece of a line from a viewer's "line" message, false if it isn't one or the wall is full.
+// "n" is the page's own number for the line, the same in each of its pieces.
+func (w *wall) draw(from Viewer, m Msg) (Stroke, bool) {
+	l, ok := ReadStroke(m)
+	if !ok || len(l.Points) < 2 || w.points+len(l.Points) > graffitiMaxTotal {
+		return Stroke{}, false
+	}
+	n, more := m.Int("n", 1, 1<<30)
+	if w.open == nil {
+		w.open = map[int][2]int{}
+	}
+	if o, ok := w.open[from.ID]; more && ok && o[0] == n && w.has(o[1]) {
+		l.ID = o[1]
+	} else {
+		w.next++
+		l.ID = w.next
+		if more {
+			w.open[from.ID] = [2]int{n, l.ID}
+		}
+	}
+	l.owner = from.ID
+	w.lines = append(w.lines, l)
+	w.points += len(l.Points)
+	return l, true
+}
+
+func (w *wall) has(id int) bool {
+	return slices.ContainsFunc(w.lines, func(l Stroke) bool { return l.ID == id })
+}
+
+// remove takes out every piece of these lines
+func (w *wall) remove(ids []int) {
+	w.lines = slices.DeleteFunc(w.lines, func(l Stroke) bool { return slices.Contains(ids, l.ID) })
+	w.points = 0
+	for _, l := range w.lines {
+		w.points += len(l.Points)
+	}
+}
+
+// eraserSize: how near the eraser's middle a line is rubbed out, in the picture's
+// height (a fat pen's width), plus the line's own half width
+const eraserSize = 12.0 / 720
+
+// erase rubs out every line the eraser's path touches, and says which
+func (w *wall) erase(m Msg) []int {
+	path, ok := readPoints(m)
+	if !ok {
+		return nil
+	}
+	const aspect = 16.0 / 9                            // a step across is longer than one down
+	near := func(p, a, b [2]float64, r float64) bool { // p within r of the segment a-b
+		px, py, ax, ay, bx, by := p[0]*aspect, p[1], a[0]*aspect, a[1], b[0]*aspect, b[1]
+		dx, dy := bx-ax, by-ay
+		t := 0.0
+		if d := dx*dx + dy*dy; d > 0 {
+			t = min(max(((px-ax)*dx+(py-ay)*dy)/d, 0), 1)
+		}
+		ex, ey := ax+t*dx-px, ay+t*dy-py
+		return ex*ex+ey*ey <= r*r
+	}
+	lo, hi := path[0], path[0]
+	for _, p := range path {
+		lo = [2]float64{min(lo[0], p[0]), min(lo[1], p[1])}
+		hi = [2]float64{max(hi[0], p[0]), max(hi[1], p[1])}
+	}
+	var gone []int
+	for _, l := range w.lines {
+		if slices.Contains(gone, l.ID) {
+			continue
+		}
+		r := eraserSize + graffitiPens[l.Width]/720/2
+		touched := false
+		for i, p := range l.Points {
+			a := l.Points[max(i-1, 0)]
+			if max(a[0], p[0]) < lo[0]-r || min(a[0], p[0]) > hi[0]+r || max(a[1], p[1]) < lo[1]-r || min(a[1], p[1]) > hi[1]+r {
+				continue // nowhere near (r in heights is more than enough across)
+			}
+			for j, e := range path {
+				if near(e, a, p, r) || near(p, path[max(j-1, 0)], e, r) {
+					touched = true
+					break
+				}
+			}
+			if touched {
+				break
+			}
+		}
+		if touched {
+			gone = append(gone, l.ID)
+		}
+	}
+	w.remove(gone)
+	return gone
+}
+
+// undo takes back this viewer's last line still on the wall
+func (w *wall) undo(from Viewer) []int {
+	for i := len(w.lines) - 1; i >= 0; i-- {
+		if l := w.lines[i]; l.owner == from.ID && from.ID != 0 {
+			w.remove([]int{l.ID})
+			return []int{l.ID}
+		}
+	}
+	return nil
+}
+
+func (w *wall) clear() { w.lines, w.points, w.open = nil, 0, nil }
+
+// view: the lines as the page draws them
+func (w *wall) view() []Stroke {
+	if w.lines == nil {
+		return []Stroke{}
+	}
+	return w.lines
 }
 
 type graffiti struct {
 	Base
-	lines  []Stroke
-	points int
-	begun  time.Time // when the first line went on this page; zero while it's clean
-	by     []string  // who drew on it
+	wall
+	begun time.Time // when the first line went on this page; zero while it's clean
+	by    []string  // who drew on it
 }
 
-func (g *graffiti) View(Viewer) any {
-	lines := g.lines
-	if lines == nil {
-		lines = []Stroke{}
-	}
-	return map[string]any{"lines": lines}
-}
+func (g *graffiti) View(Viewer) any { return map[string]any{"lines": g.view()} }
 
 func (g *graffiti) Message(r *Room, from Viewer, m Msg) {
-	if m.Kind() != "line" {
+	switch m.Kind() {
+	case "line":
+		if l, ok := g.draw(from, m); ok {
+			if g.begun.IsZero() {
+				g.begun = time.Now()
+			}
+			if from.Name != "" && !slices.Contains(g.by, from.Name) {
+				g.by = append(g.by, from.Name)
+			}
+			r.All(Msg{"kind": "line", "line": l})
+		}
+	case "erase":
+		g.gone(r, g.erase(m))
+	case "undo":
+		g.gone(r, g.undo(from))
+	case "clear":
+		if len(g.lines) == 0 {
+			return
+		}
+		g.clear()
+		g.begun, g.by = time.Time{}, nil
+		r.All(Msg{"kind": "clear"})
+		if r.Movie != nil {
+			name := from.Name
+			if name == "" {
+				name = "Someone"
+			}
+			r.Movie.Say(name+" wiped the graffiti off", 0)
+		}
+	}
+}
+
+// gone: lines rubbed out or taken back; a wall left clean has no page to turn
+func (g *graffiti) gone(r *Room, ids []int) {
+	if len(ids) == 0 {
 		return
 	}
-	if l, ok := ReadStroke(m); ok && g.points+len(l.Points) <= graffitiMaxTotal {
-		g.lines = append(g.lines, l)
-		g.points += len(l.Points)
-		if g.begun.IsZero() {
-			g.begun = time.Now()
-		}
-		if from.Name != "" && !slices.Contains(g.by, from.Name) {
-			g.by = append(g.by, from.Name)
-		}
-		r.All(Msg{"kind": "line", "line": l})
+	if len(g.lines) == 0 {
+		g.begun, g.by = time.Time{}, nil
 	}
+	r.All(Msg{"kind": "erase", "ids": ids})
 }
 
 // Tick turns the page a minute after it was begun
@@ -110,7 +267,8 @@ func (g *graffiti) Tick(r *Room, now time.Time) {
 	}
 	kept.At, kept.Title = pic.At, pic.Title
 	r.Reel.Add(ReelPage{Picture: kept, When: now, By: g.by})
-	g.lines, g.points, g.begun, g.by = nil, 0, time.Time{}, nil
+	g.clear()
+	g.begun, g.by = time.Time{}, nil
 	r.All(Msg{"kind": "turn"})
 	r.Changed()
 }
@@ -149,7 +307,7 @@ type graffitiKept struct {
 	By    []string `json:"by"`
 }
 
-func (g *graffiti) Save() any { return graffitiKept{g.lines, g.by} }
+func (g *graffiti) Save() any { return graffitiKept{g.view(), g.by} }
 
 func (g *graffiti) Load(b []byte) error {
 	var k graffitiKept
@@ -164,6 +322,10 @@ func (g *graffiti) Load(b []byte) error {
 		if g.points+len(l.Points) > graffitiMaxTotal {
 			break
 		}
+		if l.ID == 0 { // kept before lines had IDs: each piece its own
+			l.ID = g.next + 1
+		}
+		g.next = max(g.next, l.ID)
 		g.lines = append(g.lines, l)
 		g.points += len(l.Points)
 	}

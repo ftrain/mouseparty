@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -485,5 +486,163 @@ func TestCall(t *testing.T) {
 	}
 	if _, ok := CallName("../live"); ok || IsCallName("ABCDEF0123456789ABCDEF0123456789") {
 		t.Fatal("a name that isn't one")
+	}
+}
+
+// A line drawn in pieces is one line: the eraser rubs out all of it, undo takes
+// back only your own last one, and clear wipes the wall, chat saying who
+func TestGraffitiErases(t *testing.T) {
+	r, out := testRoom(ann, bob)
+	m := &testMovie{}
+	r.Movie = m
+	g := &graffiti{}
+	pts := func(p ...float64) []any {
+		var out []any
+		for i := 0; i < len(p); i += 2 {
+			out = append(out, []any{p[i], p[i+1]})
+		}
+		return out
+	}
+	line := func(v Viewer, n float64, p ...float64) {
+		g.Message(r, v, Msg{"kind": "line", "n": n, "c": 0.0, "w": 1.0, "p": pts(p...)})
+	}
+	line(ann, 1, 0.1, 0.1, 0.2, 0.1) // Ann's first line, in two pieces
+	line(ann, 1, 0.2, 0.1, 0.3, 0.1)
+	line(bob, 1, 0.1, 0.5, 0.9, 0.5) // Bob's, across the middle
+	line(ann, 2, 0.1, 0.9, 0.2, 0.9) // Ann's second
+	if len(g.lines) != 4 || g.lines[0].ID != g.lines[1].ID || g.lines[1].ID == g.lines[2].ID || g.lines[2].ID == g.lines[3].ID {
+		t.Fatal("the pieces of a line aren't one line:", g.lines)
+	}
+	g.Message(r, ann, Msg{"kind": "erase", "p": pts(0.29, 0.11)}) // the end of Ann's first: all of it goes
+	if len(g.lines) != 2 || g.lines[0].owner != bob.ID {
+		t.Fatal("the eraser didn't take the whole line:", g.lines)
+	}
+	g.Message(r, ann, Msg{"kind": "erase", "p": pts(0.5, 0.7)}) // touches nothing
+	if len(g.lines) != 2 {
+		t.Fatal("the eraser took a line it didn't touch")
+	}
+	g.Message(r, bob, Msg{"kind": "undo"}) // Bob's own, not Ann's later one
+	if len(g.lines) != 1 || g.lines[0].owner != ann.ID {
+		t.Fatal("undo took the wrong line:", g.lines)
+	}
+	g.Message(r, bob, Msg{"kind": "undo"}) // nothing of his left
+	if len(g.lines) != 1 {
+		t.Fatal("undo took someone else's line")
+	}
+	erased := 0
+	for _, s := range *out {
+		if s.msg["kind"] == "erase" {
+			erased++
+		}
+	}
+	if erased != 2 {
+		t.Fatal("pages weren't told of each line gone:", erased)
+	}
+	g.Message(r, bob, Msg{"kind": "clear"})
+	if len(g.lines) != 0 || g.points != 0 || !g.begun.IsZero() || len(m.said) != 1 || !strings.Contains(m.said[0], "Bob wiped") {
+		t.Fatal("clear didn't wipe it, or chat wasn't told:", g.lines, m.said)
+	}
+	line(ann, 3, 0.1, 0.1, 0.2, 0.2)
+	g.Message(r, ann, Msg{"kind": "undo"})
+	if len(g.lines) != 0 || !g.begun.IsZero() {
+		t.Fatal("a wall left clean still has a page to turn")
+	}
+
+	// Sketch: only the artist rubs out
+	s := newSketch(r).(*sketch)
+	s.Message(r, ann, Msg{"kind": "join"})
+	s.Message(r, bob, Msg{"kind": "join"})
+	s.Message(r, ann, Msg{"kind": "start"})
+	artist, other := ann, bob
+	if s.turns.Current() == bob.ID {
+		artist, other = bob, ann
+	}
+	s.Message(r, artist, Msg{"kind": "line", "n": 1.0, "c": 0.0, "w": 1.0, "p": pts(0.1, 0.1, 0.9, 0.9)})
+	s.Message(r, other, Msg{"kind": "erase", "p": pts(0.5, 0.5)})
+	s.Message(r, other, Msg{"kind": "clear"})
+	if len(s.lines) != 1 {
+		t.Fatal("a guesser rubbed out the drawing")
+	}
+	s.Message(r, artist, Msg{"kind": "erase", "p": pts(0.5, 0.5)})
+	if len(s.lines) != 0 {
+		t.Fatal("the artist's eraser didn't work")
+	}
+}
+
+// Games that used to stick: Blanks waits for nobody who's gone and hurries once
+// all have answered; Werewolf's next game leaves out who left; a Spies team down
+// to its spymaster loses; Bingo deals again after its last call, and for another movie
+func TestGamesDontStick(t *testing.T) {
+	r, _ := testRoom(ann, bob, cat)
+	b := newBlanks(r).(*blanks)
+	b.Message(r, ann, Msg{"kind": "answer", "text": "a llama"})
+	b.Message(r, bob, Msg{"kind": "answer", "text": "a goose"})
+	b.Message(r, cat, Msg{"kind": "vote", "i": 0.0}) // Cat's in, with nothing written
+	b.Left(r, cat)
+	if b.phase != "write" || b.timer.Left() > blanksHurry.Seconds() {
+		t.Fatal("still waiting for Cat, who left:", b.timer.Left())
+	}
+	b.Tick(r, later(6*time.Second))
+	b.Message(r, ann, Msg{"kind": "vote", "i": float64(slices.IndexFunc(b.entries, func(e blanksEntry) bool { return e.ID == bob.ID }))})
+	b.Message(r, bob, Msg{"kind": "vote", "i": float64(slices.IndexFunc(b.entries, func(e blanksEntry) bool { return e.ID == ann.ID }))})
+	if b.phase != "vote" || b.timer.Left() > blanksHurry.Seconds() {
+		t.Fatal("everyone voted, and it's not moving on")
+	}
+
+	everyone := []Viewer{ann, bob, cat, dan, eve}
+	here := everyone
+	r = &Room{Rand: rand.New(rand.NewPCG(1, 2)), send: func(int, map[string]any) {}, viewers: func() []Viewer { return here }}
+	w := newWerewolf(r).(*werewolf)
+	for _, v := range everyone {
+		w.Message(r, v, Msg{"kind": "join"})
+	}
+	w.Message(r, ann, Msg{"kind": "start"})
+	here = everyone[:4]
+	w.Left(r, eve)
+	for _, v := range everyone { // the wolves eaten: the village wins
+		w.alive[v.ID] = w.role[v.ID] != "wolf"
+	}
+	w.checkWin()
+	w.Tick(r, later(time.Hour))
+	if w.phase != "lobby" || w.lobby.Players.Has(eve.ID) || w.lobby.timer.Running() {
+		t.Fatal("Eve, who left, is in the next game; or it starts itself:", w.lobby.Players.IDs())
+	}
+
+	r, _ = testRoom(ann, bob, cat, dan)
+	s := newSpies(r).(*spies)
+	for _, v := range []Viewer{ann, bob, cat, dan} {
+		s.Message(r, v, Msg{"kind": "join"})
+	}
+	s.Message(r, ann, Msg{"kind": "start"})
+	var operative Viewer
+	for _, v := range []Viewer{ann, bob, cat, dan} {
+		if s.team[v.ID] == "red" && s.master["red"] != v.ID {
+			operative = v
+		}
+	}
+	s.Left(r, operative)
+	if s.phase != "over" || s.winner != "blue" {
+		t.Fatal("red's spymaster is left with nobody to guess, and the game goes on:", s.phase)
+	}
+
+	m := &testMovie{}
+	r, _ = testRoom(ann)
+	r.Movie = m
+	g := newBingo(r).(*bingo)
+	for i := 1; i <= bingoPool+1 && !g.again.Running(); i++ { // till Ann's card wins, or every word's called
+		g.Tick(r, later(time.Duration(i)*bingoCall))
+	}
+	if !g.again.Running() {
+		t.Fatal("the game's done, and no new one coming")
+	}
+	g.Tick(r, later(bingoNext+time.Second))
+	if g.again.Running() || len(g.said) != 0 || g.cards[ann.ID] == nil {
+		t.Fatal("no new cards")
+	}
+	first := g.cards[ann.ID].Words
+	m.pos = 500 // another thing on (testMovie's key)
+	g.Tick(r, later(0))
+	if g.cards[ann.ID].Words == first {
+		t.Fatal("the same card for another movie")
 	}
 }

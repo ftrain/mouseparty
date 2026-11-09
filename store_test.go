@@ -194,6 +194,42 @@ func TestStartOver(t *testing.T) {
 	}
 }
 
+// Party > Erase All Data: the party file, the download cache and Open House Party's old folder
+// go, and nothing is written again before the app quits
+func TestEraseAll(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	a := NewApp(nil)
+	go a.run()
+	text := a.SettingsText()
+	if msg := a.SetSettingsText(strings.Replace(text, `"countdown": 10`, `"countdown": 4`, 1)); msg != "" {
+		t.Fatal(msg)
+	}
+	a.wait(func() { a.party.Save("graffiti", []byte(`{"lines":[]}`)) })
+	cache, _ := os.UserCacheDir()
+	for _, f := range []string{filepath.Join(downloadsDir(), "abc", "movie.mp4"), filepath.Join(oldDataDir()+" (copied into Mouse Party)", "settings.json"),
+		filepath.Join(dataDir(), "party (locked 2026-01-01).sqlite")} {
+		os.MkdirAll(filepath.Dir(f), 0o755)
+		os.WriteFile(f, []byte("x"), 0o644)
+	}
+	if msg := a.EraseAll(); msg != "" {
+		t.Fatal(msg)
+	}
+	a.shutdown(nil) // what quitting does: saves nothing now
+	for _, dir := range []string{dataDir(), filepath.Join(cache, "Mouse Party"), oldDataDir() + " (copied into Mouse Party)"} {
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Fatal("still there:", dir)
+		}
+	}
+	b := NewApp(nil) // and the next time it opens, it's new
+	go b.run()
+	if b.GetView().Locked || b.cfg.Countdown != 10 {
+		t.Fatal("not as new:", b.cfg.Countdown)
+	}
+	if _, ok := b.party.Load("graffiti"); ok {
+		t.Fatal("an app's keeping survived")
+	}
+}
+
 // Party > Settings…: the settings as text, edited, taken back; text that won't read changes nothing
 func TestSettingsText(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())

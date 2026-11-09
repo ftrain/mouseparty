@@ -50,7 +50,13 @@ const poll: Start<View, never, Out> = (ctx, view) => {
                 h('div', {}, q),
                 opts.map((o) => h('div', {}, o)),
                 L.button('Ask', () => {
-                    kit.send({ kind: 'ask', question: q.value, options: opts.map((o) => o.value) });
+                    const answers = opts.map((o) => o.value).filter((a) => a.trim());
+                    if (!q.value.trim() || answers.length < 2) {
+                        kit.note(q.value.trim() ? 'Two answers at least, to choose between.' : 'Ask a question first.');
+                        (q.value.trim() ? opts.find((o) => !o.value.trim())! : q).focus();
+                        return; // the host would turn it down: what's typed stays
+                    }
+                    kit.send({ kind: 'ask', question: q.value, options: answers });
                     [q, ...opts].forEach((el) => {
                         el.value = '';
                     });

@@ -12,7 +12,8 @@ const (
 	blanksWrite   = 60 * time.Second
 	blanksVote    = 30 * time.Second
 	blanksResults = 10 * time.Second
-	blanksMax     = 80 // characters in an answer
+	blanksMax     = 80              // characters in an answer
+	blanksHurry   = 5 * time.Second // once everyone's answered, or voted
 )
 
 var blanksPrompts = []string{
@@ -98,13 +99,43 @@ func (b *blanks) Message(r *Room, from Viewer, m Msg) {
 	case m.Kind() == "answer" && b.phase == "write":
 		if a := m.Str("text", blanksMax); a != "" {
 			b.answers[from.ID] = a
+			b.hurry()
 			r.Changed()
 		}
 	case m.Kind() == "vote" && b.phase == "vote":
 		if i, ok := m.Int("i", 0, len(b.entries)-1); ok && b.vote.Cast(from.ID, i) {
+			b.hurry()
 			r.Changed()
 		}
 	}
+}
+
+// hurry: everyone playing has answered (two at least, or one alone), or voted: on in a moment
+func (b *blanks) hurry() {
+	done := 0
+	for _, id := range b.players.IDs() {
+		if (b.phase == "write" && b.answers[id] != "") || (b.phase == "vote" && b.vote.Voted(id)) {
+			done++
+		}
+	}
+	if done == b.players.Len() && (b.phase == "vote" || done >= 2 || b.players.Len() == 1) {
+		b.timer.Hurry(blanksHurry)
+	}
+}
+
+// Left: one who's gone isn't waited for, and their answer goes if the vote hasn't begun
+// (their score goes with them)
+func (b *blanks) Left(r *Room, v Viewer) {
+	if !b.players.Remove(v.ID) {
+		return
+	}
+	if b.phase == "write" {
+		delete(b.answers, v.ID)
+	}
+	if b.players.Len() > 0 {
+		b.hurry()
+	}
+	r.Changed()
 }
 
 func (b *blanks) Tick(r *Room, now time.Time) {

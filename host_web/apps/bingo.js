@@ -1,5 +1,5 @@
 // Built from web/viewer/apps/bingo.ts by `npm run build` (vite.config.ts): change it there.
-import { confetti, h, mount } from "./lib.js";
+import { confetti, h, mount, timer } from "./lib.js";
 const bingo = (ctx, view) => {
 	const m = mount(ctx, "cover", (v, kit) => [
 		h("h2", {}, "Bingo"),
@@ -8,7 +8,7 @@ const bingo = (ctx, view) => {
 			style: "grid-template-columns:repeat(5,minmax(0,5.5em));grid-auto-rows:3.4em;font-size:0.85em"
 		}, v.card.map((w, i) => h("div", { class: v.marked[i] ? "cell lit" : "cell" }, w || "★"))) : h("p", {}, L_wait(kit)),
 		v.won ? h("p", { style: "font-size:1.6em" }, h("b", {}, "BINGO! 🎉")) : null,
-		h("p", { class: "muted" }, v.movie ? "Words fill in as they're said." : "Words are called every few seconds."),
+		v.again ? h("p", {}, "New cards in ", timer(v.again)) : h("p", { class: "muted" }, v.movie ? "Words fill in as they're said." : "Words are called every few seconds."),
 		v.recent && v.recent.length ? h("p", {}, "Heard: ", v.recent.join(", ")) : null,
 		v.winners && v.winners.length ? h("p", {}, "Bingo: ", v.winners.join(", ")) : null
 	]);
@@ -20,7 +20,7 @@ const bingo = (ctx, view) => {
 	return {
 		view: m.draw,
 		message(e) {
-			if (e.kind !== "bingo") return;
+			if (e.kind === "deal") return m.kit.note("New cards!");
 			m.kit.note(`${e.name} has BINGO!`);
 			confetti(ctx, e.name === ctx.me().name ? 140 : 50);
 		}

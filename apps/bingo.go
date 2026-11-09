@@ -3,7 +3,8 @@ package apps
 // Bingo plays itself along with the movie: each page gets a card of words from
 // the movie's own subtitles, and a square fills in when its word is said. Five in
 // a row (or column, or diagonal) wins. With no subtitles to listen to, the host
-// calls a word every so often instead, from the everyday words.
+// calls a word every so often instead, from the everyday words. Another movie on,
+// or every word called, or every card won: new cards for everyone.
 
 import (
 	"slices"
@@ -12,8 +13,9 @@ import (
 )
 
 const (
-	bingoCall = 8 * time.Second // between called words, when there are no subtitles
-	bingoPool = 50              // words called from, then
+	bingoCall = 8 * time.Second  // between called words, when there are no subtitles
+	bingoPool = 50               // words called from, then
+	bingoNext = 20 * time.Second // after the last call, or the last card won, new cards
 )
 
 // Words too common to be worth a square
@@ -46,11 +48,21 @@ type bingo struct {
 	cards     map[int]*bingoCard
 	winners   []string
 	call      Timer
+	playing   string // the key of what was on when the cards were dealt
+	again     Timer  // running: this game is done, new cards when it's up
 }
 
 func newBingo(r *Room) Activity {
-	b := &bingo{said: map[string]bool{}, cards: map[int]*bingoCard{}, heard: -1}
+	b := &bingo{}
+	b.deal(r)
+	return b
+}
+
+// deal: a new game, from what's on now (everyone's card dealt again as they ask)
+func (b *bingo) deal(r *Room) {
+	*b = bingo{said: map[string]bool{}, cards: map[int]*bingoCard{}, heard: -1}
 	if r.Movie != nil {
+		b.playing = r.Movie.Playing().Key
 		b.lines = r.Movie.Lines()
 		from, _ := r.Movie.Position()
 		seen := map[string]bool{}
@@ -73,7 +85,9 @@ func newBingo(r *Room) Activity {
 		b.pool = b.pool[:bingoPool] // called in this order
 		b.call.Set(bingoCall)
 	}
-	return b
+	for _, v := range r.Viewers() {
+		b.card(r, v.ID)
+	}
 }
 
 func (b *bingo) card(r *Room, id int) *bingoCard {
@@ -91,7 +105,7 @@ func (b *bingo) card(r *Room, id int) *bingoCard {
 
 func (b *bingo) View(v Viewer) any {
 	c := b.cards[v.ID]
-	view := map[string]any{"movie": b.fromMovie, "recent": b.recent, "winners": b.winners, "next": b.call.Left()}
+	view := map[string]any{"movie": b.fromMovie, "recent": b.recent, "winners": b.winners, "next": b.call.Left(), "again": b.again.Left()}
 	if c != nil {
 		marked := [25]bool{}
 		for i, w := range c.Words {
@@ -116,6 +130,12 @@ func (b *bingo) Message(r *Room, from Viewer, m Msg) {
 }
 
 func (b *bingo) Tick(r *Room, now time.Time) {
+	if b.again.Done(now) || (r.Movie != nil && r.Movie.Playing().Key != b.playing) {
+		b.deal(r)
+		r.All(Msg{"kind": "deal"})
+		r.Changed()
+		return
+	}
 	var heard []string
 	if b.fromMovie {
 		pos, ok := r.Movie.Position()
@@ -141,6 +161,10 @@ func (b *bingo) Tick(r *Room, now time.Time) {
 				heard = append(heard, w)
 				break
 			}
+		}
+		if len(heard) == 0 && !b.again.Running() { // every word called
+			b.call.Clear()
+			b.again.Set(bingoNext)
 		}
 		r.Changed()
 	}
@@ -188,5 +212,13 @@ func (b *bingo) checkWins(r *Room) {
 				break
 			}
 		}
+	}
+	all := len(b.cards) > 0
+	for _, c := range b.cards {
+		all = all && c.Won
+	}
+	if all && !b.again.Running() { // everyone has bingo
+		b.call.Clear()
+		b.again.Set(bingoNext)
 	}
 }

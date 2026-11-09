@@ -251,22 +251,47 @@ export const lobby = (lb: Lobby, kit: Kit<LobbyMsg>, title: string, rules: strin
 // land in the same place for everyone. Strokes go to the host in pieces.
 export const COLORS = ['#ff3b30', '#ffcc00', '#34c759', '#0a84ff', '#ffffff', '#000000'];
 const WIDTHS = [3, 8, 20]; // in a 720-line picture; scaled with it
+const ERASER_SIZE = 12; // how far from its middle the eraser reaches, the same (apps/graffiti.go eraserSize)
 
-// a line (apps/graffiti.go Stroke): its colour and width by number, its points
+// a line (apps/graffiti.go Stroke): its colour and width by number, its points;
+// the host numbers each line (i), every piece of it the same
 export interface Stroke {
+    i?: number;
     c: number;
     w: number;
     p: [number, number][];
 }
-export type StrokeMsg = { kind: 'line' } & Stroke;
+// what a drawing pad sends: a piece of a line (n: this page's number for the line),
+// the eraser's path, take back my last line, wipe it all
+export type StrokeMsg = ({ kind: 'line'; n: number } & Stroke) | { kind: 'erase'; p: [number, number][] } | { kind: 'undo' } | { kind: 'clear' };
+// and what the host says back besides a line: these lines are gone, or all of them are
+export type WallEvent = { kind: 'line'; line: Stroke } | { kind: 'erase'; ids: number[] } | { kind: 'clear' };
 
-export const sketch = (ctx: Ctx<StrokeMsg>, lines: Stroke[], opts: { color?: number; paper?: boolean; canDraw?: () => boolean; clear?: () => void } = {}) => {
+// the eraser's mark under the pointer: a ring the size of what it rubs out
+const ERASER = (px: number) => {
+    const r = Math.max(6, Math.round(px)),
+        d = r * 2 + 2;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${d}" height="${d}"><circle cx="${r + 1}" cy="${r + 1}" r="${r}" fill="rgba(255,255,255,0.25)" stroke="#000" stroke-width="1"/></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${r + 1} ${r + 1}, crosshair`;
+};
+
+// sketch: a pad over the picture. Every tool is for whoever canDraw: the pens, the eraser
+// (rubs out any line it touches), undo (your own last line) and clear, which with
+// askFirst wants a second press within a few seconds (Graffiti: the wall is everyone's)
+export const sketch = (ctx: Ctx<StrokeMsg>, lines: Stroke[], opts: { color?: number; paper?: boolean; canDraw?: () => boolean; askFirst?: boolean } = {}) => {
     const canvas = h('canvas');
     const bar = h('div', { class: 'ty tl', style: 'display:flex;gap:0.15em;padding:0.3em;flex-wrap:wrap;align-items:center' });
     let color = opts.color ?? Math.floor(Math.random() * 4),
-        width = 1;
+        width = 1,
+        erasing = false;
     const pick = (group: string, el: EventTarget | null) => {
         for (const b of bar.querySelectorAll(`[data-g="${group}"]`)) b.classList.toggle('on', b === el);
+    };
+    const eraser = h('button', { 'data-g': 'c', title: 'Eraser: rub out a line', 'aria-label': 'Eraser', on: { click: () => tool(true, eraser) } }, 'eraser');
+    const tool = (rub: boolean, el: EventTarget | null) => {
+        erasing = rub;
+        pick('c', el);
+        canvas.style.cursor = rub ? ERASER((ERASER_SIZE * box.h) / 720) : '';
     };
     COLORS.forEach((c, i) =>
         bar.append(
@@ -274,10 +299,11 @@ export const sketch = (ctx: Ctx<StrokeMsg>, lines: Stroke[], opts: { color?: num
                 'data-g': 'c',
                 class: i === color ? 'on' : '',
                 style: `background:${c};width:1.6em;height:1.6em;padding:0`,
+                'aria-label': `Pen colour ${i + 1}`,
                 on: {
                     click: (e) => {
                         color = i;
-                        pick('c', e.currentTarget);
+                        tool(false, e.currentTarget);
                     },
                 },
             }),
@@ -301,7 +327,27 @@ export const sketch = (ctx: Ctx<StrokeMsg>, lines: Stroke[], opts: { color?: num
             ),
         ),
     );
-    if (opts.clear) bar.append(button('clear', opts.clear));
+    let asking: ReturnType<typeof setTimeout> | undefined;
+    const wipe: HTMLButtonElement = button('clear', () => {
+        if (opts.askFirst && !asking) {
+            wipe.textContent = 'clear all?';
+            wipe.classList.add('on');
+            asking = setTimeout(unask, 3000);
+            return;
+        }
+        unask();
+        ctx.send({ kind: 'clear' });
+    }) as HTMLButtonElement;
+    const unask = () => {
+        clearTimeout(asking);
+        asking = undefined;
+        wipe.textContent = 'clear';
+        wipe.classList.remove('on');
+    };
+    wipe.title = opts.askFirst ? 'Wipe everything off, for everyone' : 'Start again';
+    const undo = button('undo', () => ctx.send({ kind: 'undo' }));
+    (undo as HTMLElement).title = 'Take back your last line';
+    bar.append(eraser, undo, wipe);
     ctx.layer.append(canvas, bar);
     const g = canvas.getContext('2d')!;
     let box = ctx.videoBox(),
@@ -332,6 +378,8 @@ export const sketch = (ctx: Ctx<StrokeMsg>, lines: Stroke[], opts: { color?: num
     };
 
     let pending: [number, number][] | null = null,
+        rubbing = false, // this stroke is the eraser's
+        n = 0, // this page's number for the line being drawn
         timer: ReturnType<typeof setInterval> | undefined;
     const at = (e: PointerEvent): [number, number] => {
         const r = canvas.getBoundingClientRect();
@@ -339,8 +387,11 @@ export const sketch = (ctx: Ctx<StrokeMsg>, lines: Stroke[], opts: { color?: num
         return [clamp((e.clientX - r.left - box.x) / box.w), clamp((e.clientY - r.top - box.y) / box.h)];
     };
     const flush = () => {
-        if (pending && pending.length > 1) {
-            ctx.send({ kind: 'line', c: color, w: width, p: pending });
+        if (pending && rubbing && pending.length > 0) {
+            ctx.send({ kind: 'erase', p: pending });
+            pending = [pending[pending.length - 1]];
+        } else if (pending && pending.length > 1) {
+            ctx.send({ kind: 'line', n, c: color, w: width, p: pending });
             pending = [pending[pending.length - 1]];
         }
     };
@@ -349,12 +400,14 @@ export const sketch = (ctx: Ctx<StrokeMsg>, lines: Stroke[], opts: { color?: num
         if (!can()) return;
         canvas.setPointerCapture(e.pointerId);
         pending = [at(e)];
+        rubbing = erasing;
+        n++;
         timer = setInterval(flush, 60);
     };
     canvas.onpointermove = (e) => {
         if (!pending) return;
         const p = at(e);
-        draw({ c: color, w: width, p: [pending[pending.length - 1], p] });
+        if (!rubbing) draw({ c: color, w: width, p: [pending[pending.length - 1], p] });
         pending.push(p);
         if (pending.length >= 60) flush();
     };
@@ -371,13 +424,28 @@ export const sketch = (ctx: Ctx<StrokeMsg>, lines: Stroke[], opts: { color?: num
             all.push(l);
             draw(l);
         },
+        // remove: these lines rubbed out or taken back
+        remove(ids: number[]) {
+            all = all.filter((l) => !ids.includes(l.i!));
+            resize();
+        },
         clear() {
             all = [];
             resize();
         },
+        // event: what the host said of the lines (WallEvent); true if it was one
+        event(e: { kind: string }) {
+            const w = e as WallEvent;
+            if (w.kind === 'line') this.line(w.line);
+            else if (w.kind === 'erase') this.remove(w.ids);
+            else if (w.kind === 'clear') this.clear();
+            else return false;
+            return true;
+        },
         resize,
         stop() {
             clearInterval(timer);
+            clearTimeout(asking);
         },
         showTools(on: boolean) {
             bar.style.display = on ? 'flex' : 'none';

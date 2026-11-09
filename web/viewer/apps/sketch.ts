@@ -18,12 +18,12 @@ interface View {
     left: number;
     playing: boolean;
 }
-type Event = { kind: 'line'; line: L.Stroke } | { kind: 'clear' };
-type Out = L.LobbyMsg | L.StrokeMsg | { kind: 'clear' } | { kind: 'guess'; guess: string };
+type Event = L.WallEvent;
+type Out = L.LobbyMsg | L.StrokeMsg | { kind: 'guess'; guess: string };
 
 const sketch: Start<View, Event, Out> = (ctx, view) => {
     let v = view;
-    const pad = L.sketch(ctx, view.lines || [], { paper: true, canDraw: () => v.drawing && v.phase === 'draw', clear: () => ctx.send({ kind: 'clear' }), color: 5 });
+    const pad = L.sketch(ctx, view.lines || [], { paper: true, canDraw: () => v.drawing && v.phase === 'draw', color: 5 });
     const lobby = L.mount<View, Out>(ctx, 'cover', (v, kit) =>
         v.phase === 'lobby'
             ? L.lobby(v.lobby, kit, 'Sketch', 'Take turns drawing a word while everyone else guesses it. Sooner is more points; the artist scores for each right guess.')
@@ -55,10 +55,7 @@ const sketch: Start<View, Event, Out> = (ctx, view) => {
     show(view);
     return {
         view: show,
-        message(e) {
-            if (e.kind === 'line') pad.line(e.line);
-            else if (e.kind === 'clear') pad.clear();
-        },
+        message: pad.event.bind(pad),
         resize: pad.resize,
         stop: pad.stop,
     };

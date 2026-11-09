@@ -165,10 +165,13 @@ func (w *werewolf) Message(r *Room, from Viewer, m Msg) {
 	case m.Kind() == "kill" && w.phase == "night" && w.role[from.ID] == "wolf":
 		w.vote.Cast(from.ID, target)
 	case m.Kind() == "see" && w.phase == "night" && w.role[from.ID] == "seer" && w.seeing == 0:
-		if target < len(w.cands) {
+		if target < len(w.cands) && w.cands[target] != from.ID { // they know what they are
 			w.seeing = w.cands[target]
 		}
 	case m.Kind() == "exile" && w.phase == "day":
+		if target < len(w.cands) && w.cands[target] == from.ID {
+			return // not themselves: nobody is the last choice
+		}
 		w.vote.Cast(from.ID, target)
 	default:
 		return
@@ -192,7 +195,7 @@ func (w *werewolf) Tick(r *Room, now time.Time) {
 		r.Changed()
 	case w.phase == "over":
 		w.phase = "lobby"
-		w.lobby.Reopen()
+		w.lobby.Reopen(r)
 		r.Changed()
 	}
 }

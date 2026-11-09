@@ -170,23 +170,41 @@ const WIDTHS = [
 	8,
 	20
 ];
+const ERASER_SIZE = 12;
+const ERASER = (px) => {
+	const r = Math.max(6, Math.round(px)), d = r * 2 + 2;
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${d}" height="${d}"><circle cx="${r + 1}" cy="${r + 1}" r="${r}" fill="rgba(255,255,255,0.25)" stroke="#000" stroke-width="1"/></svg>`;
+	return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${r + 1} ${r + 1}, crosshair`;
+};
 const sketch = (ctx, lines, opts = {}) => {
 	const canvas = h("canvas");
 	const bar = h("div", {
 		class: "ty tl",
 		style: "display:flex;gap:0.15em;padding:0.3em;flex-wrap:wrap;align-items:center"
 	});
-	let color = opts.color ?? Math.floor(Math.random() * 4), width = 1;
+	let color = opts.color ?? Math.floor(Math.random() * 4), width = 1, erasing = false;
 	const pick = (group, el) => {
 		for (const b of bar.querySelectorAll(`[data-g="${group}"]`)) b.classList.toggle("on", b === el);
+	};
+	const eraser = h("button", {
+		"data-g": "c",
+		title: "Eraser: rub out a line",
+		"aria-label": "Eraser",
+		on: { click: () => tool(true, eraser) }
+	}, "eraser");
+	const tool = (rub, el) => {
+		erasing = rub;
+		pick("c", el);
+		canvas.style.cursor = rub ? ERASER(ERASER_SIZE * box.h / 720) : "";
 	};
 	COLORS.forEach((c, i) => bar.append(h("button", {
 		"data-g": "c",
 		class: i === color ? "on" : "",
 		style: `background:${c};width:1.6em;height:1.6em;padding:0`,
+		"aria-label": `Pen colour ${i + 1}`,
 		on: { click: (e) => {
 			color = i;
-			pick("c", e.currentTarget);
+			tool(false, e.currentTarget);
 		} }
 	})));
 	[
@@ -201,7 +219,27 @@ const sketch = (ctx, lines, opts = {}) => {
 			pick("w", e.currentTarget);
 		} }
 	}, w)));
-	if (opts.clear) bar.append(button("clear", opts.clear));
+	let asking;
+	const wipe = button("clear", () => {
+		if (opts.askFirst && !asking) {
+			wipe.textContent = "clear all?";
+			wipe.classList.add("on");
+			asking = setTimeout(unask, 3e3);
+			return;
+		}
+		unask();
+		ctx.send({ kind: "clear" });
+	});
+	const unask = () => {
+		clearTimeout(asking);
+		asking = void 0;
+		wipe.textContent = "clear";
+		wipe.classList.remove("on");
+	};
+	wipe.title = opts.askFirst ? "Wipe everything off, for everyone" : "Start again";
+	const undo = button("undo", () => ctx.send({ kind: "undo" }));
+	undo.title = "Take back your last line";
+	bar.append(eraser, undo, wipe);
 	ctx.layer.append(canvas, bar);
 	const g = canvas.getContext("2d");
 	let box = ctx.videoBox(), all = lines.slice();
@@ -227,16 +265,23 @@ const sketch = (ctx, lines, opts = {}) => {
 		}
 		all.forEach(draw);
 	};
-	let pending = null, timer;
+	let pending = null, rubbing = false, n = 0, timer;
 	const at = (e) => {
 		const r = canvas.getBoundingClientRect();
 		const clamp = (v) => Math.round(Math.min(Math.max(v, 0), 1) * 1e4) / 1e4;
 		return [clamp((e.clientX - r.left - box.x) / box.w), clamp((e.clientY - r.top - box.y) / box.h)];
 	};
 	const flush = () => {
-		if (pending && pending.length > 1) {
+		if (pending && rubbing && pending.length > 0) {
+			ctx.send({
+				kind: "erase",
+				p: pending
+			});
+			pending = [pending[pending.length - 1]];
+		} else if (pending && pending.length > 1) {
 			ctx.send({
 				kind: "line",
+				n,
 				c: color,
 				w: width,
 				p: pending
@@ -249,12 +294,14 @@ const sketch = (ctx, lines, opts = {}) => {
 		if (!can()) return;
 		canvas.setPointerCapture(e.pointerId);
 		pending = [at(e)];
+		rubbing = erasing;
+		n++;
 		timer = setInterval(flush, 60);
 	};
 	canvas.onpointermove = (e) => {
 		if (!pending) return;
 		const p = at(e);
-		draw({
+		if (!rubbing) draw({
 			c: color,
 			w: width,
 			p: [pending[pending.length - 1], p]
@@ -275,13 +322,26 @@ const sketch = (ctx, lines, opts = {}) => {
 			all.push(l);
 			draw(l);
 		},
+		remove(ids) {
+			all = all.filter((l) => !ids.includes(l.i));
+			resize();
+		},
 		clear() {
 			all = [];
 			resize();
 		},
+		event(e) {
+			const w = e;
+			if (w.kind === "line") this.line(w.line);
+			else if (w.kind === "erase") this.remove(w.ids);
+			else if (w.kind === "clear") this.clear();
+			else return false;
+			return true;
+		},
 		resize,
 		stop() {
 			clearInterval(timer);
+			clearTimeout(asking);
 		},
 		showTools(on) {
 			bar.style.display = on ? "flex" : "none";

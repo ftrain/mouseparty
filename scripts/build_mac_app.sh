@@ -18,7 +18,7 @@
 # file), NOTARY_KEY_ID and NOTARY_ISSUER. Signed, the app has the hardened runtime, with
 # packaging/darwin/entitlements.plist.
 # Output: dist/Mouse Party.app and dist/MouseParty-macos-arm64.dmg, the one file a release
-# has (the app and a link to Applications to drag it to; updates download it too, checked by
+# has (the app and a link to Applications to drag it to, shown big: packaging/dmg/DS_Store; updates download it too, checked by
 # the SHA-256 GitHub gives each file). DIST=<dir> puts them elsewhere; NO_DMG=1 makes no disk image.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -136,6 +136,7 @@ if [ -z "${NO_DMG:-}" ]; then
     STAGE=$(mktemp -d)
     ditto "$APP" "$STAGE/$APP_NAME.app"
     ln -s /Applications "$STAGE/Applications"
+    cp packaging/dmg/DS_Store "$STAGE/.DS_Store"   # its window: big icons, the app beside Applications (scripts/make_dmg_layout.sh)
     hdiutil create -quiet -volname "$APP_NAME" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG"
     rm -rf "$STAGE"
     if [ -n "${SIGN_IDENTITY:-}" ]; then

@@ -76,7 +76,7 @@ Besides those, the app moves on its own (the link made, a countdown over, a movi
 | `SetPrefs` | Party > Settings (⌘,): a setting changed in the Settings window, kept at once (off the app's goroutine: no immediate state) | every state |
 | `AddURL` | Party > Add Download Link: a row downloading from a link (off the app's goroutine: no immediate state) | every state |
 
-Not walked: `CacheText`, a question: what the download cache holds; `CheckForUpdates`, updates (updates_test.go): looked for, downloaded, checked and put in, from a stand-in GitHub; `ClearCache`, the download cache (download_test.go): every download deleted, and its row; `GetView`, a question, not a command: every step reads the view; `LogText`, a question: Help > Show Log; `LoginFor`, a question: the login the Add Download Link sheet fills in (download_test.go); `Prefs`, a question: SetPrefs is walked; `RemoveAccount`, the Settings window's accounts (prefs_test.go); `RestartToUpdate`, updates (updates_test.go): it quits the app, so it isn't walked; `SaveAccount`, the Settings window's accounts (prefs_test.go); `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz; `Welcome`, a question, asked once at load (the browser walk answers it).
+Not walked: `CacheText`, a question: what the download cache holds; `CheckForUpdates`, updates (updates_test.go): looked for, downloaded, checked and put in, from a stand-in GitHub; `ClearCache`, the download cache (download_test.go): every download deleted, and its row; `EraseAll`, Party > Erase All Data (store_test.go): it quits the app, so it isn't walked; `GetView`, a question, not a command: every step reads the view; `LogText`, a question: Help > Show Log; `LoginFor`, a question: the login the Add Download Link sheet fills in (download_test.go); `Prefs`, a question: SetPrefs is walked; `RemoveAccount`, the Settings window's accounts (prefs_test.go); `RestartToUpdate`, updates (updates_test.go): it quits the app, so it isn't walked; `SaveAccount`, the Settings window's accounts (prefs_test.go); `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz; `Welcome`, a question, asked once at load (the browser walk answers it).
 
 ## A viewer's page, on its socket
 
@@ -99,7 +99,10 @@ What a page sends each app, as `{"type": "app", "id", "kind", ...}`.
 
 | App | Kind | Fields |
 |---|---|---|
-| Graffiti | `line` | `c` (int), `w` (int), `p` (points) |
+| Graffiti | `line` | `n` (int), `c` (int), `w` (int), `p` (points) |
+|  | `erase` | `p` (points) |
+|  | `undo` |  |
+|  | `clear` |  |
 | Stickies | `add` | `text` (str), `c` (int), `x` (num), `y` (num), `at` (num), `page` (int) |
 |  | `move` | `sid` (int), `x` (num), `y` (num) |
 |  | `color` | `sid` (int), `c` (int) |
@@ -118,9 +121,11 @@ What a page sends each app, as `{"type": "app", "id", "kind", ...}`.
 |  | `leave` |  |
 |  | `start` |  |
 | Anagrams | `guess` | `guess` (str) |
-| Sketch | `line` | `c` (int), `w` (int), `p` (points) |
+| Sketch | `guess` | `guess` (str) |
+|  | `line` | `n` (int), `c` (int), `w` (int), `p` (points) |
+|  | `erase` | `p` (points) |
+|  | `undo` |  |
 |  | `clear` |  |
-|  | `guess` | `guess` (str) |
 |  | `join` |  |
 |  | `leave` |  |
 |  | `start` |  |

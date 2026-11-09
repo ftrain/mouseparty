@@ -69,7 +69,20 @@ const spies: Start<View, Event, Out> = (ctx, view) => {
                           'Your clue: ',
                           L.field(kit, 'clue', 'one word', { size: 14 }),
                           L.field(kit, 'n', 'how many', { size: 6, max: 1 }),
-                          L.button('Give', () => kit.send({ kind: 'clue', word: kit.keep('clue').value, n: Number(kit.keep('n').value) || 0 })),
+                          L.button('Give', () => {
+                              // a number of cards, 0 for as many as you like; nothing typed isn't 0
+                              const clue = kit.keep('clue'),
+                                  n = kit.keep('n'),
+                                  num = n.value.trim();
+                              if (!/^[0-9]$/.test(num)) {
+                                  n.value = '';
+                                  n.placeholder = '1 to 9';
+                                  n.focus();
+                                  return;
+                              }
+                              kit.send({ kind: 'clue', word: clue.value, n: Number(num) });
+                              clue.value = n.value = '';
+                          }),
                           ' ',
                           L.timer(v.left),
                       )

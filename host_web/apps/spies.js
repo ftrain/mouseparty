@@ -29,11 +29,21 @@ const spies = (ctx, view) => {
 		else if (v.phase === "clue") status = v.master && v.team === v.turn ? h("p", {}, "Your clue: ", field(kit, "clue", "one word", { size: 14 }), field(kit, "n", "how many", {
 			size: 6,
 			max: 1
-		}), button("Give", () => kit.send({
-			kind: "clue",
-			word: kit.keep("clue").value,
-			n: Number(kit.keep("n").value) || 0
-		})), " ", timer(v.left)) : h("p", {}, `${v.turn.toUpperCase()}'s spymaster is thinking… `, timer(v.left));
+		}), button("Give", () => {
+			const clue = kit.keep("clue"), n = kit.keep("n"), num = n.value.trim();
+			if (!/^[0-9]$/.test(num)) {
+				n.value = "";
+				n.placeholder = "1 to 9";
+				n.focus();
+				return;
+			}
+			kit.send({
+				kind: "clue",
+				word: clue.value,
+				n: Number(num)
+			});
+			clue.value = n.value = "";
+		}), " ", timer(v.left)) : h("p", {}, `${v.turn.toUpperCase()}'s spymaster is thinking… `, timer(v.left));
 		else status = h("p", {}, `${v.turn.toUpperCase()}: `, h("b", {}, `${v.clue.toUpperCase()} ${v.number}`), ` · ${v.guesses} guesses left · `, timer(v.left), " ", myGo ? button("End turn", () => kit.send({ kind: "pass" })) : null);
 		return [
 			h("h2", {}, "Spies", v.team ? ` — you're ${v.team.toUpperCase()}${v.master ? ", spymaster" : ""}` : " — watching"),

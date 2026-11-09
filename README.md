@@ -67,14 +67,14 @@ with the picture, under the other windows.
 
 | | |
 |---|---|
-| **Graffiti** | everyone draws on the picture |
+| **Graffiti** | everyone draws on the picture: an eraser rubs out any line it touches, undo takes back your own last one, clear (pressed twice) wipes the wall, chat saying who |
 | **Bingo** | a card of words from the movie's own subtitles, filled in as they're said (called out, with no subtitles) |
 | **Anagrams** | first to unscramble the word |
 | **Polls** | anyone asks, everyone votes |
 | **Room** | everyone walks around as a dot; chat shows over their heads |
 | **Word Grid** | three minutes to find words in a 4×4 letter grid; only words nobody else found score |
 | **Tiles** | the crossword tile game, two to four players, private racks |
-| **Sketch** | one draws a secret word, the rest guess |
+| **Sketch** | one draws a secret word, the rest guess; the artist has the eraser, undo and clear |
 | **Blanks** | fill in the blank, then vote for the best |
 | **Spies** | two teams; spymasters give one-word clues to find their agents |
 | **Werewolf** | wolves hidden in the village; night kills, day votes |
@@ -235,7 +235,15 @@ On your Mac, one file keeps everything that outlasts a party:
 your films and songs are, never the files themselves), the settings, and what was
 made together: the documents, the Graffiti Reel, the wall, the last poll and their
 pictures. Nothing about a session is in it: not the link, not who came, not chat.
+Chat is never written anywhere: it lives in memory while the party's on (a test
+checks no file holds a word of it).
 Copy it to keep a class's work or to carry it to another Mac.
+
+**Party > Erase All Data…** deletes everything Mouse Party keeps from one time to
+the next: that file (the list, settings, saved logins, what the apps kept), any
+sealed one set aside, the download cache, the window's place, and Open House
+Party's old folder; then the app opens again as new. Your own media files stay
+where they are.
 
 **Party > Use Encryption…** seals it with a passcode: every page of the file is
 encrypted (Adiantum, the key from the passcode by Argon2id), and the app asks

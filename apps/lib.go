@@ -21,6 +21,13 @@ func (t *Timer) Clear()                  { t.until = time.Time{} }
 func (t *Timer) Running() bool           { return !t.until.IsZero() }
 func (t *Timer) Done(now time.Time) bool { return t.Running() && !now.Before(t.until) }
 
+// Hurry: no more than d to go (everyone's done: on soon, a moment to see it)
+func (t *Timer) Hurry(d time.Duration) {
+	if !t.Running() || time.Until(t.until) > d {
+		t.Set(d)
+	}
+}
+
 // Left: seconds to go, for a view (the page counts down from there); 0 if not running
 func (t *Timer) Left() float64 {
 	if !t.Running() {
@@ -156,11 +163,20 @@ func (l *Lobby) begin() bool {
 	return true
 }
 
-// Reopen: back to the lobby after a game, everyone still in
-func (l *Lobby) Reopen() {
+// Reopen: back to the lobby after a game, everyone still here still in (one who left
+// mid-game is out now), and no countdown: the next game begins when someone
+// presses Start, or once someone joins and the wait is over
+func (l *Lobby) Reopen(r *Room) {
 	l.Open = true
-	if l.Players.Len() >= l.Min {
-		l.timer.Set(l.Wait)
+	l.timer.Clear()
+	here := map[int]bool{}
+	for _, v := range r.Viewers() {
+		here[v.ID] = true
+	}
+	for _, id := range l.Players.IDs() {
+		if !here[id] {
+			l.Players.Remove(id)
+		}
 	}
 }
 

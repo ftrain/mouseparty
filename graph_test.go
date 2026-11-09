@@ -103,6 +103,7 @@ var windowElsewhere = map[string]string{
 	"GetView":         "a question, not a command: every step reads the view",
 	"Unlock":          "the sealed party (store_test.go): Argon2 is too slow to fuzz",
 	"StartOver":       "the sealed party (store_test.go)",
+	"EraseAll":        "Party > Erase All Data (store_test.go): it quits the app, so it isn't walked",
 	"SetPasscode":     "the sealed party (store_test.go)",
 	"SettingsText":    "a question: SetSettingsText is walked",
 	"CacheText":       "a question: what the download cache holds",

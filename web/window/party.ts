@@ -156,6 +156,14 @@ export async function ask(mode: Ask) {
             go: held ? 'Clear' : 'OK',
             done: () => (held ? App().ClearCache() : Promise.resolve('')),
         });
+    } else if (mode === 'erase') {
+        show({
+            title: 'Erase All Data',
+            words: 'Delete everything Mouse Party keeps from one time to the next: the list, settings, saved logins, what the apps kept (graffiti, notes, polls, documents, the reel, pictures) and the download cache. Anyone watching is cut off, and Mouse Party opens again as new. Your own files in the list stay where they are. This can’t be undone.',
+            fields: [],
+            go: 'Erase Everything',
+            done: () => App().EraseAll(),
+        });
     } else if (mode === 'on') {
         show({
             title: 'Use Encryption',

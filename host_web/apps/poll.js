@@ -32,10 +32,16 @@ const poll = (ctx, view) => {
 				size: 24
 			}));
 			out.push(h("h3", {}, p ? "Ask the next one" : "Ask everyone"), h("div", {}, q), opts.map((o) => h("div", {}, o)), button("Ask", () => {
+				const answers = opts.map((o) => o.value).filter((a) => a.trim());
+				if (!q.value.trim() || answers.length < 2) {
+					kit.note(q.value.trim() ? "Two answers at least, to choose between." : "Ask a question first.");
+					(q.value.trim() ? opts.find((o) => !o.value.trim()) : q).focus();
+					return;
+				}
 				kit.send({
 					kind: "ask",
 					question: q.value,
-					options: opts.map((o) => o.value)
+					options: answers
 				});
 				[q, ...opts].forEach((el) => {
 					el.value = "";

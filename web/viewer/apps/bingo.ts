@@ -1,7 +1,7 @@
 // Bingo (apps/bingo.go): a card of words from the movie's subtitles that fills
 // itself in as they're said (or as the host calls them). Over the video.
 import type { Start } from '../types.ts';
-import { confetti, h, mount, type Kit } from './lib.ts';
+import { confetti, h, mount, timer, type Kit } from './lib.ts';
 
 // apps/bingo.go View: the card once it's dealt
 interface View {
@@ -9,11 +9,12 @@ interface View {
     recent: string[] | null;
     winners: string[] | null;
     next: number;
+    again: number; // this game's done: new cards in this many seconds (0: it isn't)
     card?: string[]; // "" the free middle
     marked?: boolean[];
     won?: boolean;
 }
-type Event = { kind: 'bingo'; name: string };
+type Event = { kind: 'bingo'; name: string } | { kind: 'deal' };
 type Out = { kind: 'card' };
 
 const bingo: Start<View, Event, Out> = (ctx, view) => {
@@ -27,7 +28,7 @@ const bingo: Start<View, Event, Out> = (ctx, view) => {
               )
             : h('p', {}, L_wait(kit)),
         v.won ? h('p', { style: 'font-size:1.6em' }, h('b', {}, 'BINGO! 🎉')) : null,
-        h('p', { class: 'muted' }, v.movie ? "Words fill in as they're said." : 'Words are called every few seconds.'),
+        v.again ? h('p', {}, 'New cards in ', timer(v.again)) : h('p', { class: 'muted' }, v.movie ? "Words fill in as they're said." : 'Words are called every few seconds.'),
         v.recent && v.recent.length ? h('p', {}, 'Heard: ', v.recent.join(', ')) : null,
         v.winners && v.winners.length ? h('p', {}, 'Bingo: ', v.winners.join(', ')) : null,
     ]);
@@ -39,7 +40,7 @@ const bingo: Start<View, Event, Out> = (ctx, view) => {
     return {
         view: m.draw,
         message(e) {
-            if (e.kind !== 'bingo') return;
+            if (e.kind === 'deal') return m.kit.note('New cards!');
             m.kit.note(`${e.name} has BINGO!`);
             confetti(ctx, e.name === ctx.me().name ? 140 : 50);
         },

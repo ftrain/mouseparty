@@ -5,6 +5,7 @@ package apps
 // person who gets it. Twice round, then back to the lobby.
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -19,12 +20,11 @@ const (
 
 type sketch struct {
 	Base
-	lobby   *Lobby
-	turns   Turns
-	phase   string // "lobby", "draw", "reveal" or "over"
-	word    string
-	lines   []Stroke
-	points  int
+	lobby *Lobby
+	turns Turns
+	phase string // "lobby", "draw", "reveal" or "over"
+	word  string
+	wall
 	guessed []int // in the order they got it
 	feed    []string
 	timer   Timer
@@ -46,7 +46,8 @@ func (s *sketch) start(r *Room) {
 
 // turn starts the current player's turn
 func (s *sketch) turn(r *Room) {
-	s.phase, s.word, s.lines, s.points, s.guessed, s.feed = "draw", Common[r.Rand.IntN(len(Common))], nil, 0, nil, nil
+	s.phase, s.word, s.guessed, s.feed = "draw", Common[r.Rand.IntN(len(Common))], nil, nil
+	s.clear()
 	s.turns.Timer.Set(sketchTurn)
 	r.All(Msg{"kind": "clear"})
 	r.Changed()
@@ -68,15 +69,27 @@ func (s *sketch) Message(r *Room, from Viewer, m Msg) {
 	}
 	drawer := s.turns.Current()
 	switch m.Kind() {
-	case "line":
-		if l, ok := ReadStroke(m); ok && from.ID == drawer && s.phase == "draw" && s.points+len(l.Points) <= graffitiMaxTotal {
-			s.lines = append(s.lines, l)
-			s.points += len(l.Points)
-			r.All(Msg{"kind": "line", "line": l})
+	case "line", "erase", "undo", "clear":
+		if from.ID != drawer || s.phase != "draw" {
+			return
 		}
-	case "clear":
-		if from.ID == drawer && s.phase == "draw" {
-			s.lines, s.points = nil, 0
+		switch m.Kind() {
+		case "line":
+			if l, ok := s.draw(from, m); ok {
+				r.All(Msg{"kind": "line", "line": l})
+			}
+		case "erase", "undo":
+			var ids []int
+			if m.Kind() == "erase" {
+				ids = s.erase(m)
+			} else {
+				ids = s.undo(from)
+			}
+			if len(ids) > 0 {
+				r.All(Msg{"kind": "erase", "ids": ids})
+			}
+		case "clear":
+			s.clear()
 			r.All(Msg{"kind": "clear"})
 		}
 	case "guess":
@@ -136,7 +149,7 @@ func (s *sketch) Tick(r *Room, now time.Time) {
 		}
 	case s.phase == "over" && s.timer.Done(now):
 		s.phase = "lobby"
-		s.lobby.Reopen()
+		s.lobby.Reopen(r)
 		r.Changed()
 	}
 }
@@ -146,8 +159,12 @@ func (s *sketch) Left(r *Room, v Viewer) {
 		return
 	}
 	s.lobby.Left(v)
-	if s.phase != "lobby" && s.turns.Remove(v.ID) && s.phase == "draw" {
-		s.endTurn(r) // the artist left
+	if s.phase != "lobby" {
+		artist := s.turns.Remove(v.ID)
+		s.guessed = slices.DeleteFunc(s.guessed, func(id int) bool { return id == v.ID })
+		if s.phase == "draw" && (artist || len(s.guessed) >= s.players().Len()-1) {
+			s.endTurn(r) // the artist left, or everyone still here has guessed it
+		}
 	}
 	r.Changed()
 }
@@ -163,10 +180,7 @@ func (s *sketch) View(v Viewer) any {
 	if v.ID == drawer || s.phase != "draw" || inList(s.guessed, v.ID) {
 		word = s.word
 	}
-	lines := s.lines
-	if lines == nil {
-		lines = []Stroke{}
-	}
+	lines := s.view()
 	left := s.turns.Timer.Left()
 	if s.phase != "draw" {
 		left = s.timer.Left()

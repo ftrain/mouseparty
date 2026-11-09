@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -108,5 +111,64 @@ func TestAppsOverChat(t *testing.T) {
 	a.Close()
 	if m := event(b); m["kind"] != "gone" {
 		t.Fatal(m)
+	}
+}
+
+// Chat is never kept: what's said, with every app open over a real party file,
+// is in no file once the session is over
+func TestChatIsNeverKept(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	party, err := openParty(partyPath(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &Host{Party: party}
+	h.chat = &Chat{conns: map[*chatConn]bool{}}
+	h.apps = newAppHost(h.chat, apps.Env{Movie: h, Shelf: party})
+	h.chat.hello = h.greeting
+	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
+	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
+	srv := httptest.NewServer(http.HandlerFunc(h.chat.handle))
+	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const said = "zebracorn whispers 8817"
+	ws.WriteJSON(map[string]any{"type": "join", "name": "Ann"})
+	for i, k := range apps.Kinds { // every app open in turn, eight at a time
+		if i%appsMax == 0 {
+			h.apps.closeAll()
+		}
+		h.apps.Open(k.Name, apps.Viewer{ID: 1, Name: "Ann"})
+	}
+	for i := range 3 {
+		time.Sleep(350 * time.Millisecond) // the chat's flood control
+		ws.WriteJSON(map[string]any{"type": "say", "text": fmt.Sprint(said, " ", i)})
+	}
+	for heard := 0; heard < 3; { // all of it went round
+		ws.SetReadDeadline(time.Now().Add(5 * time.Second))
+		var m map[string]any
+		if err := ws.ReadJSON(&m); err != nil {
+			t.Fatal(err)
+		}
+		if text, _ := m["text"].(string); m["type"] == "msg" && strings.HasPrefix(text, said) {
+			heard++
+		}
+	}
+	ws.Close()
+	h.apps.closeAll() // apps keep what they keep as they close
+	srv.Close()
+	party.close()
+	home, _ := os.UserHomeDir()
+	filepath.WalkDir(home, func(path string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			if b, _ := os.ReadFile(path); strings.Contains(string(b), "zebracorn") {
+				t.Errorf("chat is kept in %s", path)
+			}
+		}
+		return nil
+	})
+	if _, err := os.Stat(partyPath()); err != nil {
+		t.Fatal("the party file wasn't there to look in:", err)
 	}
 }

@@ -66,6 +66,7 @@ func (a *App) menu() *menu.Menu {
 	party.AddText("Add Download Link…", keys.CmdOrCtrl("l"), cb(func() { a.ask("link") })).Disabled = a.locked
 	party.AddText("Clear Played Files", keys.CmdOrCtrl("r"), cb(a.ClearPlayed)).Disabled = a.locked
 	party.AddText("Clear Download Cache…", nil, cb(func() { a.ask("clear") })).Disabled = a.locked
+	party.AddText("Erase All Data…", nil, cb(func() { a.ask("erase") })).Disabled = a.locked
 	party.AddSeparator()
 	switch {
 	case a.locked || a.party == nil:

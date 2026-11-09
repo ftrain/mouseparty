@@ -42,15 +42,28 @@ func newWordGrid(r *Room) Activity {
 	return g
 }
 
+// gridVowels: fewer vowels up than this and the grid is thrown again (a grid of
+// consonants has hardly a word in it)
+const gridVowels = 4
+
 func (g *wordGrid) deal(r *Room) {
-	dice := slices.Clone(gridDice)
-	Shuffle(r, dice)
-	for i, d := range dice {
-		face := strings.ToLower(string(d[r.Rand.IntN(6)]))
-		if face == "q" {
-			face = "qu"
+	for try := 0; ; try++ {
+		dice := slices.Clone(gridDice)
+		Shuffle(r, dice)
+		vowels := 0
+		for i, d := range dice {
+			face := strings.ToLower(string(d[r.Rand.IntN(6)]))
+			if face == "q" {
+				face = "qu"
+			}
+			if strings.ContainsAny(face[:1], "aeiou") {
+				vowels++
+			}
+			g.grid[i] = face
 		}
-		g.grid[i] = face
+		if vowels >= gridVowels || try >= 50 {
+			break
+		}
 	}
 	g.found, g.results, g.phase = map[int][]string{}, nil, "play"
 	g.timer.Set(gridPlay)

@@ -72,6 +72,7 @@ export interface App {
     // the party file (party.go): each "" when it worked, or why not
     Unlock(passcode: string): Promise<string>;
     StartOver(): Promise<string>;
+    EraseAll(): Promise<string>; // Party > Erase All Data: everything kept deleted, and the app quits and opens again empty; "" or why not
     SetPasscode(current: string, next: string): Promise<string>;
     SettingsText(): Promise<string>;
     SetSettingsText(text: string): Promise<string>;
@@ -126,7 +127,7 @@ export interface LinkLogin {
 }
 
 // what the Party menu asks the window for (party.go's ask)
-export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear' | 'prefs' | 'updates' | 'keys' | 'welcome' | 'log';
+export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear' | 'erase' | 'prefs' | 'updates' | 'keys' | 'welcome' | 'log';
 
 // as much of the Wails runtime as the window uses
 export interface Runtime {

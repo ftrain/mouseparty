@@ -319,7 +319,7 @@ func (t *tiles) Tick(r *Room, now time.Time) {
 		r.Changed()
 	case t.phase == "over" && t.timer.Done(now):
 		t.phase = "lobby"
-		t.lobby.Reopen()
+		t.lobby.Reopen(r)
 		r.Changed()
 	}
 }

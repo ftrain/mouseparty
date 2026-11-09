@@ -6,6 +6,7 @@ package apps
 
 import (
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -166,7 +167,7 @@ func (s *spies) Tick(r *Room, now time.Time) {
 		}
 	case s.phase == "over" && s.timer.Done(now):
 		s.phase = "lobby"
-		s.lobby.Reopen()
+		s.lobby.Reopen(r)
 		r.Changed()
 	case s.phase != "over" && s.timer.Done(now): // out of time: the other team's go
 		s.startTurn(other(s.turn))
@@ -192,10 +193,25 @@ func (s *spies) Left(r *Room, v Viewer) {
 		}
 		if s.master[t] == 0 {
 			s.over(other(t), "Everyone on "+t+" left.")
+		} else if s.members(t) < 2 { // a spymaster alone has nobody to guess
+			s.over(other(t), teamName(t)+" is down to one: nobody left to guess.")
 		}
 	}
 	r.Changed()
 }
+
+// members: how many are on a team
+func (s *spies) members(team string) int {
+	n := 0
+	for _, t := range s.team {
+		if t == team {
+			n++
+		}
+	}
+	return n
+}
+
+func teamName(team string) string { return strings.ToUpper(team[:1]) + team[1:] }
 
 func (s *spies) View(v Viewer) any {
 	view := map[string]any{"phase": s.phase, "lobby": s.lobby.View(v)}

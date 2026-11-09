@@ -38,7 +38,7 @@ func (a *anagram) next(r *Room) {
 		}
 	}
 	b := []byte(a.word)
-	for string(b) == a.word {
+	for try := 0; try < 100 && (string(b) == a.word || IsWord(string(b))); try++ { // never a word already
 		Shuffle(r, b)
 	}
 	a.letters, a.phase, a.winner, a.answer = string(b), "guess", "", ""

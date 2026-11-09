@@ -85,6 +85,7 @@ type App struct {
 	party        *party        // what's kept (store.go); nil keeps nothing
 	locked       bool          // the party is sealed and its passcode not yet typed (party.go)
 	unlockWait   time.Duration // before the next try, after a wrong passcode
+	erased       bool          // Party > Erase All Data: nothing more is saved, and it opens again at quitting
 	player       *Player
 	current      *Item        // the item now streaming
 	playing      bool         // Play pressed and not stopped: the big button says Stop
@@ -396,7 +397,11 @@ func (a *App) checkTools() {
 // The list is a playlist: movies stay in it, and cfg.Position is the row now
 // playing (or next to play). Finishing a movie moves it down a row.
 
-func (a *App) save() { saveConfig(a.party, a.cfg) }
+func (a *App) save() {
+	if !a.erased {
+		saveConfig(a.party, a.cfg)
+	}
+}
 
 func (a *App) selectRow(i int) {
 	if i >= -1 && i < len(a.cfg.Queue) {
@@ -1507,7 +1512,11 @@ func (a *App) shutdown(ctx context.Context) {
 			restart = false
 		}
 	})
-	if restart && ctx != nil {
+	var erased bool
+	a.wait(func() { erased = a.erased })
+	if erased && ctx != nil { // Erase All Data: the rest deleted once we've gone, and opened again
+		afterErase(bundle)
+	} else if restart && ctx != nil {
 		reopen(bundle)
 	}
 	if ctx != nil && len(links) > 0 { // and the link not left on the clipboard either
