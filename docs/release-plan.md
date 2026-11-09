@@ -42,8 +42,9 @@ Me:
       allow-unsigned-executable-memory), notarizes with `notarytool` and the API key,
       and staples the ticket. Every build has the hardened runtime, ad hoc without a
       certificate, so CI's self-test runs it as a signed release runs.
-- [x] A **`.dmg`** (drag to Applications), signed and notarized with the rest; the zip
-      stays beside it for updates.
+- [x] A **`.dmg`** (drag to Applications), signed and notarized with the rest: a release's one
+      download, which updates fetch too (checked by the SHA-256 GitHub gives each file), beside
+      one archive of the GPL sources.
 - [x] `NSLocalNetworkUsageDescription` in Info.plist: macOS 15 asks before an app
       talks to the router (the NAT-PMP/UPnP port request); it says why.
 - [x] Updates take only an app signed by the same Developer ID team as the one

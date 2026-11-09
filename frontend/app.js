@@ -155,6 +155,12 @@ const clock = (s) => `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)
 slider.addEventListener("pointerdown", () => {
 	sliderHeld = true;
 });
+const letGo = () => {
+	if (!sliderHeld) return;
+	sliderHeld = false;
+	if (view) render(view);
+};
+for (const ev of ["pointerup", "pointercancel"]) window.addEventListener(ev, () => setTimeout(letGo));
 slider.addEventListener("input", () => {
 	const v = Number(slider.value);
 	$("time").textContent = view?.slider.pages ? `${Math.round(v)} / ${view.slider.label.split(" / ")[1]}` : clock(v);

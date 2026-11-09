@@ -1,5 +1,5 @@
 # Build "Mouse Party.app" on an Apple Silicon runner and check it hosts, on every
-# push to main and every pull request: the zip is kept as the run's artifact
+# push to main and every pull request: the disk image is kept as the run's artifact
 # (Actions tab > the run > Artifacts). A v* tag also attaches it to a release:
 #   git tag v1.0.0 && git push origin v1.0.0
 # Run it by hand from the Actions tab (workflow_dispatch) for any branch.
@@ -148,23 +148,24 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: MouseParty-macos-arm64
-          path: |
-            dist/MouseParty-macos-arm64.dmg
-            dist/MouseParty-macos-arm64.zip
+          path: dist/MouseParty-macos-arm64.dmg
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-        # with the exact sources of the ffmpeg inside, as its GPL asks
+        # two files: the app, and (as the GPL asks) the exact sources of the ffmpeg and pandoc
+        # inside it, in one archive
         run: |
           scripts/build_ffmpeg.sh --fetch
           scripts/fetch_pandoc.sh --fetch
+          SOURCES="MouseParty-$GITHUB_REF_NAME-gpl-sources.tar"
+          tar -cf "dist/$SOURCES" -C build/ffmpeg/src . -C ../../pandoc/src .
           if [ -n "${SIGN_IDENTITY:-}" ]; then
             FIRST="It's signed and notarized: it opens like any app."
           else
             FIRST="The first time it opens: System Settings > Privacy & Security > Open Anyway."
           fi
-          gh release create "$GITHUB_REF_NAME" dist/MouseParty-macos-arm64.dmg dist/MouseParty-macos-arm64.zip dist/MouseParty-macos-arm64.zip.sha256 build/ffmpeg/src/* build/pandoc/src/* \
+          gh release create "$GITHUB_REF_NAME" dist/MouseParty-macos-arm64.dmg "dist/$SOURCES" \
             --title "Mouse Party $GITHUB_REF_NAME" \
-            --notes "MouseParty-macos-arm64.dmg is the app, for Apple Silicon Macs with macOS 13 or later: open it and drag Mouse Party to Applications. $FIRST From then on it updates itself (Settings > General). The zip is the same app, which updates download. The other files are the exact sources of the ffmpeg inside it (GPL), which scripts/build_ffmpeg.sh builds from, and of its pandoc (GPL; its own WebAssembly release build, scripts/fetch_pandoc.sh)."
+            --notes "MouseParty-macos-arm64.dmg is the app, for Apple Silicon Macs with macOS 13 or later: open it and drag Mouse Party to Applications. $FIRST From then on it updates itself (Settings > General). $SOURCES is only for the GPL: the exact sources of the ffmpeg inside it, which scripts/build_ffmpeg.sh builds from, and of its pandoc (its own WebAssembly release build, scripts/fetch_pandoc.sh)."

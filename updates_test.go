@@ -53,47 +53,50 @@ func plistVersion(app string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// An update: the highest release with the app and its SHA-256 found (drafts, prereleases, other tags and
+// An update: the highest release with the app's disk image and its SHA-256 found (drafts, prereleases, other tags and
 // one with no SHA-256 passed over), downloaded, checked, unpacked beside the app, and put in its place
 // when it quits; one whose SHA-256 differs, or that isn't Mouse Party, refused, nothing changed; a
 // development build, or an app macOS runs from a read-only copy, never updated.
 func TestUpdate(t *testing.T) {
-	if _, err := os.Stat("/usr/bin/ditto"); err != nil {
-		t.Skip("needs macOS (ditto, codesign)")
+	if _, err := os.Stat("/usr/bin/hdiutil"); err != nil {
+		t.Skip("needs macOS (hdiutil, ditto, codesign)")
 	}
 	t.Setenv("HOME", t.TempDir()) // never the real party file, nor the real cache
 	t.Setenv("XDG_CACHE_HOME", "")
 	dir := t.TempDir()
-	// the release: a newer app, zipped, and its SHA-256
+	// the release: a newer app on a disk image, as the build makes it, and the SHA-256 GitHub gives it
 	made := filepath.Join(dir, "made")
 	fakeApp(t, made, "9.9.0", updateBundle)
-	zip := filepath.Join(dir, updateAsset)
-	if out, err := exec.Command("/usr/bin/ditto", "-c", "-k", "--keepParent", filepath.Join(made, "Mouse Party.app"), zip).CombinedOutput(); err != nil {
+	os.Symlink("/Applications", filepath.Join(made, "Applications"))
+	dmg := filepath.Join(dir, updateAsset)
+	if out, err := exec.Command("/usr/bin/hdiutil", "create", "-quiet", "-volname", "Mouse Party", "-srcfolder", made,
+		"-fs", "HFS+", "-format", "UDZO", "-ov", dmg).CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
 	}
-	body, _ := os.ReadFile(zip)
+	body, _ := os.ReadFile(dmg)
 	sum := sha256.Sum256(body)
 	good := hex.EncodeToString(sum[:])
 	served := good
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asset := func(name string) map[string]any {
-			return map[string]any{"name": name, "browser_download_url": server.URL + "/" + name, "size": len(body)}
+			return map[string]any{"name": name, "browser_download_url": server.URL + "/" + name, "size": len(body), "digest": "sha256:" + served}
 		}
+		bare := asset(updateAsset)
+		delete(bare, "digest")
 		switch r.URL.Path {
 		case "/releases":
 			json.NewEncoder(w).Encode([]map[string]any{
-				{"tag_name": "v9.9.0", "assets": []any{asset(updateAsset), asset(updateAsset + ".sha256")}},
-				{"tag_name": "v10.0.0", "draft": true, "assets": []any{asset(updateAsset), asset(updateAsset + ".sha256")}},
-				{"tag_name": "v9.10.0-rc1", "assets": []any{asset(updateAsset), asset(updateAsset + ".sha256")}},
-				{"tag_name": "v9.9.5", "assets": []any{asset(updateAsset)}}, // no SHA-256: not a release to take
-				{"tag_name": "python-wasm-3.15.2-abc", "assets": []any{asset(updateAsset), asset(updateAsset + ".sha256")}},
-				{"tag_name": "v3.0.0", "assets": []any{asset(updateAsset), asset(updateAsset + ".sha256")}},
+				{"tag_name": "v9.9.0", "assets": []any{asset(updateAsset), asset("MouseParty-v9.9.0-gpl-sources.tar")}},
+				{"tag_name": "v10.0.0", "draft": true, "assets": []any{asset(updateAsset)}},
+				{"tag_name": "v9.10.0-rc1", "assets": []any{asset(updateAsset)}},
+				{"tag_name": "v9.9.5", "assets": []any{bare}},                                // no SHA-256: not a release to take
+				{"tag_name": "v9.9.7", "assets": []any{asset("MouseParty-macos-arm64.zip")}}, // an old release's zip: not the app now
+				{"tag_name": "python-wasm-3.15.2-abc", "assets": []any{asset(updateAsset)}},
+				{"tag_name": "v3.0.0", "assets": []any{asset(updateAsset)}},
 			})
 		case "/" + updateAsset:
 			w.Write(body)
-		case "/" + updateAsset + ".sha256":
-			w.Write([]byte(served + "  " + updateAsset + "\n"))
 		default:
 			http.NotFound(w, r)
 		}

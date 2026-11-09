@@ -70,6 +70,49 @@ async function rowCenter(page, i) {
     return box && { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
+// the slider, by the mouse: it follows the movie playing, still after a click on it that moves nothing, and a drag moves the movie
+async function sliderFollows(page, long) {
+    const now = () => page.evaluate(() => Number(document.getElementById('slider').value));
+    const moving = async (what) => {
+        const a = await now();
+        await sleep(2000);
+        const b = await now();
+        if (!(b > a + 0.5)) fail(`the slider stood still (${a} then ${b}) ${what}`);
+    };
+    await page.evaluate((paths) => window.__drop(10, 10, paths), [long]);
+    let i = -1;
+    for (let n = 0; n < 40 && i < 0; n++, await sleep(250)) i = await page.evaluate(() => (window.__view?.rows ?? []).findIndex((r) => r.title.startsWith('Long Clip')));
+    if (i < 0) fail('the long clip never came into the list');
+    for (let n = 0; n < 60; n++, await sleep(500)) {
+        const v = await page.evaluate(() => window.__view);
+        if (v.rows[i]?.now && v.slider.on && v.slider.value > 0.5) break;
+        if (n % 10 === 0) {
+            const c = await rowCenter(page, i);
+            await page.mouse.click(c.x, c.y, { clickCount: 2 });
+        }
+        if (n === 59) fail('the long clip never played');
+    }
+    await moving('while playing');
+    const box = await page.locator('#slider').boundingBox();
+    const thumb = async () => {
+        const [v, max] = await page.evaluate(() => [Number(document.getElementById('slider').value), Number(document.getElementById('slider').max)]);
+        return { x: box.x + 8 + (box.width - 16) * (v / max), y: box.y + box.height / 2 };
+    };
+    let t = await thumb();
+    await page.mouse.click(t.x, t.y); // pressed and let go where it is: nothing to seek to
+    await moving('after a click on it');
+    t = await thumb();
+    await page.mouse.move(t.x, t.y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.75, t.y, { steps: 8 });
+    await page.mouse.up();
+    for (let n = 0; n < 40; n++, await sleep(250)) {
+        const v = await page.evaluate(() => window.__view);
+        if (v.slider.value > v.slider.max * 0.6 && v.rows[i]?.now) return moving('after a drag');
+    }
+    fail('dragging the slider never moved the movie');
+}
+
 async function walkWindow(browser) {
     const page = await browser.newPage({ viewport: { width: 420, height: 640 } });
     watch(page, 'window');
@@ -150,6 +193,7 @@ async function walkWindow(browser) {
                 .map(([k, n]) => `${k} ×${n}`)
                 .join(', '),
     );
+    await sliderFollows(page, files.long);
     // and Play, for the viewers: wait for the link and press it if it's off
     for (let i = 0; i < 60; i++) {
         const v = await page.evaluate(() => window.__view);

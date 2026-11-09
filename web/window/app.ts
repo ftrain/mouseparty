@@ -168,6 +168,14 @@ const clock = (s: number) => `${Math.floor(s / 3600)}:${String(Math.floor((s % 3
 slider.addEventListener('pointerdown', () => {
     sliderHeld = true;
 });
+// let go: a press that moved nothing has no change event, and the slider must follow the movie again
+// (it once stayed held, standing still, for the rest of the movie)
+const letGo = () => {
+    if (!sliderHeld) return;
+    sliderHeld = false;
+    if (view) render(view);
+};
+for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, () => setTimeout(letGo)); // after the change event, if any
 slider.addEventListener('input', () => {
     const v = Number(slider.value);
     $('time').textContent = view?.slider.pages ? `${Math.round(v)} / ${view.slider.label.split(' / ')[1]}` : clock(v);

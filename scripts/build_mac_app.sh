@@ -17,9 +17,9 @@
 # or an App Store Connect API key (as .github/workflows/mac-app.yml does): NOTARY_KEY (the .p8
 # file), NOTARY_KEY_ID and NOTARY_ISSUER. Signed, the app has the hardened runtime, with
 # packaging/darwin/entitlements.plist.
-# Output: dist/Mouse Party.app, dist/MouseParty-macos-arm64.zip (what updates download; its
-# .sha256 beside it) and dist/MouseParty-macos-arm64.dmg (to install from: the app and a link
-# to Applications to drag it to). DIST=<dir> puts them elsewhere; NO_DMG=1 makes no disk image.
+# Output: dist/Mouse Party.app and dist/MouseParty-macos-arm64.dmg, the one file a release
+# has (the app and a link to Applications to drag it to; updates download it too, checked by
+# the SHA-256 GitHub gives each file). DIST=<dir> puts them elsewhere; NO_DMG=1 makes no disk image.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -121,14 +121,13 @@ notarize() {
     xcrun stapler staple "$2"
 }
 
-ZIP="$DIST/MouseParty-macos-arm64.zip"
-rm -f "$ZIP"
-ditto -c -k --keepParent "$APP" "$ZIP"
-if [ -n "${SIGN_IDENTITY:-}" ] && [ ${#NOTARY[@]} -gt 0 ]; then
+rm -f "$DIST/MouseParty-macos-arm64.zip" "$DIST/MouseParty-macos-arm64.zip.sha256"   # what releases had once
+if [ -n "${SIGN_IDENTITY:-}" ] && [ ${#NOTARY[@]} -gt 0 ]; then   # the app's own ticket, so it opens wherever it's copied
+    ZIP=$(mktemp -d)/MouseParty.zip
+    ditto -c -k --keepParent "$APP" "$ZIP"
     notarize "$ZIP" "$APP"
-    rm -f "$ZIP" && ditto -c -k --keepParent "$APP" "$ZIP"   # re-zip with the ticket stapled
+    rm -rf "$(dirname "$ZIP")"
 fi
-shasum -a 256 "$ZIP" | cut -d' ' -f1 > "$ZIP.sha256"   # a release's, checked by an update before it goes in
 
 # the disk image people install from: the app, and Applications to drag it to
 DMG="$DIST/MouseParty-macos-arm64.dmg"
@@ -144,5 +143,5 @@ if [ -z "${NO_DMG:-}" ]; then
         if [ ${#NOTARY[@]} -gt 0 ]; then notarize "$DMG" "$DMG"; fi
     fi
 fi
-echo "Built $APP and $ZIP"
+echo "Built $APP"
 if [ -f "$DMG" ]; then echo "and $DMG"; fi

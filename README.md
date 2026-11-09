@@ -167,13 +167,13 @@ as it's made:
 
 **Updates:** a release of Mouse Party (from this repo's releases) looks for a newer one at
 start and once a day, and downloads it, when **Settings > General** says to (it does to start
-with); **Mouse Party > Check for Updates…** looks now. A download is checked (the SHA-256 its release
-gives, its signature, that it's Mouse Party and the version it says) and goes in when Mouse Party
+with); **Mouse Party > Check for Updates…** looks now. A download (the release's disk image) is checked (the SHA-256
+GitHub gives it, its signature, that it's Mouse Party and the version it says) and goes in when Mouse Party
 quits, never in the middle of a party, or at once with **Mouse Party > Restart to Update**. It can't
 update itself where macOS runs a read-only copy of it (opened straight from Downloads): move it to
 Applications first. A build made from the source says it's a development build, and never updates.
 A release is made by pushing a tag, `git tag v3.1.0 && git push origin v3.1.0`: the workflow builds
-it with that version and publishes the disk image, the zip and its SHA-256. A release signed with a
+it with that version and publishes the disk image and one archive of the GPL sources. A release signed with a
 Developer ID takes only updates signed by the same developer.
 
 As text, the settings are:
@@ -272,7 +272,7 @@ Linux.
 ```bash
 scripts/setup.sh                           # everything, pinned and checked; says what's ready and what isn't
 scripts/test.sh                            # the pages, vet, every test, the self-test
-BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # -> dist/Mouse Party.app, MouseParty-macos-arm64.dmg and .zip
+BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # -> dist/Mouse Party.app and MouseParty-macos-arm64.dmg
 ```
 
 Nothing is a git submodule. Each piece from outside comes in through a
@@ -331,7 +331,7 @@ skips its tests); with `NO_SKIPS=1`, as CI sets, a skip fails it.
 - `.github/workflows/mac-app.yml`, on an Apple Silicon runner, on every push to
   `main` and every pull request: builds ffmpeg and the Python (each cached
   until its script changes), builds the app, runs the tests and the self-test
-  inside the built app, and keeps the disk image and the zip as the run's artifact. Every
+  inside the built app, and keeps the disk image as the run's artifact. Every
   build is signed with the hardened runtime (ad hoc, without a Developer ID), so the
   self-test runs it as a signed release runs.
 
@@ -341,8 +341,8 @@ A `v*` tag also makes a release:
 git tag v2.0.0 && git push origin v2.0.0
 ```
 
-The release carries the app (a disk image, and the zip updates download, with its SHA-256)
-and the exact sources of its ffmpeg and pandoc. With the repository secrets the workflow's
+The release carries two files: the app (`MouseParty-macos-arm64.dmg`, which updates download
+too) and one archive of the exact sources of its ffmpeg and pandoc, which their GPL asks for. With the repository secrets the workflow's
 first lines name (a Developer ID certificate and an App Store Connect API key), a tag's build
 is signed with the Developer ID and notarized, and opens without a warning.
 

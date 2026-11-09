@@ -36,7 +36,7 @@ import (
 var version = "dev"
 
 const (
-	updateAsset  = "MouseParty-macos-arm64.zip"  // the app, in each release
+	updateAsset  = "MouseParty-macos-arm64.dmg"  // the app, in each release: the disk image people install from
 	updateBundle = "io.github.ftrain.mouseparty" // what an update's Info.plist must say it is (packaging/darwin/Info.plist)
 	updateEvery  = 24 * time.Hour
 )
@@ -98,12 +98,13 @@ func newer(a, b string) bool {
 
 // release: the newest release of the app, as GitHub lists it
 type release struct {
-	Version  string
-	Zip, Sum string // their download URLs
-	Size     int64
+	Version string
+	URL     string // the disk image's download
+	Sum     string // its SHA-256, as GitHub gives it (hex)
+	Size    int64
 }
 
-// latestRelease: the highest vX.Y.Z release that has the app's zip and its SHA-256 (drafts and prereleases aside)
+// latestRelease: the highest vX.Y.Z release that has the app's disk image, with the SHA-256 GitHub gives it (drafts and prereleases aside)
 func latestRelease(ctx context.Context) (*release, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", updatesAPI, nil)
 	if err != nil {
@@ -124,9 +125,10 @@ func latestRelease(ctx context.Context) (*release, error) {
 		Draft      bool   `json:"draft"`
 		Prerelease bool   `json:"prerelease"`
 		Assets     []struct {
-			Name string `json:"name"`
-			URL  string `json:"browser_download_url"`
-			Size int64  `json:"size"`
+			Name   string `json:"name"`
+			URL    string `json:"browser_download_url"`
+			Size   int64  `json:"size"`
+			Digest string `json:"digest"` // "sha256:…", GitHub's own of the file uploaded
 		} `json:"assets"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&list); err != nil {
@@ -139,14 +141,11 @@ func latestRelease(ctx context.Context) (*release, error) {
 		}
 		rel := release{Version: strings.TrimPrefix(r.Tag, "v")}
 		for _, a := range r.Assets {
-			switch a.Name {
-			case updateAsset:
-				rel.Zip, rel.Size = a.URL, a.Size
-			case updateAsset + ".sha256":
-				rel.Sum = a.URL
+			if sum, ok := strings.CutPrefix(a.Digest, "sha256:"); a.Name == updateAsset && ok && len(sum) == 64 {
+				rel.URL, rel.Sum, rel.Size = a.URL, strings.ToLower(sum), a.Size
 			}
 		}
-		if rel.Zip != "" && rel.Sum != "" && (best == nil || newer(rel.Version, best.Version)) {
+		if rel.URL != "" && (best == nil || newer(rel.Version, best.Version)) {
 			best = &rel
 		}
 	}
@@ -256,7 +255,7 @@ func (a *App) downloadUpdate(rel *release) {
 	}()
 }
 
-// fetchUpdate: the release's zip, its SHA-256 checked, unpacked beside bundle, the app in it checked; its path
+// fetchUpdate: the release's disk image, its SHA-256 checked, the app in it copied out beside bundle and checked; its path
 func fetchUpdate(rel *release, bundle string, step func(got, total int64)) (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
@@ -268,15 +267,11 @@ func fetchUpdate(rel *release, bundle string, step func(got, total int64)) (stri
 		return "", err
 	}
 	defer os.RemoveAll(dir)
-	want, err := fetchSum(rel.Sum)
-	if err != nil {
+	dmg := filepath.Join(dir, updateAsset)
+	if _, err := fetch(context.Background(), rel.URL, dmg, nil, func(_ string, got, total int64) { step(got, total) }); err != nil {
 		return "", err
 	}
-	zip := filepath.Join(dir, updateAsset)
-	if _, err := fetch(context.Background(), rel.Zip, zip, nil, func(_ string, got, total int64) { step(got, total) }); err != nil {
-		return "", err
-	}
-	f, err := os.Open(zip)
+	f, err := os.Open(dmg)
 	if err != nil {
 		return "", err
 	}
@@ -286,41 +281,28 @@ func fetchUpdate(rel *release, bundle string, step func(got, total int64)) (stri
 	if err != nil {
 		return "", err
 	}
-	if got := hex.EncodeToString(h.Sum(nil)); got != want {
+	if got := hex.EncodeToString(h.Sum(nil)); got != rel.Sum {
 		return "", errors.New("it isn't what the release says it is (its SHA-256 differs)")
 	}
+	// opened where nothing sees it (no Finder window, not in the sidebar), read-only, and put away again
+	mount := filepath.Join(dir, "mount")
+	if out, err := exec.Command("/usr/bin/hdiutil", "attach", "-nobrowse", "-noautoopen", "-readonly", "-noverify",
+		"-mountpoint", mount, dmg).CombinedOutput(); err != nil {
+		return "", fmt.Errorf("its disk image didn't open: %s", strings.TrimSpace(string(out)))
+	}
+	defer exec.Command("/usr/bin/hdiutil", "detach", "-force", mount).Run()
 	stage := stagingDir(bundle)
 	os.RemoveAll(stage)
-	if out, err := exec.Command("/usr/bin/ditto", "-x", "-k", zip, stage).CombinedOutput(); err != nil {
-		os.RemoveAll(stage)
-		return "", fmt.Errorf("it didn't unzip: %s", strings.TrimSpace(string(out)))
-	}
 	app := filepath.Join(stage, filepath.Base(bundle))
-	if _, err := os.Stat(app); err != nil {
-		app = filepath.Join(stage, "Mouse Party.app")
+	if out, err := exec.Command("/usr/bin/ditto", filepath.Join(mount, "Mouse Party.app"), app).CombinedOutput(); err != nil {
+		os.RemoveAll(stage)
+		return "", fmt.Errorf("its app didn't copy out: %s", strings.TrimSpace(string(out)))
 	}
 	if why := checkBundle(app, rel.Version, teamOf(bundle)); why != "" {
 		os.RemoveAll(stage)
 		return "", errors.New(why)
 	}
 	return app, nil
-}
-
-// fetchSum: the SHA-256 a release gives for its zip (the first word of its .sha256 file)
-func fetchSum(link string) (string, error) {
-	req, _ := http.NewRequest("GET", link, nil)
-	req.Header.Set("User-Agent", "Mouse Party")
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
-	if err != nil {
-		return "", errors.New(shortNetError(err))
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-	fields := strings.Fields(string(b))
-	if resp.StatusCode != http.StatusOK || len(fields) == 0 || len(fields[0]) != 64 {
-		return "", errors.New("the release has no SHA-256 to check it by")
-	}
-	return strings.ToLower(fields[0]), nil
 }
 
 // checkBundle: why the unpacked app isn't the update it should be ("" when it is): whole as signed, Mouse Party, that version
