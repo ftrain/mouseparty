@@ -11,6 +11,8 @@ Quit, and the party, the chat and the link are gone.
 
 ## Getting it
 
+- **The website:** [ftrain.github.io/mouseparty](https://ftrain.github.io/mouseparty/) has a
+  download button that is always the newest release.
 - **Download:** the app is on this repo's
   [Releases](https://github.com/ftrain/mouseparty/releases) page, for Apple Silicon
   Macs on macOS 13 or later: open the `.dmg` and drag Mouse Party to Applications.
@@ -218,6 +220,28 @@ A build without cloudflared hands out the direct `http://` link instead
 Each viewer pulls their own copy from your upload: about 1.6 Mbit/s each at the
 default bitrate.
 
+**If a guest isn't a friend.** The link is an invitation, and anyone holding it
+can talk to your Mac's web server. So everything a guest's browser can reach runs
+in a macOS sandbox, each program in a box of its own (`sandbox.go`):
+
+- **The viewer site** (the page, chat, the apps, pandoc and Datasette) is a
+  second process, separate from the window. It can read the app's own pages and
+  tools, write a temporary folder of its own, answer on the site's port and talk
+  to MediaMTX. It can't open a file in your home folder, start a program, or
+  reach anything else on your Mac or network. A document that's up is opened by
+  the app and handed over already open: the site never learns where it is.
+- **MediaMTX** sees the session's temporary folder and sends video; **cloudflared**
+  sees no files and talks only to Cloudflare and the site.
+- **ffmpeg** reads the files it's playing and nothing else, and reaches only
+  MediaMTX. That matters for download links: a movie from a stranger is read by
+  the one big program here not written in a memory-safe language.
+
+So someone who found a hole in any of them would have the session (the chat, the
+document on screen) and not your Mac. The app itself, which has to read whatever
+you drag in, never reads a byte a guest sent except through a few checked calls
+(`site.go`). This narrows what a break-in gets; it is not a promise that there
+are no holes. `"no_sandbox": true` in **Party > Edit as Text…** turns it off.
+
 ## Nothing outlives the session
 
 Chat is only ever in the app's memory. When you quit, every viewer's page is
@@ -393,3 +417,7 @@ built (with x264) is under the GPL, pandoc (also GPL), and MediaMTX, cloudflared
 hls.js, pdf.js, Tiny Little Office and some Go libraries under MIT, BSD and Apache licences. [`licenses/`](licenses/README.md)
 lists every one, with its licence text, and the built app carries the same
 folder. Each release includes the exact sources of its ffmpeg and pandoc.
+
+There are no guarantees. It's provided as it is, with no warranty of any kind,
+as the licence says: it opens your Mac to whoever has the link, on purpose, and
+you use it at your own risk.

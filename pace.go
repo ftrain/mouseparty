@@ -168,6 +168,7 @@ func (h *Host) SetPace(name, token string, seconds int) {
 
 // EndPace: the pace reached the last page, and stops there
 func (h *Host) EndPace() {
+	h.tell(SiteTell{Do: "endpace"})
 	h.mu.Lock()
 	had := h.pace != 0 && h.doc.paged()
 	var word string

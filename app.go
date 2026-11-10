@@ -137,6 +137,7 @@ func NewApp(standby []byte) *App {
 		language: hostLanguage(), standby: standby, cueCache: map[cueKey][]Cue{}, tempLogins: map[string]siteLogin{}}
 	a.party, a.locked = openTheParty(a.log)
 	a.cfg = loadConfig(a.party)
+	sandboxOff.Store(a.cfg.NoSandbox)
 	a.player = &Player{Log: a.log,
 		OnPosition: func(s float64) { a.do(func() { a.position(s) }) },
 		OnExit:     func(code int) { a.do(func() { a.finished(code) }) }}
@@ -1337,7 +1338,9 @@ func (a *App) hostStart() {
 	if cloudflared == "" {
 		a.log("cloudflared is missing (brew install cloudflared); the link will be a direct one.")
 	}
+	sandboxOff.Store(a.cfg.NoSandbox)
 	h := NewHost(a.log, mediamtx, cloudflared, a.standby)
+	h.Sandbox = true // the viewer site in a process of its own, boxed (site.go)
 	h.MapPorts = a.cfg.OpenRouterPorts
 	h.Party = a.party
 	h.DocAt = func(at string) { a.do(func() { a.docAt(at) }) }

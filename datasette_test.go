@@ -108,7 +108,7 @@ func TestDatasetteOnlyReads(t *testing.T) {
 // All Python sees of the database's folder is the database
 func TestOnlyFile(t *testing.T) {
 	path := films(t)
-	o := onlyFile{dir: filepath.Dir(path), name: "films.db"}
+	o := onlyFile{name: "films.db", open: (&document{Path: path}).open}
 	if _, err := o.Open("secret.txt"); err == nil {
 		t.Fatal("the secret beside it opened")
 	}
@@ -129,7 +129,7 @@ func TestOnlyFile(t *testing.T) {
 // Through the host: the database up only, its pages with the script that keeps everyone on one page
 func TestDatasettePages(t *testing.T) {
 	py := needPython(t)
-	h := &Host{python: py, key: "k"}
+	h := &Host{python: py, pyHome: pythonHome(), key: "k"}
 	h.SetDocument(document{Token: "t", Path: films(t), Title: "Films", Kind: "db"})
 	defer h.ClearDocument()
 	mux := http.NewServeMux()

@@ -18,7 +18,6 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"net/http"
-	"os/exec"
 	"regexp"
 	"sync"
 	"time"
@@ -47,16 +46,26 @@ type picture struct {
 	b    []byte
 }
 
+// pictureKeeper: where pictures outlast the session: the party file (store.go), or, from the site in its
+// sandbox, the app that has it (site.go)
+type pictureKeeper interface {
+	putPicture(id, mime string, b []byte) error
+	picture(id string) (picture, bool)
+}
+
 type pictures struct {
 	mu     sync.Mutex
-	party  *party // nil keeps them in memory only
+	party  pictureKeeper // nil keeps them in memory only
 	mem    map[string]picture
 	byHash map[[32]byte]string
 	total  int
 }
 
-func newPictures(party *party) *pictures {
-	return &pictures{party: party, mem: map[string]picture{}, byHash: map[[32]byte]string{}}
+func newPictures(keep pictureKeeper) *pictures {
+	if p, ok := keep.(*party); ok && p == nil {
+		keep = nil
+	}
+	return &pictures{party: keep, mem: map[string]picture{}, byHash: map[[32]byte]string{}}
 }
 
 // put keeps b (of type mime) and says its reference and size; the same bytes twice are one picture
@@ -123,14 +132,19 @@ type nowShowing struct {
 
 // SetPlaying: what's on now, for Stickies: a movie, a song or a document ("" when nothing is); paged, a document
 func (h *Host) SetPlaying(path, title string, paged bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if path == "" {
-		h.playing = apps.Playing{}
-		return
+	p := apps.Playing{}
+	if path != "" {
+		sum := sha256.Sum256([]byte(path)) // its notes are kept by it; the pages are told nothing of where it is
+		p = apps.Playing{Key: hex.EncodeToString(sum[:8]), Title: title, Paged: paged}
 	}
-	sum := sha256.Sum256([]byte(path)) // its notes are kept by it; the pages are told nothing of where it is
-	h.playing = apps.Playing{Key: hex.EncodeToString(sum[:8]), Title: title, Paged: paged}
+	h.setPlaying(p)
+}
+
+func (h *Host) setPlaying(p apps.Playing) {
+	h.tell(SiteTell{Do: "playing", Playing: p})
+	h.mu.Lock()
+	h.playing = p
+	h.mu.Unlock()
 }
 
 // Playing: what's on now (apps.Movie)
@@ -154,6 +168,9 @@ func (h *Host) SetShowing(path, title string) {
 // Frame: the frame on screen now, a PNG at most 1280 wide, cut from the file
 // itself (not the stream, so it's as sharp as the movie is), square pixels
 func (h *Host) Frame() ([]byte, apps.Picture, error) {
+	if h.mac != nil { // the site in its sandbox can't see the movie: the app cuts it
+		return h.mac.frame()
+	}
 	h.mu.Lock()
 	showing := h.showing
 	h.mu.Unlock()
@@ -165,7 +182,7 @@ func (h *Host) Frame() ([]byte, apps.Picture, error) {
 	defer h.grabbing.Unlock()
 	ctx, cancel := contextTimeout(15 * time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, firstTool("ffmpeg"), "-v", "error", "-nostdin", "-ss", fmt.Sprintf("%.3f", at),
+	out, err := ffmpegCmd(ctx, nil, "-v", "error", "-nostdin", "-ss", fmt.Sprintf("%.3f", at),
 		"-i", showing.path, "-frames:v", "1", "-an", "-sn",
 		"-vf", "scale=trunc(iw*sar/2)*2:ih,setsar=1,scale='min(1280,iw)':-2", "-f", "image2", "-update", "1", "-c:v", "png", "pipe:1").Output()
 	if err != nil || len(out) == 0 {

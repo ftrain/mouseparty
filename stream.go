@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -146,11 +147,20 @@ func burnTextSubtitles(filter string, shift float64) []string {
 
 var srtTiming = regexp.MustCompile(`(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})`)
 
-// offsetSRT: a temporary copy of an SRT file with every time moved by offset seconds
+// offsetSRT: a temporary copy of an SRT file with every time moved by offset seconds (0: as it is)
 func offsetSRT(path string, offset float64) (string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
+	}
+	if offset == 0 {
+		f, err := os.CreateTemp("", "mouseparty-*"+filepath.Ext(path)) // as it's named: ffmpeg tells .ass from .srt by it
+		if err != nil {
+			return "", err
+		}
+		defer f.Close()
+		_, err = f.Write(b)
+		return f.Name(), err
 	}
 	stamp := func(ms int) string {
 		ms = max(ms, 0)
@@ -209,7 +219,7 @@ func extractCover(path string, index int) string {
 	f.Close()
 	ctx, cancel := contextTimeout(30 * time.Second)
 	defer cancel()
-	err = exec.CommandContext(ctx, firstTool("ffmpeg"), "-v", "error", "-y", "-i", path, "-map",
+	err = ffmpegCmd(ctx, []string{f.Name()}, "-v", "error", "-y", "-i", path, "-map",
 		fmt.Sprintf("0:v:%d", index), "-frames:v", "1", f.Name()).Run()
 	if st, e := os.Stat(f.Name()); err == nil && e == nil && st.Size() > 0 {
 		return f.Name()
@@ -307,12 +317,11 @@ func movieCommand(path string, start float64, duration float64, audioTrack int, 
 	var videoFilters []string
 	if burn.SRT != "" {
 		if _, err := os.Stat(burn.SRT); err == nil {
+			// always a temporary copy: ffmpeg's box lets it read its inputs and our own files, not a path in a filter
 			srt := burn.SRT
-			if burn.Offset != 0 {
-				if shifted, err := offsetSRT(burn.SRT, burn.Offset); err == nil {
-					temps = append(temps, shifted)
-					srt = shifted
-				}
+			if shifted, err := offsetSRT(burn.SRT, burn.Offset); err == nil {
+				temps = append(temps, shifted)
+				srt = shifted
 			}
 			videoFilters = append(videoFilters, burnTextSubtitles(fmt.Sprintf("subtitles='%s'", filterPath(srt)), start)...)
 		}
@@ -382,7 +391,7 @@ func (p *Player) Start(args, temps []string, start float64, checkURL string) err
 		return fmt.Errorf("nothing is accepting the stream at %s: the app's MediaMTX has stopped", checkURL)
 	}
 	full := append([]string{"-loglevel", "info", "-nostats", "-progress", "pipe:1"}, args...)
-	cmd := exec.Command(firstTool("ffmpeg"), full...)
+	cmd := ffmpegCmd(nil, temps, full...) // in its box (sandbox.go): the inputs, and these files of ours
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()

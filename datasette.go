@@ -71,11 +71,17 @@ type datasette struct {
 
 // startDatasette runs Datasette on the database at path, its pages under base ("/<key>/data/<token>/")
 func startDatasette(py *wasmTool, home, path, title, base string, log func(string)) *datasette {
+	return startDatasetteOn(py, home, &document{Path: path, Title: title}, base, log)
+}
+
+// startDatasetteOn: on the database that is the document up (its file by its path, or as handed to the site)
+func startDatasetteOn(py *wasmTool, home string, doc *document, base string, log func(string)) *datasette {
+	title := doc.Title
 	ctx, cancel := context.WithCancel(context.Background())
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	d := &datasette{in: inW, out: bufio.NewReaderSize(outR, 1<<20), cancel: cancel, ready: make(chan struct{}), gone: make(chan struct{}), log: log}
-	only := onlyFile{dir: filepath.Dir(path), name: filepath.Base(path)}
+	only := onlyFile{name: filepath.Base(doc.Path), open: doc.open}
 	name := only.seen()
 	fsc := wazero.NewFSConfig().
 		WithReadOnlyDirMount(home, "/").
@@ -253,15 +259,18 @@ func (h *Host) restartDatasette(old *datasette) {
 	default:
 		old.stop()
 	}
-	h.datasette = startDatasette(h.python, pythonHome(), h.doc.Path, h.doc.Title, h.datasetteBase(h.doc), h.Log)
+	h.datasette = startDatasetteOn(h.python, h.pyHome, h.doc, h.datasetteBase(h.doc), h.Log)
 }
 
 func (h *Host) datasetteBase(d *document) string { return "/" + h.key + "/data/" + d.Token + "/" }
 
 // ---------- what it sees ----------
 
-// onlyFile: a folder holding one file, read-only: all Python sees of the database's folder
-type onlyFile struct{ dir, name string }
+// onlyFile: a folder holding one file, read-only: all Python sees of the database
+type onlyFile struct {
+	name string
+	open func() (docFile, error)
+}
 
 // seen: the file's name as Python sees it. Datasette opens it as a SQLite URI
 // (file:<path>?immutable=1), where ?, # and % mean something, and a name with
@@ -275,23 +284,38 @@ func (o onlyFile) Open(name string) (fs.File, error) {
 	case ".":
 		return &oneDir{o}, nil
 	case o.seen():
-		return os.Open(filepath.Join(o.dir, o.name))
+		return o.open()
 	}
 	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 }
 
 type oneDir struct{ o onlyFile }
 
-func (d *oneDir) Stat() (fs.FileInfo, error) { return os.Stat(d.o.dir) }
+func (d *oneDir) Stat() (fs.FileInfo, error) { return folderInfo{}, nil }
 func (d *oneDir) Read([]byte) (int, error)   { return 0, errors.New("a folder") }
 func (d *oneDir) Close() error               { return nil }
 func (d *oneDir) ReadDir(int) ([]fs.DirEntry, error) {
-	st, err := os.Stat(filepath.Join(d.o.dir, d.o.name))
+	f, err := d.o.open()
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
 	if err != nil {
 		return nil, err
 	}
 	return []fs.DirEntry{fs.FileInfoToDirEntry(renamed{st, d.o.seen()})}, nil
 }
+
+// folderInfo: the folder itself, which is nowhere on the Mac
+type folderInfo struct{}
+
+func (folderInfo) Name() string       { return "." }
+func (folderInfo) Size() int64        { return 0 }
+func (folderInfo) Mode() fs.FileMode  { return fs.ModeDir | 0o555 }
+func (folderInfo) ModTime() time.Time { return time.Time{} }
+func (folderInfo) IsDir() bool        { return true }
+func (folderInfo) Sys() any           { return nil }
 
 type renamed struct {
 	fs.FileInfo

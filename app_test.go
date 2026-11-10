@@ -14,6 +14,9 @@ import (
 // (set on GitHub's runners) would put them all in one, each seeing the others' lists
 func TestMain(m *testing.M) {
 	os.Unsetenv("XDG_CONFIG_HOME")
+	if len(os.Args) > 1 && os.Args[1] == siteArg { // the viewer site of a host under test, in its sandbox (site.go)
+		os.Exit(siteMain())
+	}
 	os.Exit(m.Run())
 }
 

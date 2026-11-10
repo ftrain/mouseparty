@@ -112,4 +112,5 @@ func (h *Host) setStun(on bool) {
 	h.mu.Lock()
 	h.stun = on
 	h.mu.Unlock()
+	h.tell(SiteTell{Do: "stun", On: on})
 }

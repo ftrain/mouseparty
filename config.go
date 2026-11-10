@@ -15,13 +15,14 @@ type Config struct {
 	OpenRouterPorts bool    `json:"open_router_ports"` // ask the router (NAT-PMP/UPnP) to let friends in; false = this network only
 	Bitrate         string  `json:"bitrate"`
 	Preset          string  `json:"preset"`
-	Skip            Number  `json:"skip"`            // minutes into the first movie played
-	Countdown       Number  `json:"countdown"`       // seconds of "up next" card before each movie; 0 for none
-	CacheGB         Number  `json:"cache_gb"`        // downloads kept, in GB: past it the oldest go (download.go); 0 for no limit
-	CheckUpdates    bool    `json:"check_updates"`   // look for a newer Mouse Party once a day (updates.go)
-	InstallUpdates  bool    `json:"install_updates"` // and download it, to go in when the app quits
-	Notify          bool    `json:"notify"`          // a notification when a friend arrives or a download finishes, while the app is behind others (mac.go)
-	Welcomed        bool    `json:"welcomed"`        // the welcome has been shown (Help > Welcome to Mouse Party shows it again)
+	Skip            Number  `json:"skip"`                 // minutes into the first movie played
+	Countdown       Number  `json:"countdown"`            // seconds of "up next" card before each movie; 0 for none
+	CacheGB         Number  `json:"cache_gb"`             // downloads kept, in GB: past it the oldest go (download.go); 0 for no limit
+	CheckUpdates    bool    `json:"check_updates"`        // look for a newer Mouse Party once a day (updates.go)
+	InstallUpdates  bool    `json:"install_updates"`      // and download it, to go in when the app quits
+	Notify          bool    `json:"notify"`               // a notification when a friend arrives or a download finishes, while the app is behind others (mac.go)
+	Welcomed        bool    `json:"welcomed"`             // the welcome has been shown (Help > Welcome to Mouse Party shows it again)
+	NoSandbox       bool    `json:"no_sandbox,omitempty"` // the site, MediaMTX, cloudflared and ffmpeg run without their sandboxes (sandbox.go): only if one is wrong on this macOS
 	Queue           []*Item `json:"queue"`
 	Position        int     `json:"position"` // queue row now playing, or next to play
 }

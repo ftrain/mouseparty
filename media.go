@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -117,7 +116,7 @@ var (
 func inspect(path string) MediaInfo {
 	ctx, cancel := contextTimeout(30 * time.Second)
 	defer cancel()
-	out, _ := exec.CommandContext(ctx, firstTool("ffmpeg"), "-hide_banner", "-nostdin", "-i", path).CombinedOutput()
+	out, _ := ffmpegCmd(ctx, nil, "-hide_banner", "-nostdin", "-i", path).CombinedOutput()
 	return parseInspect(string(out))
 }
 

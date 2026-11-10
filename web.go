@@ -42,6 +42,16 @@ func viewerFiles() fs.FS {
 }
 
 func (h *Host) startWeb() error {
+	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", h.HTTPPort))
+	if err != nil {
+		return fmt.Errorf("the viewer site did not start: %w", err)
+	}
+	h.serve(l)
+	return nil
+}
+
+// serve: the site, answering on l
+func (h *Host) serve(l net.Listener) {
 	web := viewerFiles()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{key}", func(w http.ResponseWriter, r *http.Request) {
@@ -110,16 +120,11 @@ func (h *Host) startWeb() error {
 	mux.HandleFunc("POST /{key}/grab", h.grab)
 	mux.HandleFunc("POST /{key}/read", h.postRead) // a document brought in (pandoc.go)
 
-	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", h.HTTPPort))
-	if err != nil {
-		return fmt.Errorf("the viewer site did not start: %w", err)
-	}
 	h.mu.Lock()
 	h.server = &http.Server{Handler: h.onlyWithKey(mux), ReadHeaderTimeout: 10 * time.Second}
 	server := h.server
 	h.mu.Unlock()
 	go server.Serve(l)
-	return nil
 }
 
 // onlyWithKey: nothing answers without the session key; a wrong one gets the same
@@ -302,13 +307,17 @@ func (h *Host) docFile(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"app": app, "text": text})
 		return
 	}
-	f, err := os.Open(d.Path)
+	f, err := d.open()
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	defer f.Close()
-	st, _ := f.Stat()
+	st, err := f.Stat()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", "application/pdf")
 	http.ServeContent(w, r, "", st.ModTime(), f)
 }

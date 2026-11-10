@@ -249,7 +249,7 @@ func cues(t Track, movie string, offset float64) []Cue {
 	}
 	ctx, cancel := contextTimeout(300 * time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, firstTool("ffmpeg"), args...).Output()
+	out, err := ffmpegCmd(ctx, nil, args...).Output()
 	if err != nil && len(out) == 0 {
 		return nil
 	}

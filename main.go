@@ -8,6 +8,7 @@
 //
 //	MouseParty               the app
 //	MouseParty --selftest    host on free ports, check it all works, and stop
+//	MouseParty --site        the viewer site in its sandbox: the app starts this itself (site.go)
 //
 // The queue and settings, and what apps keep (the graffiti wall, the last poll),
 // live in ~/Library/Application Support/Mouse Party; nothing else about a
@@ -41,6 +42,9 @@ func main() {
 	setToolPath()
 	if len(os.Args) > 1 && os.Args[1] == "--selftest" {
 		os.Exit(selftest())
+	}
+	if len(os.Args) > 1 && os.Args[1] == siteArg { // the viewer site, in its sandbox, started by the app (site.go)
+		os.Exit(siteMain())
 	}
 	app := NewApp(standby)
 	var ctx context.Context

@@ -95,6 +95,7 @@ func TestCloudflareIsAskedAgainAndHTTPIsNeverHandedOut(t *testing.T) {
 	tunnelRetries, cfSettle = []time.Duration{0, 50 * time.Millisecond, 50 * time.Millisecond}, 0
 	defer func() { tunnelRetries, cfSettle = retries, settle }()
 
+	unboxed(t) // the stand-in is a shell script, and a box lets its program start no other
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "cloudflared") // says no twice, then gives a link and stays up
 	os.WriteFile(fake, []byte(`#!/bin/sh
@@ -186,6 +187,7 @@ func TestMediaMTXTriesOtherPorts(t *testing.T) {
 		t.Skip("needs mediamtx")
 	}
 	t.Setenv("HOME", t.TempDir())
+	unboxed(t) // the stand-in is a shell script, and a box lets its program start no other
 	dir := t.TempDir()
 	stand := filepath.Join(dir, "mediamtx")
 	script := fmt.Sprintf("#!/bin/sh\nn=$(cat %[1]s/runs 2>/dev/null || echo 0); echo $((n+1)) > %[1]s/runs; grep apiAddress \"$1\" >> %[1]s/apis\n"+

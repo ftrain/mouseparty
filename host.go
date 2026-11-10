@@ -140,6 +140,7 @@ type Host struct {
 	ICEPort        int
 	MapPorts       bool // false: LAN (and tunnel) only, the router is left alone
 	CleanLeftovers bool // false: a check running beside a real session leaves it alone
+	Sandbox        bool // the viewer site is a process of its own, in a box (site.go, sandbox.go); false: part of this one
 	Standby        []byte
 	Party          *party            // where apps (apps.Keeper) and the pictures they name are kept (store.go); nil nowhere
 	DocAt          func(at string)   // viewers went to another page of the database up (SetAt)
@@ -182,6 +183,11 @@ type Host struct {
 	grabbing  sync.Mutex
 	pandoc    *wasmTool     // documents brought in are read by it (pandoc.go)
 	reading   chan struct{} // one at a time
+	pyHome    string        // the Python's folder ("" none in this build)
+	listener  net.Listener  // the site's port, held here while the site is a process of its own
+	site      *siteProc     // that process, as the app sees it (site.go); nil when the site is part of this one
+	siteFast  int           // times in a row it stopped as soon as it started
+	mac       *siteSide     // in that process: the way back to the app, for what only it can do
 
 	tunnelURL        string
 	tunnelRegistered time.Time
@@ -213,36 +219,23 @@ func (h *Host) start() error {
 	}
 	h.mu.Lock()
 	h.key = base64.RawURLEncoding.EncodeToString(key)
-	h.chat = &Chat{conns: map[*chatConn]bool{}}
-	env := apps.Env{Movie: h}
-	if h.Party != nil {
-		h.Party.prunePictures()
-		env.Shelf = h.Party
-	}
-	env.Reel = apps.NewReel(env.Shelf)
-	h.pics = newPictures(h.Party)
-	if h.pandoc == nil {
-		h.pandoc, h.reading = newWasmTool("pandoc"), make(chan struct{}, 1)
-		if home := pythonHome(); home != "" {
-			h.python = &wasmTool{name: "python", path: filepath.Join(home, "python.wasm")}
-		}
-	}
-	h.apps = newAppHost(h.chat, env)
-	h.chat.hello = h.greeting
-	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
-	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
-	h.chat.arrived = func(name string) {
-		if h.Arrived != nil {
-			h.Arrived(name)
-		}
-	}
-	h.chat.docAt = h.SetAt
-	h.chat.docPage, h.chat.docRead, h.chat.docPages, h.chat.docPace = h.Turn, h.Reading, h.SetPages, h.SetPace
 	h.ports = map[string]int{"api": freePort(), "rtsp": freePort(), "hls": freePort(), "webrtc": freePort()}
 	h.tmp = tmp
 	h.stdins = map[*exec.Cmd]io.WriteCloser{}
 	h.exited = map[*exec.Cmd]chan struct{}{}
 	h.mu.Unlock()
+	if h.Party != nil {
+		h.Party.prunePictures()
+	}
+	elsewhere := h.Sandbox && sandboxing() // the site in its own process: it holds the session, and this only what it's told
+	if !elsewhere {
+		var shelf apps.Shelf
+		var keep pictureKeeper
+		if h.Party != nil {
+			shelf, keep = h.Party, h.Party
+		}
+		h.session(shelf, keep)
+	}
 
 	public := ""
 	gw := defaultGateway()
@@ -275,7 +268,12 @@ func (h *Host) start() error {
 	if err := h.startMediaMTX(public, standby); err != nil { // before the site, which reads its ports
 		return err
 	}
-	if err := h.startWeb(); err != nil {
+	if elsewhere {
+		err = h.startSite()
+	} else {
+		err = h.startWeb()
+	}
+	if err != nil {
 		return err
 	}
 	h.mu.Lock()
@@ -290,21 +288,40 @@ func (h *Host) start() error {
 	return nil
 }
 
-func (h *Host) Stop() {
+// session: what a session holds for its viewers: chat, the apps, the pictures, the
+// tools that read documents. In the app, or in the site's own process (site.go).
+func (h *Host) session(shelf apps.Shelf, keep pictureKeeper) {
 	h.mu.Lock()
-	h.mediamtx = nil // we are stopping it: no restart
-	procs := h.procs
-	h.procs = nil
-	h.tunnel = nil
-	server, chat, mapper, tmp := h.server, h.chat, h.mapper, h.tmp
-	h.server, h.mapper, h.tmp = nil, nil, ""
+	defer h.mu.Unlock()
+	h.chat = &Chat{conns: map[*chatConn]bool{}}
+	env := apps.Env{Movie: h, Shelf: shelf}
+	env.Reel = apps.NewReel(env.Shelf)
+	h.pics = newPictures(keep)
+	if h.pandoc == nil {
+		h.pandoc, h.reading = newWasmTool("pandoc"), make(chan struct{}, 1)
+		if home := pythonHome(); home != "" {
+			h.python, h.pyHome = &wasmTool{name: "python", path: filepath.Join(home, "python.wasm")}, home
+		}
+	}
+	h.apps = newAppHost(h.chat, env)
+	h.chat.hello = h.greeting
+	h.chat.app, h.chat.appControl = h.apps.message, h.apps.control
+	h.chat.joined, h.chat.left = h.apps.joined, h.apps.left
+	h.chat.arrived = func(name string) {
+		if h.Arrived != nil {
+			h.Arrived(name)
+		}
+	}
+	h.chat.docAt = h.SetAt
+	h.chat.docPage, h.chat.docRead, h.chat.docPages, h.chat.docPace = h.Turn, h.Reading, h.SetPages, h.SetPace
+}
+
+// endSession: the apps closed (keeping what they keep), the viewers' sockets and the site shut
+func (h *Host) endSession() {
+	h.mu.Lock()
+	server, chat := h.server, h.chat
+	h.server = nil
 	h.mu.Unlock()
-	if mapper != nil {
-		mapper.Close()
-	}
-	for _, p := range procs {
-		stopGroup(p)
-	}
 	if h.apps != nil {
 		h.apps.closeAll()
 	}
@@ -318,13 +335,40 @@ func (h *Host) Stop() {
 		server.Shutdown(ctx)
 		cancel()
 	}
+	h.mu.Lock()
+	old := h.datasette
+	h.doc, h.datasette = nil, nil
+	h.mu.Unlock()
+	old.stop()
+}
+
+func (h *Host) Stop() {
+	h.mu.Lock()
+	h.mediamtx = nil // we are stopping it: no restart
+	procs := h.procs
+	h.procs = nil
+	h.tunnel = nil
+	mapper, tmp, site, listener := h.mapper, h.tmp, h.site, h.listener
+	h.mapper, h.tmp, h.site, h.listener = nil, "", nil, nil
+	h.mu.Unlock()
+	if mapper != nil {
+		mapper.Close()
+	}
+	for _, p := range procs {
+		stopGroup(p)
+	}
+	if site != nil {
+		site.stop() // its apps keep what they hold as they close, through here
+	}
+	if listener != nil {
+		listener.Close()
+	}
+	h.endSession()
 	if tmp != "" {
 		os.RemoveAll(tmp)
 	}
 	h.mu.Lock()
-	h.key, h.urls, h.doc = "", map[string]string{}, nil
-	h.datasette.stop()
-	h.datasette = nil
+	h.key, h.urls = "", map[string]string{}
 	h.mu.Unlock()
 }
 
@@ -408,7 +452,8 @@ func (h *Host) viewers() int {
 // spawn runs a tool under the watchdog, in the session's folder (anything a tool
 // writes beside itself, like MediaMTX's certificates, goes with the session)
 func (h *Host) spawn(name, bin string, args ...string) (*exec.Cmd, error) {
-	cmd := exec.Command("/bin/sh", append([]string{"-c", watchdog, "mouseparty-watch", bin}, args...)...)
+	run, argv := h.boxFor(name, bin).argv(args...)
+	cmd := exec.Command("/bin/sh", append([]string{"-c", watchdog, "mouseparty-watch", run}, argv...)...)
 	cmd.Dir = h.tmp
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdin, err := cmd.StdinPipe()
@@ -430,6 +475,28 @@ func (h *Host) spawn(name, bin string, args ...string) (*exec.Cmd, error) {
 	h.mu.Unlock()
 	go h.drain(cmd, out, name, bin, args)
 	return cmd, nil
+}
+
+// boxFor: what a tool may do (sandbox.go). MediaMTX: the session's folder, this
+// Mac's own ports, the ICE port from anywhere, and UDP out, which is the video
+// going to viewers. cloudflared: no files; out to Cloudflare, and the site's port
+// here. Neither can start a program, whatever it's told to (MediaMTX can be
+// configured to run commands, through an API the site reaches).
+func (h *Host) boxFor(name, bin string) *box {
+	b := newBox(bin).lookups()
+	switch name {
+	case "mediamtx":
+		b.write(h.tmp).allow(
+			`(allow network-bind network-inbound (local ip "localhost:*"))`,
+			fmt.Sprintf(`(allow network-bind network-inbound (local ip "*:%d"))`, h.ICEPort),
+			`(allow network-outbound (remote udp "*:*"))`)
+	case "cloudflared":
+		b.allow(
+			`(allow network-bind network-inbound (local ip "localhost:*"))`,
+			`(allow network-outbound (remote ip "*:443") (remote ip "*:7844") (remote ip "*:53"))`,
+			fmt.Sprintf(`(allow network-outbound (remote tcp "localhost:%d"))`, h.HTTPPort))
+	}
+	return b
 }
 
 var tunnelLink = regexp.MustCompile(`https://[a-z0-9-]+\.trycloudflare\.com`)

@@ -21,6 +21,7 @@ func selftest() int {
 	// its own ports and no cleanup, so it can run while the app is hosting a real session
 	h := NewHost(func(s string) { fmt.Println(s) }, firstTool("mediamtx"), "", standby)
 	h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers = freePort(), freeICEPort(), false, false
+	h.Sandbox = true // as the app hosts: the site in its box
 	ok := true
 	check := func(what string, fn func() (string, error)) {
 		result, err := fn()

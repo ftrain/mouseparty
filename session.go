@@ -6,6 +6,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,7 +51,36 @@ type document struct {
 	Ready bool   `json:"ready,omitempty"`
 	Error string `json:"error,omitempty"` // why it couldn't be read
 	text  string
+	file  *os.File // its file, handed to the site in its sandbox, where a path opens nothing (site.go); nil: opened by Path
 }
+
+// docFile: a document's file as it's read: from the start, by one reader
+type docFile interface {
+	fs.File
+	io.ReadSeeker
+	io.ReaderAt
+}
+
+// open: the document's file, each reader with a place of its own in it
+func (d *document) open() (docFile, error) {
+	if d.file == nil {
+		return os.Open(d.Path)
+	}
+	st, err := d.file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	return handedFile{io.NewSectionReader(d.file, 0, st.Size()), d.file}, nil
+}
+
+// handedFile: a reader of a file that was handed over open
+type handedFile struct {
+	*io.SectionReader
+	f *os.File
+}
+
+func (h handedFile) Stat() (fs.FileInfo, error) { return h.f.Stat() }
+func (h handedFile) Close() error               { return nil } // the file is the document's, until it's gone
 
 // textApp: which of Tiny Little Office's editors a document is read into, by what it is
 func textApp(path string) string {
@@ -77,6 +108,7 @@ type clock struct {
 // their own delay. The position, not a wall clock: viewers' clocks differ.
 
 func (h *Host) SetSubtitles(token string, tracks []SubTrack) {
+	h.tell(SiteTell{Do: "subs", Token: token, Tracks: tracks})
 	h.mu.Lock()
 	h.subsToken, h.subs = token, tracks
 	h.mu.Unlock()
@@ -84,6 +116,7 @@ func (h *Host) SetSubtitles(token string, tracks []SubTrack) {
 }
 
 func (h *Host) ClearSubtitles() {
+	h.tell(SiteTell{Do: "nosubs"})
 	h.mu.Lock()
 	h.subsToken, h.subs, h.clock = "", nil, nil
 	h.mu.Unlock()
@@ -92,6 +125,7 @@ func (h *Host) ClearSubtitles() {
 }
 
 func (h *Host) SetPosition(token string, position float64) {
+	h.tell(SiteTell{Do: "position", Token: token, Position: position})
 	now := time.Now()
 	h.mu.Lock()
 	var expected *float64
@@ -145,6 +179,7 @@ func (h *Host) subsJSON() map[string]any {
 // SetSchedule: what's on and next, now first. Sent with this Mac's own time, so
 // viewers whose clocks are off still see the right times.
 func (h *Host) SetSchedule(rows []ScheduleRow) {
+	h.tell(SiteTell{Do: "schedule", Rows: rows})
 	h.mu.Lock()
 	h.schedule = rows
 	h.mu.Unlock()
@@ -177,19 +212,18 @@ func (h *Host) SetDocument(d document) {
 	if d.Kind == "text" {
 		d.App = textApp(d.Path)
 	}
+	elsewhere := h.tell(SiteTell{Do: "doc", Doc: d}) // then it's the site's to show: here it's only remembered
 	h.mu.Lock()
 	old := h.datasette
 	h.doc, h.datasette = &d, nil
-	if d.Kind == "db" {
-		if home := pythonHome(); home != "" && h.python != nil {
-			h.datasette = startDatasette(h.python, home, d.Path, d.Title, h.datasetteBase(&d), h.Log)
-		}
+	if d.Kind == "db" && h.pyHome != "" && h.python != nil {
+		h.datasette = startDatasetteOn(h.python, h.pyHome, h.doc, h.datasetteBase(&d), h.Log)
 	}
 	h.mu.Unlock()
 	old.stop()
 	h.broadcast(h.docJSON())
 	h.repace()
-	if d.Kind == "text" {
+	if d.Kind == "text" && !elsewhere {
 		go h.readText(h.doc)
 	}
 }
@@ -197,15 +231,23 @@ func (h *Host) SetDocument(d document) {
 // readText: a document up, read by pandoc (seconds, the first time), then pages are told it's ready
 func (h *Host) readText(d *document) {
 	text, err := "", error(nil)
-	st, serr := os.Stat(d.Path)
+	var size int64
+	f, serr := d.open()
+	if serr == nil {
+		defer f.Close()
+		var st fs.FileInfo
+		if st, serr = f.Stat(); serr == nil {
+			size = st.Size()
+		}
+	}
 	switch {
 	case serr != nil:
 		err = serr
-	case st.Size() > readMaxBytes:
+	case size > readMaxBytes:
 		err = fmt.Errorf("it's over %d MB", readMaxBytes>>20)
 	default:
 		var b []byte
-		if b, err = os.ReadFile(d.Path); err == nil {
+		if b, err = io.ReadAll(f); err == nil {
 			if h.reading != nil {
 				h.reading <- struct{}{} // after any a viewer brought in
 				defer func() { <-h.reading }()
@@ -264,6 +306,7 @@ func (h *Host) SetAt(token, at string, back bool) {
 }
 
 func (h *Host) SetPage(page int) {
+	h.tell(SiteTell{Do: "page", Page: page})
 	h.mu.Lock()
 	changed := h.doc != nil && h.doc.Page != page
 	if changed {
@@ -277,6 +320,7 @@ func (h *Host) SetPage(page int) {
 }
 
 func (h *Host) ClearDocument() {
+	h.tell(SiteTell{Do: "nodoc"})
 	h.mu.Lock()
 	had := h.doc != nil
 	old := h.datasette
