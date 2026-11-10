@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mouse Party</title>
+<meta name="description" content="Have friends over, online: a movie on, chat beside it and games on the table, hosted from your own Mac and gone when you quit.">
+<meta property="og:title" content="Mouse Party">
+<meta property="og:description" content="Have friends over, online. Hosted from your own Mac, and gone when you quit.">
+<meta property="og:image" content="https://ftrain.github.io/mouseparty/icon.png">
+<link rel="icon" type="image/png" href="icon.png">
+<style>
+/* One column of plain prose, as wide as a paragraph reads well; the icon's night sky and party hat for colour. */
+:root {
+    --ground: #fbf8fd;
+    --ink: #241338;
+    --quiet: #6b5a80;
+    --rule: #e4daee;
+    --link: #a3206f;
+    --button: #2b1450;
+    --button-ink: #ffffff;
+    --frame: #1a1030;
+    --prose: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --display: ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", system-ui, sans-serif;
+    --plain: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ground: #1a1030;
+        --ink: #efe8f6;
+        --quiet: #a999bd;
+        --rule: #3a2658;
+        --link: #ff8fbf;
+        --button: #ff7ab6;
+        --button-ink: #1a1030;
+        --frame: #0d0718;
+        color-scheme: dark;
+    }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+    margin: 0;
+    padding: 3.5rem max(1.25rem, env(safe-area-inset-right)) 4rem max(1.25rem, env(safe-area-inset-left));
+    background: var(--ground);
+    color: var(--ink);
+    font: 1.1875rem/1.6 var(--prose);
+}
+main { max-width: 34rem; margin: 0 auto; }
+header { margin-bottom: 2.5rem; }
+header img { display: block; width: 8rem; height: 8rem; margin: 0 0 0.5rem -0.75rem; }
+h1 { font: 700 2.75rem/1.1 var(--display); letter-spacing: -0.01em; margin: 0 0 0.75rem; }
+h2 { font: 700 1.375rem/1.25 var(--display); margin: 2.75rem 0 0.5rem; text-wrap: balance; }
+p { margin: 0 0 1.1rem; }
+.lede { font-size: 1.375rem; line-height: 1.45; }
+a { color: var(--link); text-underline-offset: 0.15em; }
+a:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; border-radius: 4px; }
+.get { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: center; margin: 1.75rem 0 0.75rem; font-family: var(--plain); }
+.get a { display: inline-flex; align-items: center; gap: 0.6rem; font-weight: 600; font-size: 1.0625rem; }
+.get svg { width: 1.3em; height: 1.3em; flex: none; }
+.get .download { background: var(--button); color: var(--button-ink); text-decoration: none; padding: 0.8rem 1.3rem; border-radius: 999px; }
+.get .download:hover { filter: brightness(1.15); }
+.small { font: 0.9375rem/1.5 var(--plain); color: var(--quiet); }
+figure { margin: 2.25rem 0; }
+figure img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--rule); background: var(--frame); }
+figure.window img { width: auto; max-width: min(100%, 22rem); margin: 0 auto; }
+figcaption { font: 0.9375rem/1.45 var(--plain); color: var(--quiet); margin-top: 0.6rem; }
+footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); }
+</style>
+</head>
+<body>
+<main>
+<header>
+    <img src="icon.png" alt="The Mouse Party icon: a mouse in a party hat, under confetti" width="256" height="256">
+    <h1>Mouse Party</h1>
+    <p class="lede">Have friends over, online: a movie on, chat beside it, and games on the table. It all runs from your own Mac, and it's gone when you quit.</p>
+    <div class="get">
+        <a class="download" href="https://github.com/ftrain/mouseparty/releases/latest/download/MouseParty-macos-arm64.dmg">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="m7 10 5 5 5-5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
+            Download for Mac
+        </a>
+        <a href="https://github.com/ftrain/mouseparty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>
+            Source code
+        </a>
+    </div>
+    <p class="small">The newest release, as a disk image. For Apple Silicon Macs on macOS 13 or later. Open it and drag Mouse Party to Applications; from then on it updates itself. Until releases are signed, macOS will say it can't verify the app the first time: System Settings &gt; Privacy &amp; Security &gt; Open Anyway.</p>
+</header>
+
+<p>Drag some movies into the window and press Play. Press the other button, and a link is on your clipboard. Paste it into the group chat. Your friends open it in a browser, on a laptop or a phone, and the movie is playing, with a chat beside it. Nobody installs anything or makes an account.</p>
+
+<figure class="window">
+    <img src="shots/window.png" alt="The Mouse Party window on the Mac: a red Stop button and a blue copy-link button over a list of movies, a song, a PDF, a document, a database and a download" width="1040" height="940">
+    <figcaption>The whole app: a list you drag things into, a button to play and stop, and a button that copies the link.</figcaption>
+</figure>
+
+<h2>There is no server</h2>
+<p>Your Mac is the server, for as long as the app is open. The video goes from your Mac straight to each friend. The link comes from a Cloudflare tunnel, which needs no account, so it works from anywhere without touching your router's settings.</p>
+<p>When you quit, the link stops working, and the chat and the list of who came are gone. They were only ever in memory. What stays on your Mac is your list of movies, your settings, and the few things the games keep, such as the graffiti wall. All of that is in one file, which you can lock with a passcode or erase from the menu.</p>
+
+<h2>More than movies</h2>
+<p>It plays anything ffmpeg can read, with subtitles. Music gets its cover art and a quiet picture of the sound. A PDF, a Word file or a deck of slides is read together, everyone on the same page, with anyone able to turn it. A SQLite database is looked through together with Datasette. You can also paste a download link, and the movie starts playing while it's still coming down.</p>
+
+<figure>
+    <img src="shots/together.png" alt="A friend's view in the browser: the picture on the left with Graffiti's pens over it, and the chat on the right" width="1280" height="720" loading="lazy">
+    <figcaption>What a friend sees in their browser, here with Graffiti's pens out. This picture and the next come from the app's automated tests, so the guests are robots and the movie is a test card.</figcaption>
+</figure>
+
+<h2>Games on the table</h2>
+<p>Anyone watching can open a game or a toy for everyone, as a window over the movie, which keeps playing behind it. There's Bingo with words from the movie's own subtitles, a crossword tile game, Sketch, Anagrams, Word Grid, Blanks, Spies and Werewolf. There are polls, sticky notes that reappear at the same moment next time, graffiti drawn right on the picture, shared documents and spreadsheets, and a voice call for talking over the film. They're simple, and there to be played with.</p>
+
+<figure>
+    <img src="shots/game.png" alt="The tile game open in a window over the movie, with the chat beside it" width="1280" height="720" loading="lazy">
+    <figcaption>The tile game, in a window over the movie. Each person moves and sizes their own windows.</figcaption>
+</figure>
+
+<h2>If a guest isn't a friend</h2>
+<p>The link is an invitation, and whoever holds it can talk to your Mac. So everything a guest's browser can reach runs inside macOS sandboxes. The part that serves the page and the chat can't open a file in your home folder, start a program, or reach anything else on your Mac or your network. Someone who found a hole in it would have the party, and not your computer. This narrows what a break-in could get. It doesn't promise there are no holes.</p>
+
+<h2>No guarantees</h2>
+<p>Mouse Party is one person's project, given away. It comes as it is, with no warranty of any kind and no promise of support. It opens your Mac to whoever has the link, on purpose. Use it at your own risk, share the link with people you know, and quit when the party's over.</p>
+
+<h2>Open source</h2>
+<p>The code is <a href="https://github.com/ftrain/mouseparty">on GitHub</a> under the <a href="https://github.com/ftrain/mouseparty/blob/main/LICENSE">MIT licence</a>: read it, change it, build your own. The download also carries other people's programs under their own licences, among them ffmpeg and pandoc, which are GPL; <a href="https://github.com/ftrain/mouseparty/blob/main/licenses/README.md">every one is listed</a>, and each release includes their sources. The <a href="https://github.com/ftrain/mouseparty#readme">README</a> says how everything works and how to build it, and <a href="https://github.com/ftrain/mouseparty/releases">Releases</a> has every version.</p>
+
+<footer class="small">
+    <p>Mouse Party is by Paul Ford. MIT licence, no warranty.</p>
+</footer>
+</main>
+</body>
+</html>
