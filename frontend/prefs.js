@@ -274,8 +274,21 @@ function accounts(p) {
 	}));
 	return box;
 }
+let watching = 0;
+function watchPlaying() {
+	clearTimeout(watching);
+	watching = window.setTimeout(async () => {
+		if (current !== "streaming" || sheet.hidden || !sheet.querySelector(".prefs")) return;
+		const now = await App().Prefs();
+		if (now.soundFor !== prefs.soundFor && !sheet.querySelector(".pref-range:active")) {
+			prefs = now;
+			draw();
+		} else watchPlaying();
+	}, 1e3);
+}
 function draw() {
 	const tab = TABS.find((t) => t.id === current) ?? TABS[0];
+	if (tab.id === "streaming") watchPlaying();
 	const bar = el("nav", { className: "pref-tabs" });
 	for (const t of TABS) {
 		const b = el("button", {

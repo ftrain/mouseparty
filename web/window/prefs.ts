@@ -312,8 +312,24 @@ function accounts(p: Prefs) {
     return box;
 }
 
+// while Streaming is up, it follows what's playing: a movie starting (after its countdown) or
+// ending shows or hides its sound sync
+let watching = 0;
+function watchPlaying() {
+    clearTimeout(watching);
+    watching = window.setTimeout(async () => {
+        if (current !== 'streaming' || sheet.hidden || !sheet.querySelector('.prefs')) return;
+        const now = await App().Prefs();
+        if (now.soundFor !== prefs.soundFor && !sheet.querySelector('.pref-range:active')) {
+            prefs = now;
+            draw();
+        } else watchPlaying();
+    }, 1000);
+}
+
 function draw() {
     const tab = TABS.find((t) => t.id === current) ?? TABS[0];
+    if (tab.id === 'streaming') watchPlaying();
     const bar = el('nav', { className: 'pref-tabs' });
     for (const t of TABS) {
         const b = el('button', { type: 'button', className: 'pref-tab' + (t.id === tab.id ? ' on' : '') });
