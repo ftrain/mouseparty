@@ -1,0 +1,18 @@
+# Pull requests for newer Go modules, npm dev tools and GitHub Actions, once a week.
+# Bundled programs (ffmpeg, MediaMTX, cloudflared, pandoc, the Python) are pinned by
+# their scripts in scripts/ and aren't watched here. A new or upgraded dependency
+# updates its folder in licenses/ and the tables in licenses/README.md.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -18,6 +18,9 @@ on:
         description: How long each fuzzer runs (Go duration)
         default: 15m
 
+permissions:
+  contents: read
+
 jobs:
   fuzz:
     runs-on: macos-15

@@ -202,7 +202,7 @@ func (h *Host) launchSite() error {
 	canary := filepath.Join(tmp, "outside")
 	os.MkdirAll(own, 0o700)
 	os.WriteFile(canary, []byte("the site must not be able to read this\n"), 0o600)
-	cache := wasmCacheDir()
+	cache := wasmCacheFor(true) // the site's own: nothing outside its box loads from it (wasm.go)
 	if cache != "" && os.MkdirAll(cache, 0o755) != nil {
 		cache = ""
 	}
@@ -500,6 +500,7 @@ type siteSide struct {
 // siteMain is `MouseParty --site`: the viewer site, until the app goes. Started only by the app
 // (launchSite), which hands it the site's port (3) and its three sockets (4, 5, 6).
 func siteMain() int {
+	inSiteBox = true
 	conn := func(fd uintptr) net.Conn {
 		f := os.NewFile(fd, "app")
 		c, err := net.FileConn(f)

@@ -29,12 +29,24 @@ import (
 const wasmMemoryPages = 32768 // 2 GB, at most, for any one run
 
 // wasmCacheDir: where compiled modules are kept between sessions ("" for none)
-var wasmCacheDir = func() string {
+var wasmCacheDir = func() string { return wasmCacheFor(inSiteBox) }
+
+// inSiteBox: this process is the viewer site, in its box (siteMain)
+var inSiteBox bool
+
+// wasmCacheFor: the boxed site's cache, or the one for a process outside any box.
+// The cache is machine code that is run as it is, and the site writes its own, so
+// nothing outside the box ever loads from the site's folder: a site taken over
+// could put anything there.
+func wasmCacheFor(boxed bool) string {
 	d, err := os.UserCacheDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(d, "Mouse Party", "wasm")
+	if boxed {
+		return filepath.Join(d, "Mouse Party", "wasm")
+	}
+	return filepath.Join(d, "Mouse Party", "wasm-unboxed")
 }
 
 // findWasm: a tool's module, in the app (Contents/Resources/wasm) or, building
