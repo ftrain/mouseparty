@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	github.com/gorilla/websocket v1.5.3
-	github.com/huin/goupnp v1.3.0
+	github.com/huin/goupnp v1.3.1
 	github.com/jackpal/gateway v1.2.0
 	github.com/jackpal/go-nat-pmp v1.1.0
 	github.com/ncruces/go-sqlite3 v0.36.0
