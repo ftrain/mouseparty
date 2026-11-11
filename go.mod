@@ -8,7 +8,7 @@ require (
 	github.com/jackpal/gateway v1.2.0
 	github.com/jackpal/go-nat-pmp v1.1.0
 	github.com/ncruces/go-sqlite3 v0.36.0
-	github.com/pdfcpu/pdfcpu v0.16.3
+	github.com/pdfcpu/pdfcpu v0.16.4
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/wailsapp/wails/v2 v2.17.0
 	golang.org/x/image v0.47.0
