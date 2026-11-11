@@ -7,6 +7,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -49,6 +50,8 @@ type Prefs struct {
 	InstallUpdates  bool         `json:"installUpdates"`  // and download it, to go in when the app quits
 	Notify          bool         `json:"notify"`          // notifications while the app is behind others
 	Update          UpdateStatus `json:"update"`          // only shown: this version, and where updating has got to
+	SoundFor        string       `json:"soundFor"`        // only shown: the movie up now, whose sound SetSound moves ("" for none)
+	Sound           float64      `json:"sound"`           // only shown: how far it's moved now, in seconds (positive: later)
 }
 
 // Account: a site's kept login, as the window lists it (never its password)
@@ -89,6 +92,9 @@ func (a *App) Prefs() Prefs {
 			OpenRouterPorts: a.cfg.OpenRouterPorts, MaxViewers: int(a.cfg.MaxViewers), CacheGB: float64(a.cfg.CacheGB), Accounts: a.accounts(),
 			Sealed: a.party != nil && a.party.sealed, CheckUpdates: a.cfg.CheckUpdates, InstallUpdates: a.cfg.InstallUpdates,
 			Notify: a.cfg.Notify, Update: a.updateStatus()}
+		if it := a.current; it != nil && a.phase == "movie" && it.kind() == "video" {
+			p.SoundFor, p.Sound = displayTitle(it.Path), it.Sound
+		}
 	})
 	p.Cache = a.CacheText()
 	return p
@@ -128,6 +134,44 @@ func (a *App) SetPrefs(p Prefs) string {
 		}
 	})
 	return result
+}
+
+// SetSound moves the sound of the movie up now against its picture, by seconds (positive:
+// later), kept with its row for whenever it plays; "" or why not. For a file whose sound and
+// picture don't line up: the same for every viewer, so it's put right here, once. The movie
+// starts again from where it is, the new way.
+func (a *App) SetSound(seconds float64) string {
+	result := ""
+	a.wait(func() { result = a.setSound(seconds) })
+	return result
+}
+
+func (a *App) setSound(seconds float64) string {
+	it := a.current
+	switch {
+	case math.IsNaN(seconds) || seconds < -soundMost || seconds > soundMost:
+		return fmt.Sprintf("The sound moves at most %g seconds either way", soundMost)
+	case a.locked:
+		return "The party is sealed: open it first"
+	case it == nil || a.state() != "movie" || it.kind() != "video":
+		return "Play a movie to move its sound"
+	}
+	seconds = math.Round(seconds*100) / 100
+	if it.Sound == seconds {
+		return ""
+	}
+	it.Sound = seconds
+	a.save()
+	switch title := displayTitle(it.Path); {
+	case seconds > 0:
+		a.log(fmt.Sprintf("The sound of %s is %.2f seconds later.", title, seconds))
+	case seconds < 0:
+		a.log(fmt.Sprintf("The sound of %s is %.2f seconds earlier.", title, -seconds))
+	default:
+		a.log("The sound of " + title + " is as the file has it.")
+	}
+	a.seek(a.playedTo()) // on from where it is, the new way
+	return ""
 }
 
 // accounts: the sites with a kept login, in order

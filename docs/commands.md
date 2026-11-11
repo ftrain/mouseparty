@@ -38,7 +38,7 @@ stateDiagram-v2
     movie --> linking: PlayClicked
     movie --> nolink: PlayClicked
     movie --> ready: PlayClicked
-    movie --> between: PlayRow, Seek, Remove, ClearPlayed, RedoRemove
+    movie --> between: PlayRow, Seek, SetSound, Remove, ClearPlayed, RedoRemove
     movie --> stopping: PlayClicked, Remove, ClearPlayed, RedoRemove
     doc --> empty: PlayClicked, Remove, ClearPlayed, RedoRemove
     doc --> linking: PlayClicked
@@ -62,6 +62,7 @@ Besides those, the app moves on its own (the link made, a countdown over, a movi
 | `PlayClicked` | Play, or Stop | ready, countdown, movie, doc, between |
 | `PlayRow` | a row double-clicked: play it, or switch to it; a failed download's, try it again | every state |
 | `Seek` | the slider let go | movie |
+| `SetSound` | Settings > Streaming: the sound of the movie up now moved earlier or later, and the movie started again from where it was | movie |
 | `ShowPage` | a PDF's page, from the slider | doc |
 | `TurnPage` | the arrow keys; past the last page, on | doc |
 | `Select` | a row clicked | every state |

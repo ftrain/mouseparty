@@ -99,8 +99,8 @@ if [ ! -f "$PREFIX/lib/libass.a" ]; then
     done_with libass
 fi
 
-ENCODERS=libx264,libopus,png,webvtt
-MUXERS=rtsp,rtp,webvtt,image2,matroska,mp4,mov,null
+ENCODERS=libx264,libopus,png,webvtt,pcm_s16le # pcm_s16le and s16le: the tests hear where a sound falls (TestSoundShift)
+MUXERS=rtsp,rtp,webvtt,image2,matroska,mp4,mov,null,pcm_s16le
 PROTOCOLS=file,pipe,tcp,udp,rtp
 # what stream.go and subtitles.go name; the sources (color, anullsrc; testsrc and
 # sine for the tests); and what ffmpeg inserts itself: format and rate conversion,
@@ -108,6 +108,7 @@ PROTOCOLS=file,pipe,tcp,udp,rtp
 FILTERS=drawtext,subtitles,ass,scale,pad,setsar,setpts,asetpts,overlay,split,asplit,showcqt,gblur,lagfun,vstack,colorchannelmixer
 FILTERS=$FILTERS,color,anullsrc,testsrc,sine
 FILTERS=$FILTERS,buffer,buffersink,abuffer,abuffersink,null,anull,copy,acopy,format,aformat,aresample,fps,trim,atrim
+FILTERS=$FILTERS,adelay # the sound moved later (Item.Sound)
 FILTERS=$FILTERS,transpose,hflip,vflip,crop,setparams
 
 unpack ffmpeg ffmpeg-9.0.2.tar.xz

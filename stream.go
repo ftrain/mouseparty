@@ -7,6 +7,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -336,8 +337,8 @@ type Burn struct {
 func filterPath(p string) string { return strings.NewReplacer(`\`, `\\`, `:`, `\:`).Replace(p) }
 
 // movieCommand: ffmpeg arguments for one file, starting start seconds in, with
-// audioTrack (0-based) and burn
-func movieCommand(path string, start float64, duration float64, audioTrack int, burn Burn, o StreamOpts) (args, temps []string) {
+// audioTrack (0-based), its sound moved shift seconds (soundShift) and burn
+func movieCommand(path string, start float64, duration float64, audioTrack int, shift float64, burn Burn, o StreamOpts) (args, temps []string) {
 	args = []string{"-fflags", "+genpts+igndts"}
 	// Seek before the input (fast), and accurately: it starts at exactly this movie
 	// time rather than the keyframe before it, which subtitles depend on
@@ -399,8 +400,30 @@ func movieCommand(path string, start float64, duration float64, audioTrack int, 
 			args = append(args, "-map", "0:v:0", "-map", fmt.Sprintf("0:a:%d", audioTrack),
 				"-vf", strings.Join(videoFilters, ","))
 		}
+		if f := soundShift(shift); f != "" {
+			args = append(args, "-af", f)
+		}
 	}
 	return append(args, encodingArgs(o)...), temps
+}
+
+// soundMost: the furthest the sound is moved either way, in seconds
+const soundMost = 3.0
+
+// soundShift: the audio filter that moves a movie's sound against its picture by
+// seconds (positive: later), for a file whose two don't line up; "" for none. Later
+// is silence before it; earlier, its first moment cut, so what was heard at t is
+// heard at t-seconds. Either way the picture is as it was, and the positions
+// (and subtitles, which go by the picture) with it.
+func soundShift(seconds float64) string {
+	ms := int(math.Round(seconds * 1000))
+	switch {
+	case ms > 0:
+		return fmt.Sprintf("adelay=delays=%d:all=1", ms)
+	case ms < 0:
+		return fmt.Sprintf("atrim=start=%.3f,asetpts=PTS-STARTPTS", float64(-ms)/1000)
+	}
+	return ""
 }
 
 // Player runs one ffmpeg at a time. Positions (seconds into the movie just sent)

@@ -149,6 +149,7 @@ const TABS: Tab[] = [
                 select(PRESETS, p.preset, (q, v) => (q.preset = v)),
                 'More looks sharper. Lower this if your Mac runs hot.',
             ),
+            sound(p),
         ],
     },
     {
@@ -213,6 +214,41 @@ const TABS: Tab[] = [
         },
     },
 ];
+
+// Sound sync, on Streaming: a slider moving the sound of the movie up now earlier or later, for a
+// file whose sound and picture don't line up. Everyone hears the change; it's kept with the movie.
+const SOUND_MOST = 3; // prefs.go's soundMost
+const soundText = (s: number) => (s === 0 ? 'In sync, as the file has it' : `${Math.abs(s).toFixed(2)} s ${s > 0 ? 'later' : 'earlier'}`);
+
+function sound(p: Prefs) {
+    if (!p.soundFor) return row('Sound sync', el('span', { className: 'pref-note', textContent: 'Play a movie to line up its sound.' }));
+    const slider = el('input', { type: 'range', min: String(-SOUND_MOST), max: String(SOUND_MOST), step: '0.05', value: String(p.sound), className: 'pref-range' });
+    slider.setAttribute('aria-label', `Sound sync for ${p.soundFor}`);
+    const shown = el('span', { className: 'pref-sound', textContent: soundText(p.sound) });
+    const set = async (s: number) => {
+        slider.value = String(s);
+        shown.textContent = soundText(s);
+        const why = await App().SetSound(s);
+        status().textContent = why;
+        prefs = await App().Prefs();
+        if (why) draw();
+    };
+    slider.oninput = () => void (shown.textContent = soundText(Number(slider.value)));
+    slider.onchange = () => void set(Number(slider.value));
+    return row(
+        'Sound sync',
+        [
+            el('span', { className: 'pref-inline' }, el('span', { textContent: 'Earlier' }), slider, el('span', { textContent: 'Later' })),
+            el(
+                'span',
+                { className: 'pref-inline' },
+                shown,
+                button('Reset', () => void set(0), 'quiet-button'),
+            ),
+        ],
+        `For ${p.soundFor}, for everyone. If voices come before lips move, move it later. Each change makes the picture pause for a moment.`,
+    );
+}
 
 // Updates, on General: this version, whether to look for a newer one and download it, Check Now, and how it's going
 function updates(p: Prefs) {

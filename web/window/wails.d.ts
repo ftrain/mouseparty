@@ -79,6 +79,7 @@ export interface App {
     // the Settings window (prefs.go): each change kept as it's made
     Prefs(): Promise<Prefs>;
     SetPrefs(p: Prefs): Promise<string>;
+    SetSound(seconds: number): Promise<string>; // the movie up now's sound moved (positive: later); "" or why not
     SaveAccount(site: string, user: string, pass: string): Promise<string>; // site: its name, or a link to it
     RemoveAccount(site: string): Promise<string>;
     // updates (updates.go)
@@ -102,6 +103,8 @@ export interface Prefs {
     installUpdates: boolean; // and download it, to go in when the app quits
     notify: boolean; // notifications while the app is behind others
     update: UpdateStatus; // only shown
+    soundFor: string; // only shown: the movie up now ("" for none), whose sound SetSound moves
+    sound: number; // only shown: how far it's moved, in seconds (positive: later)
 }
 
 // updates.go's UpdateStatus

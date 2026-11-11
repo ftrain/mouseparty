@@ -82,6 +82,7 @@ var windowGraph = []windowCommand{
 	{"PlayRow", windowStates, merge(each(windowStates, "same"), each([]string{"ready"}, starting...), each([]string{"countdown", "movie", "doc"}, "same", "between"),
 		each([]string{"between"}, "between")), "a row double-clicked: play it, or switch to it; a failed download's, try it again"},
 	{"Seek", []string{"movie"}, each([]string{"movie"}, "movie", "between"), "the slider let go"},
+	{"SetSound", []string{"movie"}, each([]string{"movie"}, "movie", "between"), "Settings > Streaming: the sound of the movie up now moved earlier or later, and the movie started again from where it was"},
 	{"ShowPage", []string{"doc"}, each([]string{"doc"}, "doc"), "a PDF's page, from the slider"},
 	{"TurnPage", []string{"doc"}, each([]string{"doc"}, "doc", "between", "stopping", "ready"), "the arrow keys; past the last page, on"},
 	{"Select", windowStates, each(windowStates, "same"), "a row clicked"},
@@ -792,12 +793,17 @@ func windowWalk(t *testing.T, data []byte) {
 			}
 		case 10:
 			name, fn = "LinkClicked", a.linkClicked
-		case 11: // the settings changed: as text, or in the Settings window (good ones and refused ones)
-			if c.n(2) == 0 {
+		case 11: // the settings changed: as text, or in the Settings window (good ones and refused ones), or the sound moved
+			switch c.n(3) {
+			case 2:
+				s := []float64{0.25, -0.5, 0, 4}[c.n(4)]
+				step("SetSound", func() { a.setSound(s) }, command("SetSound").Acts, command("SetSound").To)
+				continue
+			case 0:
 				a.SetSettingsText(settingsTexts[c.n(len(settingsTexts))])
 				state, v := look()
 				checkView(t, "SetSettingsText", state, v)
-			} else {
+			default:
 				p := a.Prefs()
 				p.Countdown, p.CacheGB = float64(c.n(4)-1), float64(c.n(3))/1000
 				p.Bitrate, p.Preset = []int{1500, 100, 4000}[c.n(3)], presets[c.n(len(presets))]

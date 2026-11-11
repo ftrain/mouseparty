@@ -117,7 +117,11 @@ const TABS = [
 		id: "streaming",
 		label: "Streaming",
 		icon: "gauge",
-		draw: (p) => [row("Bandwidth", select(BITRATES.map(([k, label]) => [String(k), label]), String(p.bitrate), (q, v) => q.bitrate = Number(v)), `Lower this if the video stutters. 4 friends need ${mbit((p.bitrate + 128) * 4)} of upload.`), row("Encoding effort", select(PRESETS, p.preset, (q, v) => q.preset = v), "More looks sharper. Lower this if your Mac runs hot.")]
+		draw: (p) => [
+			row("Bandwidth", select(BITRATES.map(([k, label]) => [String(k), label]), String(p.bitrate), (q, v) => q.bitrate = Number(v)), `Lower this if the video stutters. 4 friends need ${mbit((p.bitrate + 128) * 4)} of upload.`),
+			row("Encoding effort", select(PRESETS, p.preset, (q, v) => q.preset = v), "More looks sharper. Lower this if your Mac runs hot."),
+			sound(p)
+		]
 	},
 	{
 		id: "network",
@@ -151,6 +155,38 @@ const TABS = [
 		}
 	}
 ];
+const SOUND_MOST = 3;
+const soundText = (s) => s === 0 ? "In sync, as the file has it" : `${Math.abs(s).toFixed(2)} s ${s > 0 ? "later" : "earlier"}`;
+function sound(p) {
+	if (!p.soundFor) return row("Sound sync", el("span", {
+		className: "pref-note",
+		textContent: "Play a movie to line up its sound."
+	}));
+	const slider = el("input", {
+		type: "range",
+		min: String(-3),
+		max: String(SOUND_MOST),
+		step: "0.05",
+		value: String(p.sound),
+		className: "pref-range"
+	});
+	slider.setAttribute("aria-label", `Sound sync for ${p.soundFor}`);
+	const shown = el("span", {
+		className: "pref-sound",
+		textContent: soundText(p.sound)
+	});
+	const set = async (s) => {
+		slider.value = String(s);
+		shown.textContent = soundText(s);
+		const why = await App().SetSound(s);
+		status().textContent = why;
+		prefs = await App().Prefs();
+		if (why) draw();
+	};
+	slider.oninput = () => void (shown.textContent = soundText(Number(slider.value)));
+	slider.onchange = () => void set(Number(slider.value));
+	return row("Sound sync", [el("span", { className: "pref-inline" }, el("span", { textContent: "Earlier" }), slider, el("span", { textContent: "Later" })), el("span", { className: "pref-inline" }, shown, button("Reset", () => void set(0), "quiet-button"))], `For ${p.soundFor}, for everyone. If voices come before lips move, move it later. Each change makes the picture pause for a moment.`);
+}
 function updates(p) {
 	const u = p.update;
 	const status = el("p", {

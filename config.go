@@ -43,6 +43,7 @@ type Item struct {
 	Subtitles *[]Track      `json:"subtitles,omitempty"` // what was found; nil until looked for
 	Subs      *SubsSettings `json:"subs,omitempty"`      // what to do with them
 	Audio     *[]AudioTrack `json:"audio,omitempty"`     // its sound tracks; nil until looked at
+	Sound     float64       `json:"sound,omitempty"`     // seconds its sound is moved against its picture, for a file whose two don't line up (positive: later); Settings > Streaming
 	URL       string        `json:"url,omitempty"`       // a download link (download.go): Path is its download, in the cache
 	Got       bool          `json:"got,omitempty"`       // the download is complete; until then the row is off, counting bytes
 	Cleared   bool          `json:"cleared,omitempty"`   // an earlier Mouse Party's row kept, greyed, when its download was cleared: taken out at start (syncDownloads)

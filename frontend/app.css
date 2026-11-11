@@ -261,6 +261,8 @@ body {
 .pref-note { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .pref-inline { display: inline-flex; align-items: center; gap: 6px; }
 .pref-number { width: 80px; }
+.pref-range { width: 200px; }
+.pref-sound { min-width: 12em; font-variant-numeric: tabular-nums; }
 .pref-select { max-width: 100%; }
 .pref-number, .pref-select, .pref-add input {
     font: inherit; color: var(--text); background: var(--bg);

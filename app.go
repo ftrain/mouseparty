@@ -863,7 +863,7 @@ func (a *App) startCurrent(skip float64) {
 		err = a.player.Start(args, temps, 0, "")
 	} else {
 		a.phase = "movie"
-		args, temps := movieCommand(it.Path, skip*60, it.Duration, a.audioTrack(it), a.burn(it), a.opts())
+		args, temps := movieCommand(it.Path, skip*60, it.Duration, a.audioTrack(it), it.Sound, a.burn(it), a.opts())
 		err = a.player.Start(args, temps, skip*60, a.host.RTSPURL())
 	}
 	if err != nil {
