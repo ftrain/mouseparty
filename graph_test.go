@@ -142,7 +142,7 @@ var socketGraph = []socketCommand{
 }
 
 // fromHost: the types the host sends a page (types.ts FromHost)
-var fromHost = []string{"hello", "apps", "app", "doc", "subs", "schedule", "clock", "online", "msg", "system"}
+var fromHost = []string{"hello", "full", "apps", "app", "doc", "subs", "schedule", "clock", "online", "msg", "system"}
 
 // ---------- the graph is the code's ----------
 

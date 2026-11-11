@@ -113,6 +113,7 @@ export interface AppNote {
 
 export type FromHost =
     | (Hello & { type: 'hello'; history: ChatLine[]; online: string[]; you: number; apps: AppInfo[]; kinds: AppKind[]; appsMax: number })
+    | { type: 'full' } // as many are watching as the host lets in: this page isn't one of them
     | { type: 'apps'; op: 'open'; app: AppInfo }
     | { type: 'apps'; op: 'close'; id: number }
     | AppNote

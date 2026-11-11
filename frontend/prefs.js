@@ -107,9 +107,9 @@ const TABS = [
 		label: "General",
 		icon: "settings",
 		draw: (p) => [
-			row("Countdown", number(p.countdown, 0, 600, 1, (q, n) => q.countdown = n, "seconds"), "An “up next” card before each movie, so everyone is ready. 0 for none; songs in a row never have one."),
-			row("First movie", number(p.skip, 0, 600, 1, (q, n) => q.skip = n, "minutes in"), "Where the first movie played starts, to skip what comes before it. 0 for the beginning."),
-			row("Notifications", checkbox("When a friend arrives or a download finishes", p.notify, (q, on) => q.notify = on), "Only while Mouse Party is behind other apps. macOS asks the first time."),
+			row("Countdown", number(p.countdown, 0, 600, 1, (q, n) => q.countdown = n, "seconds"), "A pause before each movie, so everyone is ready."),
+			row("Skip", number(p.skip, 0, 600, 1, (q, n) => q.skip = n, "minutes of the first movie"), "To start partway in."),
+			row("Notifications", checkbox("A friend arrives or a download finishes", p.notify, (q, on) => q.notify = on)),
 			...updates(p)
 		]
 	},
@@ -117,19 +117,19 @@ const TABS = [
 		id: "streaming",
 		label: "Streaming",
 		icon: "gauge",
-		draw: (p) => [row("Bandwidth", select(BITRATES.map(([k, label]) => [String(k), label]), String(p.bitrate), (q, v) => q.bitrate = Number(v)), `This Mac sends the picture and its sound to each friend: 4 friends at ${mbit(p.bitrate)} need about ${mbit((p.bitrate + 128) * 4)} of upload. Lower it if the picture stalls. It changes from the next thing played.`), row("Encoding effort", select(PRESETS, p.preset, (q, v) => q.preset = v), "More effort makes a sharper picture at the same bandwidth, and works this Mac harder. Lower it if this Mac struggles to keep up.")]
+		draw: (p) => [row("Bandwidth", select(BITRATES.map(([k, label]) => [String(k), label]), String(p.bitrate), (q, v) => q.bitrate = Number(v)), `Lower this if the video stutters. 4 friends need ${mbit((p.bitrate + 128) * 4)} of upload.`), row("Encoding effort", select(PRESETS, p.preset, (q, v) => q.preset = v), "More looks sharper. Lower this if your Mac runs hot.")]
 	},
 	{
 		id: "network",
 		label: "Network",
 		icon: "wifi",
-		draw: (p) => [row("Router", checkbox("Ask the router to let friends in", p.openRouterPorts, (q, on) => q.openRouterPorts = on), "Opens a way in on the router (NAT-PMP or UPnP) while the party is on, closed again after. Off, friends come in through the https link alone. It changes the next time the party starts.")]
+		draw: (p) => [row("Guests", number(p.maxViewers, 0, 1e3, 1, (q, n) => q.maxViewers = n, "at most"), "Anyone after that is asked to try again later. 0 means no limit."), row("Router", checkbox("Let video go straight to friends", p.openRouterPorts, (q, on) => q.openRouterPorts = on), "Smoother video. Your router opens a door while the party is on and closes it after. Safe to leave on.")]
 	},
 	{
 		id: "downloads",
 		label: "Downloads",
 		icon: "download",
-		draw: (p) => [row("Keep up to", number(p.cacheGB, 0, 1e5, 1, (q, n) => q.cacheGB = n, "GB of downloads"), "Past it, the downloads played longest ago are deleted, and their rows go from the list. Removing a row deletes its download too. 0 for no limit."), row("Downloaded now", [el("span", { textContent: p.cache || "Nothing" }), ...p.cache ? [button("Clear Download Cache…", () => askFrom("clear", () => void openPrefs("downloads")))] : []])]
+		draw: (p) => [row("Keep up to", number(p.cacheGB, 0, 1e5, 1, (q, n) => q.cacheGB = n, "GB of downloads"), "When it fills up, the oldest downloads are deleted."), row("Downloaded now", [el("span", { textContent: p.cache || "Nothing" }), ...p.cache ? [button("Clear Download Cache…", () => askFrom("clear", () => void openPrefs("downloads")))] : []])]
 	},
 	{
 		id: "accounts",
@@ -144,10 +144,10 @@ const TABS = [
 		draw: (p) => {
 			const again = () => void openPrefs("security");
 			return [row("Party file", p.sealed ? [
-				el("span", { textContent: "Encrypted with a passcode" }),
+				el("span", { textContent: "Encrypted" }),
 				button("Change Passcode…", () => askFrom("change", again)),
 				button("Stop Using Encryption…", () => askFrom("off", again))
-			] : [el("span", { textContent: "Not encrypted" }), button("Use Encryption…", () => askFrom("on", again))], "The list, the settings, the saved logins and what the apps keep are in one file on this Mac. Encrypted, Mouse Party asks for its passcode each time it starts."), row("As text", button("Edit as Text…", () => askFrom("settings", again)), "The list and the settings as JSON, for what has no control here, such as a movie’s subtitles.")];
+			] : [el("span", { textContent: "Not encrypted" }), button("Use Encryption…", () => askFrom("on", again))], "Locks your list and settings with a passcode."), row("As text", button("Edit as Text…", () => askFrom("settings", again)), "Every setting, for people who like to edit them by hand.")];
 		}
 	}
 ];
@@ -158,14 +158,14 @@ function updates(p) {
 		textContent: u.text
 	});
 	const controls = [
-		checkbox("Check for updates automatically", p.checkUpdates, (q, on) => q.checkUpdates = on),
-		checkbox("Download and install updates automatically", p.installUpdates, (q, on) => q.installUpdates = on),
+		checkbox("Check automatically", p.checkUpdates, (q, on) => q.checkUpdates = on),
+		checkbox("Install automatically", p.installUpdates, (q, on) => q.installUpdates = on),
 		el("span", { className: "pref-inline" }, button("Check Now", () => void App().CheckForUpdates().then(follow)))
 	];
 	if (u.ready) controls.push(button("Restart to Update", () => void App().RestartToUpdate(), "go-button"));
 	controls.push(status);
 	if (u.busy) follow();
-	return [row("Version", el("span", { textContent: u.version === "dev" ? "A development build" : `Mouse Party ${u.version}` })), row("Updates", controls, "An update downloads quietly and goes in when Mouse Party quits, never in the middle of a party.")];
+	return [row("Version", el("span", { textContent: u.version === "dev" ? "Development build" : u.version })), row("Updates", controls)];
 }
 let following = 0;
 function follow() {
@@ -181,7 +181,7 @@ function accounts(p) {
 	const list = el("div", { className: "pref-list" });
 	if (!p.accounts.length) list.append(el("p", {
 		className: "pref-note",
-		textContent: "No saved logins. A login is saved when a link is added with “Save this login” on, or here."
+		textContent: "No saved logins."
 	}));
 	for (const a of p.accounts) {
 		const remove = button("Remove", async () => {
@@ -200,7 +200,7 @@ function accounts(p) {
 	}
 	const site = el("input", {
 		type: "text",
-		placeholder: "Site, or a link to it",
+		placeholder: "Site",
 		spellcheck: false,
 		autocomplete: "off",
 		name: "site"
@@ -231,10 +231,10 @@ function accounts(p) {
 	};
 	box.append(list, el("p", {
 		className: "pref-subhead",
-		textContent: "Add a login, or change one"
+		textContent: "Add a login"
 	}), add, el("p", {
 		className: "pref-note",
-		textContent: "For a site whose download links ask for a username and password. Saving a site’s login again replaces it. It goes to that site alone, over https."
+		textContent: "For download sites that need a password."
 	}));
 	return box;
 }

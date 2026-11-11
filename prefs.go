@@ -40,6 +40,7 @@ type Prefs struct {
 	Bitrate         int          `json:"bitrate"`         // the video's, in kbit/s
 	Preset          string       `json:"preset"`          // x264's preset: one of presets
 	OpenRouterPorts bool         `json:"openRouterPorts"` // ask the router to let friends in
+	MaxViewers      int          `json:"maxViewers"`      // how many can watch at once; 0 for no limit
 	CacheGB         float64      `json:"cacheGB"`         // downloads kept; 0 for no limit
 	Cache           string       `json:"cache"`           // what the download cache holds now ("" for nothing); only shown
 	Accounts        []Account    `json:"accounts"`        // only shown: changed by SaveAccount and RemoveAccount
@@ -85,7 +86,7 @@ func (a *App) Prefs() Prefs {
 	var p Prefs
 	a.wait(func() {
 		p = Prefs{Countdown: float64(a.cfg.Countdown), Skip: float64(a.cfg.Skip), Bitrate: kbps(a.cfg.Bitrate), Preset: a.cfg.Preset,
-			OpenRouterPorts: a.cfg.OpenRouterPorts, CacheGB: float64(a.cfg.CacheGB), Accounts: a.accounts(),
+			OpenRouterPorts: a.cfg.OpenRouterPorts, MaxViewers: int(a.cfg.MaxViewers), CacheGB: float64(a.cfg.CacheGB), Accounts: a.accounts(),
 			Sealed: a.party != nil && a.party.sealed, CheckUpdates: a.cfg.CheckUpdates, InstallUpdates: a.cfg.InstallUpdates,
 			Notify: a.cfg.Notify, Update: a.updateStatus()}
 	})
@@ -106,6 +107,8 @@ func (a *App) SetPrefs(p Prefs) string {
 		return "That isn't a bandwidth Mouse Party offers"
 	case !strings.Contains(" "+strings.Join(presets, " ")+" ", " "+p.Preset+" "):
 		return "That isn't an encoding effort Mouse Party knows"
+	case p.MaxViewers < 0 || p.MaxViewers > 1000:
+		return "Guests are from 0 (no limit) to 1000"
 	case p.CacheGB < 0 || p.CacheGB > 100000:
 		return "The cache is from 0 (no limit) to 100,000 GB"
 	}
@@ -117,7 +120,7 @@ func (a *App) SetPrefs(p Prefs) string {
 		}
 		smaller := p.CacheGB > 0 && (a.cfg.CacheGB == 0 || Number(p.CacheGB) < a.cfg.CacheGB)
 		a.cfg.Countdown, a.cfg.Skip, a.cfg.Bitrate, a.cfg.Preset = Number(p.Countdown), Number(p.Skip), fmt.Sprintf("%dk", p.Bitrate), p.Preset
-		a.cfg.OpenRouterPorts, a.cfg.CacheGB = p.OpenRouterPorts, Number(p.CacheGB)
+		a.cfg.OpenRouterPorts, a.cfg.CacheGB, a.cfg.MaxViewers = p.OpenRouterPorts, Number(p.CacheGB), Number(p.MaxViewers)
 		a.cfg.CheckUpdates, a.cfg.InstallUpdates, a.cfg.Notify = p.CheckUpdates, p.InstallUpdates, p.Notify
 		a.save()
 		if smaller {

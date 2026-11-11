@@ -207,7 +207,7 @@ func (a *App) checkUpdates(install bool) {
 		return
 	}
 	if version == "dev" {
-		u.state, u.note = "error", "This is a development build: it doesn't update itself."
+		u.state, u.note = "error", "A development build doesn't update."
 		return
 	}
 	u.state, u.checked = "checking", time.Now()
@@ -402,12 +402,12 @@ func (a *App) updateStatus() UpdateStatus {
 			s.Text = fmt.Sprintf("Downloading Mouse Party %s… %d%%", u.latest, u.got*100/u.total)
 		}
 	case "ready":
-		s.Text = "Mouse Party " + u.latest + " is ready. It goes in when Mouse Party quits, or now with Restart to Update."
+		s.Text = u.latest + " is ready."
 	case "error":
 		s.Text = u.note
 	default:
 		if version == "dev" {
-			s.Text = "This is a development build: it doesn't update itself."
+			s.Text = "A development build doesn't update."
 		} else if !u.checked.IsZero() {
 			s.Text = "Last checked " + u.checked.Format("3:04 PM") + "."
 		}

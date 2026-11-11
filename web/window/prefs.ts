@@ -116,17 +116,16 @@ const TABS: Tab[] = [
             row(
                 'Countdown',
                 number(p.countdown, 0, 600, 1, (q, n) => (q.countdown = n), 'seconds'),
-                'An “up next” card before each movie, so everyone is ready. 0 for none; songs in a row never have one.',
+                'A pause before each movie, so everyone is ready.',
             ),
             row(
-                'First movie',
-                number(p.skip, 0, 600, 1, (q, n) => (q.skip = n), 'minutes in'),
-                'Where the first movie played starts, to skip what comes before it. 0 for the beginning.',
+                'Skip',
+                number(p.skip, 0, 600, 1, (q, n) => (q.skip = n), 'minutes of the first movie'),
+                'To start partway in.',
             ),
             row(
                 'Notifications',
-                checkbox('When a friend arrives or a download finishes', p.notify, (q, on) => (q.notify = on)),
-                'Only while Mouse Party is behind other apps. macOS asks the first time.',
+                checkbox('A friend arrives or a download finishes', p.notify, (q, on) => (q.notify = on)),
             ),
             ...updates(p),
         ],
@@ -143,12 +142,12 @@ const TABS: Tab[] = [
                     String(p.bitrate),
                     (q, v) => (q.bitrate = Number(v)),
                 ),
-                `This Mac sends the picture and its sound to each friend: 4 friends at ${mbit(p.bitrate)} need about ${mbit((p.bitrate + 128) * 4)} of upload. Lower it if the picture stalls. It changes from the next thing played.`,
+                `Lower this if the video stutters. 4 friends need ${mbit((p.bitrate + 128) * 4)} of upload.`,
             ),
             row(
                 'Encoding effort',
                 select(PRESETS, p.preset, (q, v) => (q.preset = v)),
-                'More effort makes a sharper picture at the same bandwidth, and works this Mac harder. Lower it if this Mac struggles to keep up.',
+                'More looks sharper. Lower this if your Mac runs hot.',
             ),
         ],
     },
@@ -158,9 +157,14 @@ const TABS: Tab[] = [
         icon: 'wifi',
         draw: (p) => [
             row(
+                'Guests',
+                number(p.maxViewers, 0, 1000, 1, (q, n) => (q.maxViewers = n), 'at most'),
+                'Anyone after that is asked to try again later. 0 means no limit.',
+            ),
+            row(
                 'Router',
-                checkbox('Ask the router to let friends in', p.openRouterPorts, (q, on) => (q.openRouterPorts = on)),
-                'Opens a way in on the router (NAT-PMP or UPnP) while the party is on, closed again after. Off, friends come in through the https link alone. It changes the next time the party starts.',
+                checkbox('Let video go straight to friends', p.openRouterPorts, (q, on) => (q.openRouterPorts = on)),
+                'Smoother video. Your router opens a door while the party is on and closes it after. Safe to leave on.',
             ),
         ],
     },
@@ -172,7 +176,7 @@ const TABS: Tab[] = [
             row(
                 'Keep up to',
                 number(p.cacheGB, 0, 100000, 1, (q, n) => (q.cacheGB = n), 'GB of downloads'),
-                'Past it, the downloads played longest ago are deleted, and their rows go from the list. Removing a row deletes its download too. 0 for no limit.',
+                'When it fills up, the oldest downloads are deleted.',
             ),
             row('Downloaded now', [
                 el('span', { textContent: p.cache || 'Nothing' }),
@@ -196,18 +200,14 @@ const TABS: Tab[] = [
                 row(
                     'Party file',
                     p.sealed
-                        ? [
-                              el('span', { textContent: 'Encrypted with a passcode' }),
-                              button('Change Passcode…', () => askFrom('change', again)),
-                              button('Stop Using Encryption…', () => askFrom('off', again)),
-                          ]
+                        ? [el('span', { textContent: 'Encrypted' }), button('Change Passcode…', () => askFrom('change', again)), button('Stop Using Encryption…', () => askFrom('off', again))]
                         : [el('span', { textContent: 'Not encrypted' }), button('Use Encryption…', () => askFrom('on', again))],
-                    'The list, the settings, the saved logins and what the apps keep are in one file on this Mac. Encrypted, Mouse Party asks for its passcode each time it starts.',
+                    'Locks your list and settings with a passcode.',
                 ),
                 row(
                     'As text',
                     button('Edit as Text…', () => askFrom('settings', again)),
-                    'The list and the settings as JSON, for what has no control here, such as a movie’s subtitles.',
+                    'Every setting, for people who like to edit them by hand.',
                 ),
             ];
         },
@@ -219,8 +219,8 @@ function updates(p: Prefs) {
     const u = p.update;
     const status = el('p', { className: 'pref-note pref-update', textContent: u.text });
     const controls: HTMLElement[] = [
-        checkbox('Check for updates automatically', p.checkUpdates, (q, on) => (q.checkUpdates = on)),
-        checkbox('Download and install updates automatically', p.installUpdates, (q, on) => (q.installUpdates = on)),
+        checkbox('Check automatically', p.checkUpdates, (q, on) => (q.checkUpdates = on)),
+        checkbox('Install automatically', p.installUpdates, (q, on) => (q.installUpdates = on)),
         el(
             'span',
             { className: 'pref-inline' },
@@ -230,10 +230,7 @@ function updates(p: Prefs) {
     if (u.ready) controls.push(button('Restart to Update', () => void App().RestartToUpdate(), 'go-button'));
     controls.push(status);
     if (u.busy) follow();
-    return [
-        row('Version', el('span', { textContent: u.version === 'dev' ? 'A development build' : `Mouse Party ${u.version}` })),
-        row('Updates', controls, 'An update downloads quietly and goes in when Mouse Party quits, never in the middle of a party.'),
-    ];
+    return [row('Version', el('span', { textContent: u.version === 'dev' ? 'Development build' : u.version })), row('Updates', controls)];
 }
 
 // while it checks or downloads, General follows it
@@ -251,7 +248,7 @@ function follow() {
 function accounts(p: Prefs) {
     const box = el('div', { className: 'pref-accounts' });
     const list = el('div', { className: 'pref-list' });
-    if (!p.accounts.length) list.append(el('p', { className: 'pref-note', textContent: 'No saved logins. A login is saved when a link is added with “Save this login” on, or here.' }));
+    if (!p.accounts.length) list.append(el('p', { className: 'pref-note', textContent: 'No saved logins.' }));
     for (const a of p.accounts) {
         const remove = button(
             'Remove',
@@ -265,7 +262,7 @@ function accounts(p: Prefs) {
         remove.setAttribute('aria-label', `Remove the login for ${a.site}`);
         list.append(el('div', { className: 'pref-account' }, el('span', { className: 'pref-site', textContent: a.site }), el('span', { className: 'pref-user', textContent: a.user }), remove));
     }
-    const site = el('input', { type: 'text', placeholder: 'Site, or a link to it', spellcheck: false, autocomplete: 'off', name: 'site' });
+    const site = el('input', { type: 'text', placeholder: 'Site', spellcheck: false, autocomplete: 'off', name: 'site' });
     const user = el('input', { type: 'text', placeholder: 'Username', spellcheck: false, autocomplete: 'off', name: 'user' });
     const pass = el('input', { type: 'password', placeholder: 'Password', autocomplete: 'off', name: 'pass' });
     const add = el('form', { className: 'pref-add' }, site, user, pass, el('button', { type: 'submit', className: 'pref-button', textContent: 'Save' }));
@@ -275,15 +272,7 @@ function accounts(p: Prefs) {
         if (why) return void (status().textContent = why);
         await openPrefs('accounts');
     };
-    box.append(
-        list,
-        el('p', { className: 'pref-subhead', textContent: 'Add a login, or change one' }),
-        add,
-        el('p', {
-            className: 'pref-note',
-            textContent: 'For a site whose download links ask for a username and password. Saving a site’s login again replaces it. It goes to that site alone, over https.',
-        }),
-    );
+    box.append(list, el('p', { className: 'pref-subhead', textContent: 'Add a login' }), add, el('p', { className: 'pref-note', textContent: 'For download sites that need a password.' }));
     return box;
 }
 

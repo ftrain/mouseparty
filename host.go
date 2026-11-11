@@ -140,6 +140,7 @@ type Host struct {
 	ICEPort        int
 	MapPorts       bool // false: LAN (and tunnel) only, the router is left alone
 	CleanLeftovers bool // false: a check running beside a real session leaves it alone
+	MaxViewers     int  // how many can watch at once (0: no limit); one more is told the party is full
 	Sandbox        bool // the viewer site is a process of its own, in a box (site.go, sandbox.go); false: part of this one
 	Standby        []byte
 	Party          *party            // where apps (apps.Keeper) and the pictures they name are kept (store.go); nil nowhere
@@ -293,7 +294,7 @@ func (h *Host) start() error {
 func (h *Host) session(shelf apps.Shelf, keep pictureKeeper) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.chat = &Chat{conns: map[*chatConn]bool{}}
+	h.chat = &Chat{conns: map[*chatConn]bool{}, max: h.MaxViewers}
 	env := apps.Env{Movie: h, Shelf: shelf}
 	env.Reel = apps.NewReel(env.Shelf)
 	h.pics = newPictures(keep)

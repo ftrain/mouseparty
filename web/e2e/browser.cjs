@@ -472,7 +472,7 @@ async function settingsWindow(page) {
     }
     await page.click('#sheet .pref-tab[data-tab="general"]');
     const general = await page.textContent('#sheet .pref-body');
-    if (!general.includes('A development build') || !general.includes('Check for updates automatically')) fail(`General, its updates: ${general}`);
+    if (!general.includes('Development build') || !general.includes('Check automatically')) fail(`General, its updates: ${general}`);
     await page.fill('#sheet .pref-number >> nth=0', '3');
     await page.press('#sheet .pref-number >> nth=0', 'Tab');
     await until(page, 'kept the countdown', () => window.go.main.App.Prefs().then((p) => p.countdown === 3));

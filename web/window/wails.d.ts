@@ -93,6 +93,7 @@ export interface Prefs {
     bitrate: number; // kbit/s
     preset: string; // x264's preset
     openRouterPorts: boolean;
+    maxViewers: number; // how many can watch at once; 0: no limit
     cacheGB: number; // 0: no limit
     cache: string; // only shown: what the cache holds now ("" for nothing)
     accounts: Account[]; // only shown

@@ -53,6 +53,7 @@ func selftest() int {
 		return "400", nil
 	})
 	check("pdf.js comes as JavaScript", func() (string, error) { return typeIs(base+"assets/pdf.worker.min.mjs", "text/javascript") })
+	check("the icon comes as a picture", func() (string, error) { return typeIs(base+"assets/icon.png", "image/png") })
 	check("apps' scripts come as JavaScript", func() (string, error) { return typeIs(base+"apps/graffiti.js", "text/javascript") })
 	check("only apps' scripts", func() (string, error) { return statusIs(base+"apps/nope.js", 404) })
 	check("the documents' editors come as JavaScript", func() (string, error) { return typeIs(base+"office/editors.js", "text/javascript") })

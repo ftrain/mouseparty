@@ -66,6 +66,7 @@ type SiteSetup struct {
 	Kept           bool           // there's a party file: apps and pictures are kept
 	Pandoc, Python string         // the tools it runs, where the app found them ("" none)
 	Stun           bool
+	MaxViewers     int
 }
 
 // SiteTell: one thing the app tells the site (Do says which; the rest as it needs)
@@ -206,7 +207,7 @@ func (h *Host) launchSite() error {
 		cache = ""
 	}
 	setup := SiteSetup{Key: key, Ports: ports, Tmp: realPath(own), Canary: canary, Kept: h.Party != nil,
-		Pandoc: findWasm("pandoc"), Python: pythonHome(), Stun: stun}
+		Pandoc: findWasm("pandoc"), Python: pythonHome(), Stun: stun, MaxViewers: h.MaxViewers}
 	if setup.Pandoc != "" {
 		setup.Pandoc = realPath(setup.Pandoc)
 	}
@@ -620,7 +621,7 @@ func (c *SiteCalls) Start(setup SiteSetup, _ *None) error {
 		return errors.New("it isn't in its sandbox, and won't answer strangers without one")
 	}
 	h := &Host{HTTPPort: s.l.Addr().(*net.TCPAddr).Port, urls: map[string]string{}, mac: s,
-		key: setup.Key, ports: setup.Ports, tmp: setup.Tmp, stun: setup.Stun}
+		key: setup.Key, ports: setup.Ports, tmp: setup.Tmp, stun: setup.Stun, MaxViewers: setup.MaxViewers}
 	h.Log = func(line string) { s.event("log", line, 0) }
 	h.DocAt = func(at string) { s.event("docAt", at, 0) }
 	h.DocPages = func(pages int) { s.event("docPages", "", pages) }

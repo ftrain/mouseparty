@@ -22,6 +22,7 @@ type Config struct {
 	InstallUpdates  bool    `json:"install_updates"`      // and download it, to go in when the app quits
 	Notify          bool    `json:"notify"`               // a notification when a friend arrives or a download finishes, while the app is behind others (mac.go)
 	Welcomed        bool    `json:"welcomed"`             // the welcome has been shown (Help > Welcome to Mouse Party shows it again)
+	MaxViewers      Number  `json:"max_viewers"`          // how many can watch at once; one more is told the party is full (chat.go); 0 for no limit
 	NoSandbox       bool    `json:"no_sandbox,omitempty"` // the site, MediaMTX, cloudflared and ffmpeg run without their sandboxes (sandbox.go): only if one is wrong on this macOS
 	Queue           []*Item `json:"queue"`
 	Position        int     `json:"position"` // queue row now playing, or next to play
@@ -102,7 +103,7 @@ func dataDir() string {
 
 // loadConfig: the settings kept in the party, or the defaults (p nil: nothing kept)
 func loadConfig(p *party) *Config {
-	cfg := &Config{OpenRouterPorts: true, Bitrate: "2500k", Preset: "veryfast", Countdown: 10, CacheGB: 20, CheckUpdates: true, InstallUpdates: true, Notify: true, Queue: []*Item{}}
+	cfg := &Config{OpenRouterPorts: true, Bitrate: "2500k", Preset: "veryfast", Countdown: 10, CacheGB: 20, MaxViewers: 10, CheckUpdates: true, InstallUpdates: true, Notify: true, Queue: []*Item{}}
 	if p != nil {
 		if b, ok := p.setting("config"); ok {
 			json.Unmarshal(b, cfg)

@@ -84,8 +84,31 @@ type CardLine struct {
 	Literal      bool
 }
 
+// iconFile: the app's icon as a temporary file, for ffmpeg to lay on a card ("" if it can't be written)
+func iconFile() string {
+	b, err := hostWeb.ReadFile("host_web/icon.png")
+	if err != nil {
+		return ""
+	}
+	f, err := os.CreateTemp("", "mouseparty-*.png")
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if _, err := f.Write(b); err != nil {
+		os.Remove(f.Name())
+		return ""
+	}
+	return f.Name()
+}
+
 // cardCommand: ffmpeg arguments for a card on black with silence, for seconds (0: until stopped)
 func cardCommand(lines []CardLine, seconds int, o StreamOpts) (args, temps []string) {
+	return iconCard("", lines, seconds, o)
+}
+
+// iconCard: a card with the picture at icon ("" none) at the middle of its top
+func iconCard(icon string, lines []CardLine, seconds int, o StreamOpts) (args, temps []string) {
 	var filters []string
 	for _, l := range lines {
 		source := fmt.Sprintf("text='%s'", l.Text)
@@ -103,17 +126,26 @@ func cardCommand(lines []CardLine, seconds int, o StreamOpts) (args, temps []str
 	}
 	args = []string{"-re", "-f", "lavfi", "-i", fmt.Sprintf("color=c=black:s=%dx%d:r=30%s", canvasW, canvasH, length),
 		"-re", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"}
+	if icon != "" {
+		temps = append(temps, icon)
+		args = append(args, "-loop", "1", "-framerate", "30", "-i", icon)
+	}
 	if seconds > 0 {
 		args = append(args, "-t", strconv.Itoa(seconds))
 	}
-	args = append(args, "-vf", strings.Join(filters, ","))
+	if icon != "" {
+		args = append(args, "-filter_complex", "[2:v]scale=128:128[icon];[0:v][icon]overlay=(W-w)/2:24,"+strings.Join(filters, ",")+"[v]",
+			"-map", "[v]", "-map", "1:a")
+	} else {
+		args = append(args, "-vf", strings.Join(filters, ","))
+	}
 	return append(args, encodingArgs(o)...), temps
 }
 
 // countdownCommand: an "up next" card counting down from seconds
 func countdownCommand(seconds int, title string, o StreamOpts) ([]string, []string) {
 	title, size := fitText(title, canvasW, 72, 32, 48)
-	return cardCommand([]CardLine{
+	return iconCard(iconFile(), []CardLine{
 		{"> up next", green, 40, "h/2-190", true},
 		{title, "white", size, "h/2-110", false},
 		{fmt.Sprintf(`%%{eif\:max(1\,ceil(%d-t))\:d}`, seconds), green, 200, "h/2+10", true},

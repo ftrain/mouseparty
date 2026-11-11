@@ -126,6 +126,21 @@ func dispositionName(resp *http.Response) string {
 	return cleanName(params["filename"])
 }
 
+// downloadSlots: how many downloads come down at once; the rest wait their turn, in the order they were added
+// (a collection from the Archive is a dozen rows at once)
+var downloadSlots = make(chan struct{}, 3)
+
+// fetchInTurn: fetch, once there's a slot for it
+func fetchInTurn(ctx context.Context, link, path string, login *siteLogin, step func(path string, got, total int64)) (string, error) {
+	select {
+	case downloadSlots <- struct{}{}:
+		defer func() { <-downloadSlots }()
+	case <-ctx.Done():
+		return path, ctx.Err()
+	}
+	return fetch(ctx, link, path, login, step)
+}
+
 // fetch brings the link down to path (its folder made), straight into the file, so that it
 // can be played as it comes, going on from where an earlier try stopped. It says each step:
 // the path, once the server has named the file (which may change it), and the bytes as
@@ -276,6 +291,13 @@ func (a *App) AddURL(link, user, pass string, save bool) string {
 	if why != "" {
 		return why
 	}
+	links := []*url.URL{u}
+	if item, file := archiveItem(u); item != "" { // an Internet Archive page: its videos' own links (archive.go)
+		if links, why = archiveLinks(item, file); why != "" {
+			return why
+		}
+		u = links[0]
+	}
 	if user = strings.TrimSpace(user); user != "" {
 		login = &siteLogin{User: user, Pass: pass}
 	}
@@ -297,22 +319,30 @@ func (a *App) AddURL(link, user, pass string, save bool) string {
 			} else if login != nil {
 				a.tempLogins[site] = *login
 			}
-			for _, it := range a.cfg.Queue {
-				if it.URL == u.String() {
-					if login != nil && it.downloading() { // added again with a login: tried again with it
-						a.stopDownload(it)
-						a.retryDownload(it)
-						return
+			added := 0
+		each:
+			for _, u := range links {
+				for _, it := range a.cfg.Queue {
+					if it.URL == u.String() {
+						if login != nil && it.downloading() { // added again with a login: tried again with it
+							a.stopDownload(it)
+							a.retryDownload(it)
+							added++
+						}
+						continue each
 					}
-					result = "That link is in the list already"
-					return
 				}
+				it := &Item{URL: u.String(), Path: filepath.Join(downloadsDir(), downloadKey(u.String()), linkName(u))}
+				it.Kind = kindOf(it.Path)
+				a.editQueue(func(q []*Item) []*Item { return append(q, it) }, nil)
+				a.log("Downloading " + filepath.Base(it.Path) + " from " + u.Hostname())
+				a.startDownload(it)
+				added++
 			}
-			it := &Item{URL: u.String(), Path: filepath.Join(downloadsDir(), downloadKey(u.String()), linkName(u))}
-			it.Kind = kindOf(it.Path)
-			a.editQueue(func(q []*Item) []*Item { return append(q, it) }, nil)
-			a.log("Downloading " + filepath.Base(it.Path) + " from " + u.Hostname())
-			a.startDownload(it)
+			if added == 0 {
+				result = "That link is in the list already"
+				return
+			}
 			if a.host == nil || !a.host.Running() {
 				a.hostStart()
 			}
@@ -347,7 +377,7 @@ func (a *App) startDownload(it *Item) {
 	it.dl, it.Note = d, ""
 	go func() {
 		ready, lookAt := false, int64(-1) // whether it plays yet, and the bytes at which to look next
-		path, err := fetch(ctx, it.URL, it.Path, login, func(path string, got, total int64) {
+		path, err := fetchInTurn(ctx, it.URL, it.Path, login, func(path string, got, total int64) {
 			if !ready && got > 0 && lookAt < 0 {
 				lookAt = max(16<<10, min(4<<20, total/20)) // a few MB in, or a twentieth of a small one
 			}

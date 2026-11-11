@@ -118,7 +118,7 @@ export function close() {
 export const sheetOpen = () => !sheet.hidden;
 
 const twice = (v: Record<string, string>) => (!v.next ? 'Type a passcode' : v.next !== v.again ? "The two passcodes aren't the same" : '');
-const FORGET = 'If it is forgotten, nothing in the party can be recovered.';
+const FORGET = 'A forgotten passcode can’t be recovered.';
 
 // the Party menu's sheets
 export async function ask(mode: Ask) {
@@ -131,7 +131,6 @@ export async function ask(mode: Ask) {
         const text = await App().SettingsText();
         const inputs = show({
             title: 'Edit as Text',
-            words: 'The list and the settings, as JSON. A movie’s subtitles are its "subs"; the rest are in the README. Download logins aren’t here: they’re in Accounts.',
             fields: [{ name: 'text', label: '', kind: 'text' }],
             go: 'Save',
             done: (v) => App().SetSettingsText(v.text),
@@ -142,16 +141,14 @@ export async function ask(mode: Ask) {
     } else if (mode === 'keys') {
         info('Keyboard Shortcuts', '', shortcuts());
     } else if (mode === 'welcome') {
-        info('Welcome to Mouse Party', 'Have friends over to watch movies together, hosted from this Mac: nothing to sign up for, and nothing left behind when you quit.', welcome(), 'Get Started');
+        info('Welcome to Mouse Party', '', welcome(), 'Get Started');
     } else if (mode === 'log') {
         await logSheet();
     } else if (mode === 'clear') {
         const held = await App().CacheText();
         show({
             title: 'Clear Download Cache',
-            words: held
-                ? `Delete what download links brought here (${held}), and take their rows out of the list? One playing goes once it’s done. Your own files stay where they are.`
-                : 'Nothing is in the download cache. How much it keeps is in Settings > Downloads.',
+            words: held ? `Delete the downloads (${held}) and their rows?` : 'There are no downloads.',
             fields: [],
             go: held ? 'Clear' : 'OK',
             done: () => (held ? App().ClearCache() : Promise.resolve('')),
@@ -159,7 +156,7 @@ export async function ask(mode: Ask) {
     } else if (mode === 'erase') {
         show({
             title: 'Erase All Data',
-            words: 'Delete everything Mouse Party keeps from one time to the next: the list, settings, saved logins, what the apps kept (graffiti, notes, polls, documents, the reel, pictures) and the download cache. Anyone watching is cut off, and Mouse Party opens again as new. Your own files in the list stay where they are. This can’t be undone.',
+            words: 'Delete the list, the settings and everything saved. Your own files stay. This can’t be undone.',
             fields: [],
             go: 'Erase Everything',
             done: () => App().EraseAll(),
@@ -167,12 +164,12 @@ export async function ask(mode: Ask) {
     } else if (mode === 'on') {
         show({
             title: 'Use Encryption',
-            words: `The party file is sealed with this passcode, and Mouse Party asks for it each time it starts. ${FORGET}`,
+            words: FORGET,
             fields: [
                 { name: 'next', label: 'Passcode', kind: 'password' },
                 { name: 'again', label: 'Again', kind: 'password' },
             ],
-            go: 'Seal the party',
+            go: 'Turn On',
             check: twice,
             done: (v) => App().SetPasscode('', v.next),
         });
@@ -192,7 +189,6 @@ export async function ask(mode: Ask) {
     } else if (mode === 'off') {
         show({
             title: 'Stop Using Encryption',
-            words: 'The party file is kept unsealed from now on: anyone with it can read it.',
             fields: [{ name: 'current', label: 'Passcode', kind: 'password' }],
             go: 'Stop',
             done: (v) => App().SetPasscode(v.current, ''),
@@ -207,16 +203,16 @@ function info(title: string, words: string, more: HTMLElement, go = 'Done') {
 
 // Help > Keyboard Shortcuts
 const KEYS: [string, string][] = [
-    ['↑ ↓', 'Select the row above or below'],
-    ['Return', 'Play the selected row'],
-    ['⌫', 'Remove the selected row'],
-    ['⌘Z  ⇧⌘Z', 'Undo or redo removing rows'],
-    ['← →', 'Turn a document’s page (everyone’s)'],
+    ['↑ ↓', 'Select a row'],
+    ['Return', 'Play it'],
+    ['⌫', 'Remove it'],
+    ['⌘Z  ⇧⌘Z', 'Undo, redo'],
+    ['← →', 'Turn the page'],
     ['⌘L', 'Add a download link'],
     ['⌘R', 'Clear played files'],
     ['⌘,', 'Settings'],
     ['⌥⌘L', 'Show the log'],
-    ['⌘?', 'Mouse Party Help'],
+    ['⌘?', 'Help'],
 ];
 function shortcuts() {
     return el('table', { className: 'keys' }, ...KEYS.map(([k, what]) => el('tr', {}, el('td', { className: 'key', textContent: k }), el('td', { textContent: what }))));
@@ -224,12 +220,8 @@ function shortcuts() {
 
 // Help > Welcome to Mouse Party, and the first time it opens
 function welcome() {
-    const steps = [
-        ['Drag in something to watch', 'Movies, music, PDFs, documents, databases or a zip, from Finder, or a download link from the Party menu.'],
-        ['Copy the link, and send it to friends', 'They open it in a browser: no app, no account. Video, chat and games are all on that page.'],
-        ['Press Play', 'Everyone watches together. Quit, and the link, the chat and the session are gone.'],
-    ];
-    return el('ol', { className: 'welcome' }, ...steps.map(([head, text]) => el('li', {}, el('strong', { textContent: head }), el('span', { textContent: text }))));
+    const steps = ['Drag in a movie', 'Copy the link and send it to friends', 'Press Play'];
+    return el('ol', { className: 'welcome' }, ...steps.map((head) => el('li', {}, el('strong', { textContent: head }))));
 }
 
 // Help > Show Log: what Mouse Party has logged since it started, kept up to date while it's open
@@ -242,7 +234,7 @@ async function logSheet() {
     const pre = el('pre', { className: 'log' });
     const copy = el('button', { type: 'button', className: 'quiet', textContent: 'Copy Log' });
     copy.onclick = () => void window.runtime.ClipboardSetText(pre.textContent ?? '');
-    info('Log', 'What Mouse Party has done since it started. It’s kept only until it quits.', el('div', { className: 'log-box' }, pre, copy));
+    info('Log', '', el('div', { className: 'log-box' }, pre, copy));
     const fill = async () => {
         const text = await App().LogText();
         if (pre.textContent === text) return;
@@ -270,25 +262,18 @@ function linkSheet() {
     let filled = { user: '', pass: '' }; // what the sheet filled in itself (typed over, it's left alone)
     const inputs = show({
         title: 'Add Download Link',
-        words: 'A link that downloads a movie (or a song, a document or a database). It goes in the list and is downloaded to this Mac, playing as soon as it can; removing it from the list deletes the download.',
         fields: [
             { name: 'link', label: 'Link', kind: 'line' },
-            { name: 'user', label: 'Username', kind: 'line' },
+            { name: 'user', label: 'Username (if needed)', kind: 'line' },
             { name: 'pass', label: 'Password', kind: 'password' },
             { name: 'save', label: 'Save this login', kind: 'check', hidden: true },
         ],
         go: 'Add',
         check: (v) => (!v.link.trim() ? 'Paste a link' : v.pass && !v.user.trim() ? 'The password needs its username' : ''),
         done: (v) => App().AddURL(v.link, v.user, v.pass, !!v.save),
-        more: el('p', {
-            className: 'sheet-words',
-            textContent:
-                'A username and password only if the site asks for them. They go to that site alone, over https. Saved, they’re kept in the party file (encrypted when it’s sealed) and filled in next time; Settings > Accounts lists them.',
-        }),
     });
     const save = inputs.save as HTMLInputElement;
     save.checked = true;
-    inputs.labels.save.after(sheet.querySelector('.sheet-box > .sheet-words:last-child')!); // the login's note, by the login
     let asked = 0;
     const look = async () => {
         const n = ++asked;
@@ -320,7 +305,7 @@ export function lock(v: View) {
     startOver.onclick = () =>
         show({
             title: 'Start a New Party?',
-            words: 'The sealed party is put aside, beside the new one, and nothing in it is deleted; it opens only with its passcode.',
+            words: 'The locked party is set aside, not deleted.',
             fields: [],
             go: 'Start Over',
             done: () => App().StartOver(),
@@ -329,7 +314,6 @@ export function lock(v: View) {
         });
     show({
         title: 'Mouse Party',
-        words: 'This party is sealed. Its passcode opens it.',
         fields: [{ name: 'passcode', label: 'Passcode', kind: 'password' }],
         go: 'Open',
         cancel: false,

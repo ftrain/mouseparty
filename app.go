@@ -1341,7 +1341,7 @@ func (a *App) hostStart() {
 	sandboxOff.Store(a.cfg.NoSandbox)
 	h := NewHost(a.log, mediamtx, cloudflared, a.standby)
 	h.Sandbox = true // the viewer site in a process of its own, boxed (site.go)
-	h.MapPorts = a.cfg.OpenRouterPorts
+	h.MapPorts, h.MaxViewers = a.cfg.OpenRouterPorts, int(a.cfg.MaxViewers)
 	h.Party = a.party
 	h.DocAt = func(at string) { a.do(func() { a.docAt(at) }) }
 	h.DocPages = func(pages int) { a.do(func() { a.docPages(pages) }) }

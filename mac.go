@@ -106,15 +106,13 @@ func (a *App) emit(name string, data ...any) {
 	}
 }
 
-// about: the Mac's own About panel (the icon, the name, the version from Info.plist), with what's inside
+// about: the Mac's own About panel (the icon, the name, the version from Info.plist): who made it, and
+// the open source it's made with (licenses/README.md has every one, and its licence)
 func (a *App) about() {
-	build := "Version " + version
-	if version == "dev" {
-		build = "A development build: it doesn't update itself."
-	}
-	nativeAbout(build + "\n\nHave friends over: movies, chat and games, hosted from this Mac.\n\n" +
-		"MIT licence. It includes ffmpeg (GPL), MediaMTX, cloudflared, pandoc (GPL), Python and Datasette, " +
-		"each under its own licence: Contents/Resources/Licenses inside the app.\n\ngithub.com/ftrain/mouseparty")
+	nativeAbout("By Paul Ford\n\n" +
+		"Made with FFmpeg, x264, Opus, libass, FreeType, HarfBuzz, FriBidi, MediaMTX, cloudflared, pandoc, " +
+		"Python, Datasette, SQLite, Wails, wazero, pdfcpu, hls.js, pdf.js, Tiny Little Office, Lucide " +
+		"and the ENABLE word list.\n\nMIT licence, no warranty.")
 }
 
 // ---------- the log ----------

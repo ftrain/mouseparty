@@ -412,6 +412,9 @@ button { font-family: var(--font); }
     display: flex; align-items: baseline; gap: 14px; padding: 10px 14px;
     background: linear-gradient(#22347f, #0a1650); border-bottom: 2px solid #8aa2ff;
 }
+.guide-logo { display: flex; flex: none; border-radius: 8px; }
+.guide-logo:focus-visible { outline: 2px solid #ffd23f; outline-offset: 2px; }
+.guide-logo img { display: block; width: 36px; height: 36px; }
 .guide-title { font-weight: 900; font-size: 20px; letter-spacing: 0.08em; color: #ffd23f; text-shadow: 1px 1px 0 #000; }
 .guide-zone { font-size: 12px; color: #c9d4ff; }
 .guide-clock { margin-left: auto; font-weight: bold; font-size: 18px; font-variant-numeric: tabular-nums; color: #fff; }

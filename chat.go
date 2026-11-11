@@ -74,10 +74,18 @@ type Chat struct {
 	joined     func(v apps.Viewer)                      // a socket opened, or its viewer took a name
 	left       func(v apps.Viewer)                      // a socket closed
 	arrived    func(name string)                        // a viewer gave their name for the first time (a notification on the Mac)
+	max        int                                      // sockets at once (0: no limit); one more is told the party is full
 	mu         sync.Mutex
 	conns      map[*chatConn]bool
 	history    []map[string]any
 	lastID     int
+}
+
+// full: as many are watching as may
+func (c *Chat) full() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.max > 0 && len(c.conns) >= c.max
 }
 
 func (c *Chat) names() []string {
@@ -163,6 +171,12 @@ func (c *Chat) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	conn := &chatConn{ws: ws, out: make(chan []byte, 256)}
 	c.mu.Lock()
+	if c.max > 0 && len(c.conns) >= c.max { // full: told so, and let go (the page says sorry, and doesn't try again)
+		c.mu.Unlock()
+		ws.WriteMessage(websocket.TextMessage, []byte(`{"type":"full"}`))
+		ws.Close()
+		return
+	}
 	c.lastID++
 	conn.id = c.lastID
 	c.conns[conn] = true

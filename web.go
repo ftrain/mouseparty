@@ -22,7 +22,7 @@ import (
 	"github.com/ftrain/mouseparty/apps"
 )
 
-var assets = map[string]bool{"host.js": true, "host.css": true, "hls.min.js": true, "pdf.min.mjs": true, "pdf.worker.min.mjs": true}
+var assets = map[string]bool{"icon.png": true, "host.js": true, "host.css": true, "hls.min.js": true, "pdf.min.mjs": true, "pdf.worker.min.mjs": true}
 
 // On every response: browsers keep no copy, nobody indexes it, no page it links to learns the address
 var ephemeral = map[string]string{"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow, noarchive",
@@ -58,8 +58,13 @@ func (h *Host) serve(l net.Listener) {
 		http.Redirect(w, r, "/"+r.PathValue("key")+"/", http.StatusFound)
 	})
 	mux.HandleFunc("GET /{key}/{$}", func(w http.ResponseWriter, r *http.Request) {
-		page, _ := fs.ReadFile(web, "viewer.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if h.chat.full() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(fullPage))
+			return
+		}
+		page, _ := fs.ReadFile(web, "viewer.html")
 		w.Write(bytes.ReplaceAll(page, []byte("{{KEY}}"), []byte(h.Key())))
 	})
 	mux.HandleFunc("GET /{key}/assets/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +76,8 @@ func (h *Host) serve(l net.Listener) {
 		}
 		if strings.HasSuffix(name, ".js") || strings.HasSuffix(name, ".mjs") { // a module must come as JavaScript
 			w.Header().Set("Content-Type", "text/javascript")
+		} else if strings.HasSuffix(name, ".png") {
+			w.Header().Set("Content-Type", "image/png")
 		} else {
 			w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		}
@@ -86,7 +93,9 @@ func (h *Host) serve(l net.Listener) {
 		w.Header().Set("Content-Type", "text/javascript")
 		w.Write(b)
 	})
-	whep := h.webrtcProxy("whep", func(*http.Request) (string, string, bool) { return "live", "whep", true })
+	whep := h.webrtcProxy("whep", func(r *http.Request) (string, string, bool) {
+		return "live", "whep", r.Method != http.MethodPost || !h.videoFull() // one more than may watch gets no video, whatever page asks
+	})
 	mux.Handle("POST /{key}/whep", whep)
 	mux.Handle("PATCH /{key}/whep/{session}", whep)
 	mux.Handle("DELETE /{key}/whep/{session}", whep)
@@ -125,6 +134,36 @@ func (h *Host) serve(l net.Listener) {
 	server := h.server
 	h.mu.Unlock()
 	go server.Serve(l)
+}
+
+// fullPage: what one more than MaxViewers gets in place of the page
+const fullPage = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mouse Party</title><body style="margin:0;height:100vh;display:grid;place-items:center;background:#000;color:#0f0;font:18px ui-monospace,Menlo,monospace;text-align:center">
+<p>Sorry, the party is full.<br>Try again later.</p>`
+
+// videoFull: as many are being sent the video over WebRTC as may watch (MediaMTX says who it's sending to)
+func (h *Host) videoFull() bool {
+	if h.MaxViewers <= 0 {
+		return false
+	}
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(fmt.Sprintf("http://127.0.0.1:%d/v3/paths/get/live", h.ports["api"]))
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	var p struct {
+		Readers []struct {
+			Type string `json:"type"`
+		} `json:"readers"`
+	}
+	json.NewDecoder(resp.Body).Decode(&p)
+	n := 0
+	for _, r := range p.Readers {
+		if r.Type == "webRTCSession" {
+			n++
+		}
+	}
+	return n >= h.MaxViewers
 }
 
 // onlyWithKey: nothing answers without the session key; a wrong one gets the same

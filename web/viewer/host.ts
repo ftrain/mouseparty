@@ -198,7 +198,7 @@ async function pollStatus() {
 // When the host quits, the session is over: nothing of it stays on this page
 let ended = false;
 let hostSeen = Date.now();
-function endSession() {
+function endSession(full = false) {
     if (ended) return;
     ended = true;
     try {
@@ -227,17 +227,22 @@ function endSession() {
     document.title = 'Mouse Party';
     byId('guide').hidden = true;
     byId('viewerCount').textContent = '';
-    try {
-        store.clear();
-    } catch (e) {}
-    setStatus('Session ended', false);
+    if (!full)
+        try {
+            store.clear();
+        } catch (e) {}
+    setStatus(full ? 'Full' : 'Session ended', false);
     const note = Object.assign(document.createElement('div'), { className: 'ended' });
+    note.setAttribute('role', 'alert'); // read out: the party's over, or full
     const link = Object.assign(document.createElement('a'), { href: 'https://github.com/ftrain/mouseparty', target: '_blank', rel: 'noopener', textContent: 'github.com/ftrain/mouseparty' });
-    note.append(
-        Object.assign(document.createElement('p'), { textContent: 'Your host quit the program.' }),
-        Object.assign(document.createElement('p'), { textContent: 'Want to run your own? Check out ' }),
-    );
-    (note.lastChild as HTMLElement).append(link);
+    if (full) note.append(Object.assign(document.createElement('p'), { textContent: 'Sorry, the party is full.' }), Object.assign(document.createElement('p'), { textContent: 'Try again later.' }));
+    else {
+        note.append(
+            Object.assign(document.createElement('p'), { textContent: 'Your host quit the program.' }),
+            Object.assign(document.createElement('p'), { textContent: 'Want to run your own? Check out ' }),
+        );
+        (note.lastChild as HTMLElement).append(link);
+    }
     byId('stage').appendChild(note);
     byId('soundPrompt').hidden = true;
     if (ws) {
@@ -273,6 +278,7 @@ function connectChat() {
     };
     ws.onmessage = (e) => {
         const m = JSON.parse(e.data) as FromHost;
+        if (m.type === 'full') return endSession(true); // one more than the host lets in
         if (m.type === 'hello') {
             box.textContent = '';
             m.history.forEach((h) => show(h, false));
@@ -352,9 +358,7 @@ function join(typed: string) {
     const { name, said } = nameFrom(typed);
     if (said) toSay = said;
     if (!name) {
-        ask.textContent = said
-            ? `Your “${said.length > 24 ? said.slice(0, 22) + '…' : said}” goes to the chat in a moment. First, what's your name?`
-            : 'What should everyone call you? A first name or a nickname.';
+        ask.textContent = "What's your name?";
         ask.classList.add('nudge');
         input.value = '';
         input.focus();
@@ -374,7 +378,7 @@ function showChatInput() {
     const ask = byId('joinAsk');
     ask.style.display = 'none';
     ask.classList.remove('nudge');
-    ask.textContent = "First, your name: it's how you'll show in the chat.";
+    ask.textContent = "What's your name?";
     byId('joinOverlay').style.display = 'none';
     byId('chatInputBox').style.display = '';
     byId('currentUserDisplay').textContent = myName;
@@ -897,7 +901,7 @@ function showBar() {
     byId('docPage').textContent = paged ? `${shownPage()} / ${doc.pages}` : '';
     docAlone.hidden = !paged || doc.pages < 2;
     docAlone.textContent = alone ? `back to everyone · ${doc.page}` : 'read on my own';
-    docAlone.title = alone ? `Back to the ${word} everyone is on (chat says so)` : `Read at your own pace: your slider moves only your ${word} (chat says where you are)`;
+    docAlone.title = alone ? `Back to everyone's ${word}` : 'Read on your own';
     docAlone.classList.toggle('on', alone);
     docNotes.hidden = !paged || [...wins.values()].some((w) => w.info?.name === 'stickies');
     byId('docPace').hidden = !paged;
@@ -1450,13 +1454,15 @@ async function openApp(info: AppInfo) {
         el.innerHTML =
             '<div class="win-bar"><span class="win-icon"></span><span class="win-title"></span>' +
             '<input class="win-glass" type="range" min="2" max="100" title="See-through or solid (for you)" aria-label="How solid this window is">' +
-            '<button class="win-btn win-min" title="Hide it (for you)">–</button>' +
-            '<button class="win-btn win-close" title="Close it for everyone">✕</button></div>' +
+            '<button class="win-btn win-min" title="Hide it (for you)" aria-label="Hide this window">–</button>' +
+            '<button class="win-btn win-close" title="Close it for everyone" aria-label="Close for everyone">✕</button></div>' +
             '<div class="win-body"></div>' +
             ['nw', 'ne', 'sw', 'se'].map((c) => `<div class="win-grip ${c}" data-corner="${c}"></div>`).join('');
         const nw: Win = { info, place: firstPlace(info.size), hidden: false, el, body: el.querySelector<HTMLElement>('.win-body')!, inst: null };
         w = nw;
         el.querySelector('.win-title')!.textContent = info.title;
+        el.setAttribute('role', 'group');
+        el.setAttribute('aria-label', info.title);
         el.querySelector<HTMLElement>('.win-bar')!.title = info.by ? `${info.title}, opened by ${info.by}` : info.title;
         el.querySelector<HTMLElement>('.win-close')!.onclick = () => send({ type: 'app_close', id: info.id });
         el.querySelector<HTMLElement>('.win-min')!.onclick = () => {
