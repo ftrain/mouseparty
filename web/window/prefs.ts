@@ -218,10 +218,10 @@ const TABS: Tab[] = [
 // Sound sync, on Streaming: a slider moving the sound of the movie up now earlier or later, for a
 // file whose sound and picture don't line up. Everyone hears the change; it's kept with the movie.
 const SOUND_MOST = 3; // prefs.go's soundMost
-const soundText = (s: number) => (s === 0 ? 'In sync, as the file has it' : `${Math.abs(s).toFixed(2)} s ${s > 0 ? 'later' : 'earlier'}`);
+const soundText = (s: number) => (s === 0 ? '0 s' : `${Math.abs(s).toFixed(2)} s ${s > 0 ? 'later' : 'earlier'}`);
 
 function sound(p: Prefs) {
-    if (!p.soundFor) return row('Sound sync', el('span', { className: 'pref-note', textContent: 'Play a movie to line up its sound.' }));
+    if (!p.soundFor) return row('Sound sync', el('span', { className: 'pref-note', textContent: 'Play a movie to use this.' }));
     const slider = el('input', { type: 'range', min: String(-SOUND_MOST), max: String(SOUND_MOST), step: '0.05', value: String(p.sound), className: 'pref-range' });
     slider.setAttribute('aria-label', `Sound sync for ${p.soundFor}`);
     const shown = el('span', { className: 'pref-sound', textContent: soundText(p.sound) });
@@ -246,7 +246,7 @@ function sound(p: Prefs) {
                 button('Reset', () => void set(0), 'quiet-button'),
             ),
         ],
-        `For ${p.soundFor}, for everyone. If voices come before lips move, move it later. Each change makes the picture pause for a moment.`,
+        'Moves the sound for everyone.',
     );
 }
 

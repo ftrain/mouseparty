@@ -156,11 +156,11 @@ const TABS = [
 	}
 ];
 const SOUND_MOST = 3;
-const soundText = (s) => s === 0 ? "In sync, as the file has it" : `${Math.abs(s).toFixed(2)} s ${s > 0 ? "later" : "earlier"}`;
+const soundText = (s) => s === 0 ? "0 s" : `${Math.abs(s).toFixed(2)} s ${s > 0 ? "later" : "earlier"}`;
 function sound(p) {
 	if (!p.soundFor) return row("Sound sync", el("span", {
 		className: "pref-note",
-		textContent: "Play a movie to line up its sound."
+		textContent: "Play a movie to use this."
 	}));
 	const slider = el("input", {
 		type: "range",
@@ -185,7 +185,7 @@ function sound(p) {
 	};
 	slider.oninput = () => void (shown.textContent = soundText(Number(slider.value)));
 	slider.onchange = () => void set(Number(slider.value));
-	return row("Sound sync", [el("span", { className: "pref-inline" }, el("span", { textContent: "Earlier" }), slider, el("span", { textContent: "Later" })), el("span", { className: "pref-inline" }, shown, button("Reset", () => void set(0), "quiet-button"))], `For ${p.soundFor}, for everyone. If voices come before lips move, move it later. Each change makes the picture pause for a moment.`);
+	return row("Sound sync", [el("span", { className: "pref-inline" }, el("span", { textContent: "Earlier" }), slider, el("span", { textContent: "Later" })), el("span", { className: "pref-inline" }, shown, button("Reset", () => void set(0), "quiet-button"))], "Moves the sound for everyone.");
 }
 function updates(p) {
 	const u = p.update;
