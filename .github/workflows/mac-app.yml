@@ -59,7 +59,7 @@ jobs:
 
       - name: ffmpeg, cut down (cached until scripts/build_ffmpeg.sh changes)
         id: ffmpeg
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/ffmpeg/bin
           key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_ffmpeg.sh') }}
@@ -71,14 +71,14 @@ jobs:
       - name: Keep ffmpeg for next time
         # saved now, not at the end: a later step failing would otherwise lose it
         if: steps.ffmpeg.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: build/ffmpeg/bin
           key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
 
       - name: Python for Datasette, as WebAssembly (cached until scripts/build_python.sh or its packages change)
         id: python
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/python/dist
           key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_python.sh', 'scripts/python-requirements.txt', 'scripts/python-build-requirements.txt') }}
@@ -89,7 +89,7 @@ jobs:
 
       - name: Keep Python for next time
         if: steps.python.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: build/python/dist
           key: ${{ steps.python.outputs.cache-primary-key }}
