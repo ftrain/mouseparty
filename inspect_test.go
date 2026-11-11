@@ -70,6 +70,9 @@ func TestInspectAgreesWithFFprobe(t *testing.T) {
 	if ffprobe == "" || findTool("ffmpeg") == "" {
 		t.Skip("needs ffmpeg and ffprobe")
 	}
+	// Homebrew's ffmpeg (the one with an ffprobe) loads its libraries from Homebrew's folders,
+	// which ffmpeg's box doesn't let it read; the app's own is static. This is about what ffmpeg says, not the box.
+	unboxed(t)
 	dir := t.TempDir()
 	srt := filepath.Join(dir, "s.srt")
 	exec.Command("sh", "-c", `printf '1\n00:00:01,000 --> 00:00:02,000\nHi\n' > `+srt).Run()
