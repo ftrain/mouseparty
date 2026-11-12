@@ -45,6 +45,10 @@ func encodingArgs(o StreamOpts) []string {
 	return []string{
 		"-c:v", "libx264", "-preset", o.Preset, "-pix_fmt", "yuv420p", "-profile:v", "main", "-level", "3.1",
 		"-bf", "0", // no B-frames: lower latency, and what WebRTC players expect
+		// frames out as soon as they're in: MediaMTX times a new publisher from when it connects,
+		// so x264's lookahead (a second's frames held back) left viewers' browsers a second
+		// behind after every hand-off, the sound drifting late for half a minute as they caught up
+		"-tune", "zerolatency",
 		"-r", "30", "-g", "30", "-keyint_min", "30", "-sc_threshold", "0", // a keyframe every second
 		"-b:v", o.Bitrate,
 		"-maxrate", fmt.Sprintf("%d%s", value*12/10, unit),
