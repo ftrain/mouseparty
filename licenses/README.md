@@ -66,7 +66,7 @@ them in `host_web/office/fonts/`.
 
 | | Version | Licence | |
 |---|---|---|---|
-| [Lucide](https://lucide.dev) icons, the few the app picker uses (`host_web/apps/icons.js`) and the window's list (`frontend/app.js`) | lucide-static 0.460.0, lucide 1.57.0 | ISC | `lucide/` |
+| [Lucide](https://lucide.dev) icons, the few the app picker uses (`host_web/apps/icons.js`) and the window's list (`frontend/app.js`) | lucide-static 0.460.0, lucide 1.70.0 | ISC | `lucide/` |
 | [ENABLE](https://github.com/dolph/dictionary) word list, for the word games (`apps/enable.txt.gz`) | dolph/dictionary@233d25a | Public domain | `enable/` |
 
 ## Go code compiled into the app

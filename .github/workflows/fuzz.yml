@@ -26,7 +26,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -44,7 +44,7 @@ jobs:
 
       - name: ffmpeg, cut down (the Mac build's, cached)
         id: ffmpeg
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/ffmpeg/bin
           key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_ffmpeg.sh') }}
@@ -55,7 +55,7 @@ jobs:
 
       - name: Python for Datasette (the Mac build's, cached)
         id: python
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/python/dist
           key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_python.sh', 'scripts/python-requirements.txt', 'scripts/python-build-requirements.txt') }}

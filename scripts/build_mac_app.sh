@@ -25,7 +25,7 @@ cd "$(dirname "$0")/.."
 
 APP_NAME='Mouse Party'   # the app in Finder and the menu bar
 BIN='MouseParty'          # its program inside (wails.json's outputfilename)
-WAILS=github.com/wailsapp/wails/v2/cmd/wails@v2.17.0   # the same version as go.mod's
+WAILS=github.com/wailsapp/wails/v2/cmd/wails@v2.17.1   # the same version as go.mod's
 DIST=${DIST:-dist}
 
 TOOLS=()
