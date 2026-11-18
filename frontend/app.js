@@ -1,5 +1,5 @@
 // Built from web/window/app.ts by `npm run build` (vite.config.ts): change it there.
-import { ask, edit, lock, sheetOpen } from "./party.js";
+import { ask, edit, learnPlatform, lock, onMac, onWindows, sheetOpen } from "./party.js";
 const App = () => window.go.main.App;
 const $ = (id) => document.getElementById(id);
 const ICONS = {
@@ -97,8 +97,15 @@ function showInsert(at) {
 	if (at < 0) rows[rows.length - 1].classList.add("insert-after");
 	else rows[at].classList.add("insert-before");
 }
-window.addEventListener("dragover", (e) => showInsert(insertAt(e.clientY)));
+window.addEventListener("dragover", (e) => {
+	e.preventDefault();
+	showInsert(insertAt(e.clientY));
+});
 window.addEventListener("dragleave", (e) => e.relatedTarget === null && showInsert(null));
+window.addEventListener("drop", (e) => {
+	e.preventDefault();
+	showInsert(null);
+});
 $("play").addEventListener("click", () => view?.playOn && App().PlayClicked());
 $("link").addEventListener("click", () => view?.linkPress && App().LinkClicked());
 let lastDown = {
@@ -136,6 +143,7 @@ window.addEventListener("mouseup", () => {
 	dragFrom = null;
 });
 window.addEventListener("keydown", (e) => {
+	if (!onMac() && ctrlKey(e)) return e.preventDefault();
 	if (sheetOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
 	const rows = view?.rows.length ?? 0;
 	const sel = view?.selected ?? -1;
@@ -150,6 +158,21 @@ window.addEventListener("keydown", (e) => {
 	else return;
 	e.preventDefault();
 });
+function ctrlKey(e) {
+	if (!e.ctrlKey || e.altKey || e.metaKey) return false;
+	const key = e.key.toLowerCase();
+	if (onWindows() && !e.shiftKey && (key === "," || key === "/")) {
+		ask(key === "," ? "prefs" : "keys");
+		return true;
+	}
+	const undo = key === "z" && !e.shiftKey;
+	const redo = key === "z" && e.shiftKey || key === "y" && !e.shiftKey;
+	if (!undo && !redo || sheetOpen()) return false;
+	undo ? App().UndoRemove() : App().RedoRemove();
+	return true;
+}
+window.addEventListener("focus", () => void App().Focused(true));
+window.addEventListener("blur", () => void App().Focused(false));
 const slider = $("slider");
 const clock = (s) => `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 slider.addEventListener("pointerdown", () => {
@@ -174,11 +197,14 @@ slider.addEventListener("keydown", (e) => e.stopPropagation());
 window.addEventListener("load", async () => {
 	window.runtime.OnFileDrop((x, y, paths) => {
 		showInsert(null);
-		App().AddPaths(paths, rowAt(x, y) ?? -1, insertAt(y));
+		const files = paths.filter((p) => p !== "");
+		if (files.length) App().AddPaths(files, rowAt(x, y) ?? -1, insertAt(y));
 	}, false);
 	window.runtime.EventsOn("view", render);
 	window.runtime.EventsOn("ask", ask);
 	window.runtime.EventsOn("edit", edit);
+	await learnPlatform();
+	App().Focused(document.hasFocus());
 	render(await App().GetView());
 	if (await App().Welcome()) ask("welcome");
 });

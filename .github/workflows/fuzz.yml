@@ -1,4 +1,4 @@
-# Fuzz the command graph for longer than each push does (mac-app.yml: a minute of
+# Fuzz the command graph for longer than each push does (app.yml: a minute of
 # each), every night, on the Mac like everything else (docs/testing.md): each
 # fuzzer, and the pages walked with new seeds, for FUZZTIME. And the one test the
 # app's own tools can't run: what ffmpeg says of a file against ffprobe's account

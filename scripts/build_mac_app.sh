@@ -14,7 +14,7 @@
 #       BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   for other Macs: signed + notarized
 #
 # Notarizing takes NOTARY_PROFILE, a keychain profile from `xcrun notarytool store-credentials`,
-# or an App Store Connect API key (as .github/workflows/mac-app.yml does): NOTARY_KEY (the .p8
+# or an App Store Connect API key (as .github/workflows/app.yml does): NOTARY_KEY (the .p8
 # file), NOTARY_KEY_ID and NOTARY_ISSUER. Signed, the app has the hardened runtime, with
 # packaging/darwin/entitlements.plist.
 # Output: dist/Mouse Party.app and dist/MouseParty-macos-arm64.dmg, the one file a release

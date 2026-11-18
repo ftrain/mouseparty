@@ -11,4 +11,6 @@ trap 'rm -rf "$TMP"' EXIT
     --default-background-color=00000000 --window-size=1024,1024 \
     --screenshot="$TMP/icon.png" "file://$PWD/packaging/src/appicon.svg" 2>/dev/null
 cp "$TMP/icon.png" packaging/appicon.png
-echo "Made packaging/appicon.png"
+magick packaging/appicon.png -resize 256x256 -strip packaging/linux/io.github.ftrain.mouseparty.png
+magick packaging/appicon.png -strip -define icon:auto-resize=256,128,64,48,32,16 packaging/windows/icon.ico
+echo "Made packaging/appicon.png, packaging/linux/io.github.ftrain.mouseparty.png and packaging/windows/icon.ico"

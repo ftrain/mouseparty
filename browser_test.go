@@ -24,7 +24,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +31,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -43,7 +43,9 @@ import (
 // windowShim: the Wails runtime and bindings, as far as the window uses them,
 // over HTTP to the test
 const windowShim = `
+window.__calls = {};
 const call = (method) => async (...args) => {
+    window.__calls[method] = (window.__calls[method] ?? 0) + 1;
     const r = await fetch('/rpc/' + method, { method: 'POST', body: JSON.stringify(args) });
     if (!r.ok) throw new Error(method + ': ' + (await r.text()));
     return r.json();
@@ -56,6 +58,8 @@ window.runtime = {
     OnFileDrop(callback) { drop = callback; },
     EventsOn(name, callback) { on[name].push(callback); return () => {}; },
     ClipboardSetText: async (text) => ((window.__clipboard = text), true),
+    ClipboardGetText: async () => window.__clipboard ?? '',
+    Environment: async () => environment,
 };
 window.__ask = (mode) => on.ask.forEach((f) => f(mode)); // the menus
 window.__edit = (what) => on.edit.forEach((f) => f(what)); // Edit > Undo, Redo
@@ -122,18 +126,11 @@ func TestBrowser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if os.Getenv("PLAYWRIGHT_BROWSERS_PATH") == "" { // Playwright's browsers are under the real HOME
-		if cache, err := os.UserCacheDir(); err == nil {
-			t.Setenv("PLAYWRIGHT_BROWSERS_PATH", filepath.Join(cache, "ms-playwright"))
-		}
-	}
-	t.Setenv("HOME", t.TempDir()) // never the real party file
+	tempHome(t) // never the real party file
 	// the app, as the Mac starts it: again after a restart, from the same party file (sealed, by then)
 	start := func() *App {
 		a := NewApp(standby)
-		a.hostSetup = func(h *Host) {
-			h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
-		}
+		a.hostSetup = testHosting
 		go a.run()
 		go a.watchFiles()
 		a.wait(func() {
@@ -155,9 +152,10 @@ func TestBrowser(t *testing.T) {
 		w.Write([]byte(strings.Replace(string(page), `<script type="module"`, `<script src="/shim.js"></script><script type="module"`, 1)))
 	})
 	mux.Handle("GET /window/", http.StripPrefix("/window/", http.FileServerFS(window)))
+	environment, _ := json.Marshal(map[string]string{"buildType": "dev", "platform": runtime.GOOS, "arch": runtime.GOARCH})
 	mux.HandleFunc("GET /shim.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")
-		io.WriteString(w, windowShim)
+		fmt.Fprintf(w, "const environment = %s;\n%s", environment, windowShim)
 	})
 	mux.HandleFunc("POST /rpc/{method}", func(w http.ResponseWriter, r *http.Request) { rpc(current.Load())(w, r) })
 	mux.HandleFunc("POST /restart", func(w http.ResponseWriter, r *http.Request) { // the app quit and opened again
@@ -186,6 +184,7 @@ func TestBrowser(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
+	adopt(cmd)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

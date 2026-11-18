@@ -10,10 +10,6 @@
 #                                    each release carries them)
 #   scripts/build_python.sh --tag    the name of a build from these sources (and --stamp, its whole stamp)
 #
-# Mostly it isn't run: scripts/fetch_python.sh downloads the build published from it
-# (the "Python for WebAssembly" workflow), checked against its pinned SHA-256. This is
-# the recipe, run to make a new one when a version here or a package moves.
-#
 # Sources are pinned releases, checked against their SHA-256: CPython, SQLite's
 # amalgamation, zlib, and the WASI SDK (clang for WebAssembly) that builds them, the
 # one for this machine. The Python packages are pinned, each with its file's hash,
@@ -45,18 +41,19 @@ SOURCES=(
     "wasi-sdk-$SDK.0-$SDK_HOST.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$SDK/wasi-sdk-$SDK.0-$SDK_HOST.tar.gz $SDK_SUM"
 )
 
-STAMP="$PY sqlite $SQLITE zlib $ZLIB sdk $SDK $(shasum -a 256 "$0" | cut -c1-12)"   # what CPython is built from
-READY="$STAMP $(cat scripts/python-requirements.txt scripts/python-build-requirements.txt | shasum -a 256 | cut -c1-12)"   # and what's installed in it
+sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+STAMP="$PY sqlite $SQLITE zlib $ZLIB sdk $SDK $(sha256 "$0" | cut -c1-12)"   # what CPython is built from
+READY="$STAMP $(cat scripts/python-requirements.txt scripts/python-build-requirements.txt | sha256 | cut -c1-12)"   # and what's installed in it
 case "${1:-}" in   # what a build from these sources is called, without building (scripts/fetch_python.sh, the release workflow)
 --stamp) echo "$READY"; exit 0 ;;
---tag) echo "python-wasm-$PY-$(printf %s "$READY" | shasum -a 256 | cut -c1-12)"; exit 0 ;;
+--tag) echo "python-wasm-$PY-$(printf %s "$READY" | sha256 | cut -c1-12)"; exit 0 ;;
 esac
 
 mkdir -p "$SRC"
 for s in "${SOURCES[@]}"; do
     read -r file url sum <<<"$s"
     [ -f "$SRC/$file" ] || curl -fL --progress-bar -o "$SRC/$file" "$url"
-    echo "$sum  $SRC/$file" | shasum -a 256 -c --quiet
+    echo "$sum  $SRC/$file" | sha256 -c --quiet
 done
 [ "${1:-}" = "--fetch" ] && exit 0
 
@@ -73,11 +70,12 @@ CC="$WASI_SDK/bin/clang --target=wasm32-wasip1 --sysroot=$WASI_SDK/share/wasi-sy
 
 CP=$ROOT/Python-$PY
 HOST=$CP/cross-build/wasm32-wasip1
+SQ=$ROOT/sqlite
+ZL=$ROOT/zlib
 if [ "$(cat "$ROOT/cpython.stamp" 2>/dev/null)" != "$STAMP" ] || [ ! -f "$HOST/python.wasm" ]; then
 
 # SQLite, one file, for WASI (SQLite builds for it as it is: no locking, no WAL, no shared memory there).
 # No threads (CPython's WASI has none), no extensions loaded, and the features Datasette uses
-SQ=$ROOT/sqlite
 rm -rf "$SQ" && mkdir -p "$SQ"
 unzip -q -j "$SRC/sqlite-amalgamation-$SQLITE.zip" -d "$SQ"
 $CC -O2 -c "$SQ/sqlite3.c" -o "$SQ/sqlite3.o" \
@@ -87,7 +85,6 @@ $CC -O2 -c "$SQ/sqlite3.c" -o "$SQ/sqlite3.o" \
 "$WASI_SDK/bin/llvm-ar" rcs "$SQ/libsqlite3.a" "$SQ/sqlite3.o"
 
 # zlib, which Python's gzip and zlib (and so httpx, and so Datasette) need
-ZL=$ROOT/zlib
 rm -rf "$ZL" "$ROOT/zlib-$ZLIB" && tar -xzf "$SRC/zlib-$ZLIB.tar.gz" -C "$ROOT" && mv "$ROOT/zlib-$ZLIB" "$ZL"
 for c in adler32 compress crc32 deflate gzclose gzlib gzread gzwrite infback inffast inflate inftrees trees uncompr zutil; do
     $CC -O2 -DZ_HAVE_UNISTD_H -c "$ZL/$c.c" -o "$ZL/$c.o"   # what its configure would say

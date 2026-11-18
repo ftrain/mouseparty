@@ -38,6 +38,39 @@ func TestTLOOf(t *testing.T) {
 	}
 }
 
+// A picture a document names is taken only from what pandoc wrote: a file in its own folder,
+// not a link out of it, a folder, a device or anything too big to be a picture
+func TestPicturesComeOnlyFromPandocsFolder(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "secret.png")
+	os.WriteFile(outside, []byte("\x89PNG secret"), 0o600)
+	os.MkdirAll(filepath.Join(dir, "media", "folder.png"), 0o700)
+	os.WriteFile(filepath.Join(dir, "media", "a.png"), []byte("\x89PNG a"), 0o600)
+	big, _ := os.Create(filepath.Join(dir, "media", "big.png"))
+	big.Truncate(pictureMaxBytes + 1)
+	big.Close()
+	linked := os.Symlink(outside, filepath.Join(dir, "media", "link.png")) == nil
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	for _, src := range []string{"./media/a.png", "/media/a.png", "media/a.png", `media\a.png`, "../media/a.png", "../../media/a.png"} {
+		if b, ok := extracted(root, src); !ok || string(b) != "\x89PNG a" {
+			t.Errorf("%q: %q %v", src, b, ok)
+		}
+	}
+	for _, src := range []string{"", ".", "media/folder.png", "media/big.png", "media/none.png", "COM1", "CON", outside,
+		"../" + filepath.Base(filepath.Dir(outside)) + "/secret.png"} {
+		if _, ok := extracted(root, src); ok {
+			t.Errorf("%q was read", src)
+		}
+	}
+	if _, ok := extracted(root, "media/link.png"); linked && ok {
+		t.Error("a link out of the folder was followed")
+	}
+}
+
 // a document made by pandoc itself (so nothing but pandoc.wasm is needed), read back
 func TestReadDocument(t *testing.T) {
 	h := &Host{pics: newPictures(nil), pandoc: newWasmTool("pandoc"), reading: make(chan struct{}, 1)}

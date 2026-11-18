@@ -1,32 +1,26 @@
 package main
 
 // Updates: Mouse Party looks for a newer release of itself on GitHub (this
-// repo's releases, tagged vX.Y.Z, each with the app's zip and that zip's SHA-256
-// beside it, as .github/workflows/mac-app.yml publishes them), at start and once
+// repo's releases, tagged vX.Y.Z, each with the app's file for each platform and
+// GitHub's SHA-256 of it, as .github/workflows/app.yml publishes them), at start and once
 // a day when Settings > General says so, or when asked (Party > Check for
-// Updates…). A newer one is downloaded into the cache, checked (its SHA-256, its
-// signature, its bundle's name and version) and unpacked beside this app, hidden;
-// it takes this app's place when Mouse Party quits (shutdown), or at once with
-// Restart to Update, so a party going on is never cut short. A build made here
+// Updates…). A newer one is downloaded into the cache and checked; it takes this
+// app's place when Mouse Party quits (shutdown), or at once with Restart to
+// Update, so a party going on is never cut short. A build made here
 // says so ("dev") and never updates itself; neither does an app macOS runs from a
 // read-only copy (one opened from Downloads: App Translocation), or one in a
 // folder this user can't write to.
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -35,11 +29,7 @@ import (
 // version: this build's, set by scripts/build_mac_app.sh (-ldflags "-X main.version=3.1.0"); "dev" otherwise
 var version = "dev"
 
-const (
-	updateAsset  = "MouseParty-macos-arm64.dmg"  // the app, in each release: the disk image people install from
-	updateBundle = "io.github.ftrain.mouseparty" // what an update's Info.plist must say it is (packaging/darwin/Info.plist)
-	updateEvery  = 24 * time.Hour
-)
+const updateEvery = 24 * time.Hour
 
 // updatesAPI: this repo's releases (tests point it at their own)
 var updatesAPI = "https://api.github.com/repos/ftrain/mouseparty/releases?per_page=30"
@@ -50,9 +40,11 @@ type updater struct {
 	latest     string // the newest release's version, once known
 	note       string // why not, for "error"
 	got, total int64  // bytes of the download, while "downloading"
-	staged     string // the new app, unpacked beside this one, while "ready"
+	staged     string // the update, while "ready"
 	checked    time.Time
 	restart    bool // Restart to Update: open the new app once this one has gone
+	page       string
+	tidied     bool
 }
 
 // UpdateStatus: what Settings says of updates
@@ -63,6 +55,10 @@ type UpdateStatus struct {
 	Text    string `json:"text"`  // the sentence Settings shows
 	Ready   bool   `json:"ready"` // Restart to Update would install it
 	Busy    bool   `json:"busy"`  // checking or downloading: Settings looks again soon
+	// Page: the newer release's page, when this install is updated by hand
+	Page string `json:"page,omitempty"`
+	// Manual: this install never updates itself, so Install automatically means nothing
+	Manual bool `json:"manual,omitempty"`
 }
 
 // semver: "v3.1.0" or "3.1.0" as numbers; ok false for anything else (a tag that isn't a release of the app)
@@ -99,12 +95,13 @@ func newer(a, b string) bool {
 // release: the newest release of the app, as GitHub lists it
 type release struct {
 	Version string
-	URL     string // the disk image's download
+	URL     string // the download of its updateAsset
 	Sum     string // its SHA-256, as GitHub gives it (hex)
 	Size    int64
+	Page    string
 }
 
-// latestRelease: the highest vX.Y.Z release that has the app's disk image, with the SHA-256 GitHub gives it (drafts and prereleases aside)
+// latestRelease: the highest vX.Y.Z release that has updateAsset, with the SHA-256 GitHub gives it (drafts and prereleases aside)
 func latestRelease(ctx context.Context) (*release, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", updatesAPI, nil)
 	if err != nil {
@@ -122,6 +119,7 @@ func latestRelease(ctx context.Context) (*release, error) {
 	}
 	var list []struct {
 		Tag        string `json:"tag_name"`
+		Page       string `json:"html_url"`
 		Draft      bool   `json:"draft"`
 		Prerelease bool   `json:"prerelease"`
 		Assets     []struct {
@@ -139,7 +137,7 @@ func latestRelease(ctx context.Context) (*release, error) {
 		if _, ok := semver(r.Tag); !ok || r.Draft || r.Prerelease {
 			continue
 		}
-		rel := release{Version: strings.TrimPrefix(r.Tag, "v")}
+		rel := release{Version: strings.TrimPrefix(r.Tag, "v"), Page: r.Page}
 		for _, a := range r.Assets {
 			if sum, ok := strings.CutPrefix(a.Digest, "sha256:"); a.Name == updateAsset && ok && len(sum) == 64 {
 				rel.URL, rel.Sum, rel.Size = a.URL, strings.ToLower(sum), a.Size
@@ -155,39 +153,25 @@ func latestRelease(ctx context.Context) (*release, error) {
 	return best, nil
 }
 
-// thisBundle: the app this program is in, and why it can't be updated where it is ("" if it can)
-func (a *App) thisBundle() (string, string) {
-	path := a.bundlePath
-	if path == "" {
-		exe, err := os.Executable()
-		if err != nil {
-			return "", "where Mouse Party is isn't known"
-		}
-		exe, _ = filepath.EvalSymlinks(exe)
-		path = filepath.Dir(filepath.Dir(filepath.Dir(exe))) // …/Mouse Party.app/Contents/MacOS/MouseParty
-	}
-	switch {
-	case !strings.HasSuffix(path, ".app"):
-		return path, "this isn't the app (it's run from its source)"
-	case strings.Contains(path, "/AppTranslocation/"):
-		return path, "macOS is running a read-only copy of it: move Mouse Party to Applications, open it from there, and it can update itself"
-	}
-	probe, err := os.CreateTemp(filepath.Dir(path), ".mouseparty-update-")
-	if err != nil {
-		return path, "it can't write to " + filepath.Dir(path) + ": move Mouse Party to Applications"
-	}
-	probe.Close()
-	os.Remove(probe.Name())
-	return path, ""
-}
-
 // stagingDir: where an update is unpacked, beside the app (the same disk, so it moves in at once)
 func stagingDir(bundle string) string {
 	return filepath.Join(filepath.Dir(bundle), ".Mouse Party update")
 }
 
+func updateDir() (string, error) {
+	d := cacheDir()
+	if d == "" {
+		return "", errors.New("where to download it isn't known")
+	}
+	return filepath.Join(d, "update"), nil
+}
+
 // autoUpdate: once a day, if Settings says so; downloading what it finds if Settings says that too
 func (a *App) autoUpdate() {
+	if !a.update.tidied {
+		a.update.tidied = true
+		a.tidyUpdate()
+	}
 	if a.locked || !a.cfg.CheckUpdates || version == "dev" || time.Since(a.update.checked) < updateEvery {
 		return
 	}
@@ -220,9 +204,9 @@ func (a *App) checkUpdates(install bool) {
 			case !newer(rel.Version, version):
 				u.state, u.latest = "current", rel.Version
 			default:
-				u.state, u.latest = "available", rel.Version
+				u.state, u.latest, u.page = "available", rel.Version, rel.Page
 				a.log("Mouse Party " + rel.Version + " is out")
-				if install {
+				if install && a.updateByHand() == "" {
 					a.downloadUpdate(rel)
 				}
 			}
@@ -231,7 +215,7 @@ func (a *App) checkUpdates(install bool) {
 	}()
 }
 
-// downloadUpdate fetches the release's zip into the cache, checks it, and unpacks it beside this app (off the app's goroutine)
+// downloadUpdate fetches the release's updateAsset into the cache and checks it (off the app's goroutine)
 func (a *App) downloadUpdate(rel *release) {
 	u := &a.update
 	bundle, why := a.thisBundle()
@@ -248,122 +232,11 @@ func (a *App) downloadUpdate(rel *release) {
 				a.log(u.note)
 			} else {
 				u.state, u.staged = "ready", staged
-				a.log("Mouse Party " + rel.Version + " is downloaded: it goes in when Mouse Party quits (or Party > Restart to Update)")
+				a.log("Mouse Party " + rel.Version + " is downloaded: it goes in when Mouse Party quits (or " + restartItem + ")")
 			}
 			a.setMenu()
 		})
 	}()
-}
-
-// fetchUpdate: the release's disk image, its SHA-256 checked, the app in it copied out beside bundle and checked; its path
-func fetchUpdate(rel *release, bundle string, step func(got, total int64)) (string, error) {
-	cache, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(cache, "Mouse Party", "update")
-	os.RemoveAll(dir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	defer os.RemoveAll(dir)
-	dmg := filepath.Join(dir, updateAsset)
-	if _, err := fetch(context.Background(), rel.URL, dmg, nil, func(_ string, got, total int64) { step(got, total) }); err != nil {
-		return "", err
-	}
-	f, err := os.Open(dmg)
-	if err != nil {
-		return "", err
-	}
-	h := sha256.New()
-	_, err = io.Copy(h, f)
-	f.Close()
-	if err != nil {
-		return "", err
-	}
-	if got := hex.EncodeToString(h.Sum(nil)); got != rel.Sum {
-		return "", errors.New("it isn't what the release says it is (its SHA-256 differs)")
-	}
-	// opened where nothing sees it (no Finder window, not in the sidebar), read-only, and put away again
-	mount := filepath.Join(dir, "mount")
-	if out, err := exec.Command("/usr/bin/hdiutil", "attach", "-nobrowse", "-noautoopen", "-readonly", "-noverify",
-		"-mountpoint", mount, dmg).CombinedOutput(); err != nil {
-		return "", fmt.Errorf("its disk image didn't open: %s", strings.TrimSpace(string(out)))
-	}
-	defer exec.Command("/usr/bin/hdiutil", "detach", "-force", mount).Run()
-	stage := stagingDir(bundle)
-	os.RemoveAll(stage)
-	app := filepath.Join(stage, filepath.Base(bundle))
-	if out, err := exec.Command("/usr/bin/ditto", filepath.Join(mount, "Mouse Party.app"), app).CombinedOutput(); err != nil {
-		os.RemoveAll(stage)
-		return "", fmt.Errorf("its app didn't copy out: %s", strings.TrimSpace(string(out)))
-	}
-	if why := checkBundle(app, rel.Version, teamOf(bundle)); why != "" {
-		os.RemoveAll(stage)
-		return "", errors.New(why)
-	}
-	return app, nil
-}
-
-// checkBundle: why the unpacked app isn't the update it should be ("" when it is): whole as signed, Mouse Party, that version
-func checkBundle(app, want, team string) string {
-	if out, err := exec.Command("/usr/bin/codesign", "--verify", "--deep", "--strict", app).CombinedOutput(); err != nil {
-		return "its signature doesn't check: " + strings.TrimSpace(string(out))
-	}
-	if team != "" { // this Mouse Party has a Developer ID: an update must be signed by the same developer
-		req := fmt.Sprintf(`=anchor apple generic and certificate leaf[subject.OU] = "%s"`, team)
-		if out, err := exec.Command("/usr/bin/codesign", "--verify", "--deep", "--strict", "-R", req, app).CombinedOutput(); err != nil {
-			return "it isn't signed by Mouse Party's developer (" + team + "): " + strings.TrimSpace(string(out))
-		}
-	}
-	plist := filepath.Join(app, "Contents", "Info.plist")
-	read := func(key string) string {
-		out, _ := exec.Command("/usr/libexec/PlistBuddy", "-c", "Print :"+key, plist).Output()
-		return strings.TrimSpace(string(out))
-	}
-	if id := read("CFBundleIdentifier"); id != updateBundle {
-		return "it isn't Mouse Party (" + id + ")"
-	}
-	if v := read("CFBundleShortVersionString"); v != want {
-		return fmt.Sprintf("it says it's version %q, not %s", v, want)
-	}
-	return ""
-}
-
-// teamOf: the Developer ID team that signed an app; "" when it's signed ad hoc (or not at all)
-func teamOf(app string) string {
-	out, _ := exec.Command("/usr/bin/codesign", "-dv", "--verbose=2", app).CombinedOutput()
-	for _, line := range strings.Split(string(out), "\n") {
-		if t, ok := strings.CutPrefix(line, "TeamIdentifier="); ok && t != "not set" {
-			return strings.TrimSpace(t)
-		}
-	}
-	return ""
-}
-
-// installUpdate puts the downloaded app in this one's place (at quitting): this one aside, the new one in, this one deleted
-func (a *App) installUpdate() error {
-	u := &a.update
-	if u.state != "ready" || u.staged == "" {
-		return nil
-	}
-	bundle, why := a.thisBundle()
-	if why != "" {
-		return errors.New(why)
-	}
-	old := filepath.Join(stagingDir(bundle), "old.app")
-	os.RemoveAll(old)
-	if err := os.Rename(bundle, old); err != nil {
-		return err
-	}
-	if err := os.Rename(u.staged, bundle); err != nil {
-		os.Rename(old, bundle) // put back as it was
-		return err
-	}
-	os.RemoveAll(stagingDir(bundle))
-	a.log("Updated to Mouse Party " + u.latest)
-	u.state, u.staged = "", ""
-	return nil
 }
 
 // RestartToUpdate: Party > Restart to Update: quit, the update put in, and the new app opened
@@ -378,17 +251,15 @@ func (a *App) RestartToUpdate() {
 	}
 }
 
-// reopen opens the app at path once this process has gone (Restart to Update)
-func reopen(path string) {
-	cmd := exec.Command("/bin/sh", "-c", `sleep 1; exec /usr/bin/open "$0"`, path)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // not stopped with us
-	cmd.Start()
-}
-
 // updateStatus: what Settings says
 func (a *App) updateStatus() UpdateStatus {
 	u := a.update
-	s := UpdateStatus{Version: version, State: u.state, Latest: u.latest, Ready: u.state == "ready", Busy: u.state == "checking" || u.state == "downloading"}
+	how := ""
+	if version != "dev" {
+		how = a.updateByHand()
+	}
+	s := UpdateStatus{Version: version, State: u.state, Latest: u.latest, Ready: u.state == "ready", Busy: u.state == "checking" || u.state == "downloading",
+		Manual: how != ""}
 	switch u.state {
 	case "checking":
 		s.Text = "Checking for updates…"
@@ -396,6 +267,9 @@ func (a *App) updateStatus() UpdateStatus {
 		s.Text = "Mouse Party is up to date."
 	case "available":
 		s.Text = "Mouse Party " + u.latest + " is out."
+		if how != "" {
+			s.Text, s.Page = "Mouse Party "+u.latest+" is out: "+how+".", u.page
+		}
 	case "downloading":
 		s.Text = "Downloading Mouse Party " + u.latest + "…"
 		if u.total > 0 {

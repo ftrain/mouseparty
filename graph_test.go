@@ -4,7 +4,7 @@ package main
 // as data, and walked by fuzzers that check, after every step, what must always
 // hold. Three layers:
 //
-//   - the Mac window: App's methods, in each state App.state names (windowGraph)
+//   - the window: App's methods, in each state App.state names (windowGraph)
 //   - the viewers' sockets: what a page says to the host (socketGraph)
 //   - the apps: what a page says to each app (apps.Commands)
 //
@@ -17,7 +17,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +28,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -88,14 +91,14 @@ var windowGraph = []windowCommand{
 	{"Select", windowStates, each(windowStates, "same"), "a row clicked"},
 	{"Move", windowStates, each(windowStates, "same"), "a row dragged"},
 	{"Remove", windowStates, each(windowStates, "same", "empty", "stopping", "between"), "Backspace: the selected row"},
-	{"ClearPlayed", windowStates, each(windowStates, "same", "empty", "stopping", "between"), "Party > Clear Played Files (⌘R): every row above the one playing, or next to play"},
+	{"ClearPlayed", windowStates, each(windowStates, "same", "empty", "stopping", "between"), "Party > Clear Played Files (⌘R, Ctrl+R): every row above the one playing, or next to play"},
 	{"UndoRemove", windowStates, merge(each(windowStates, "same"), each([]string{"empty"}, "empty", "linking", "nolink", "ready")),
-		"Edit > Undo (⌘Z): the rows last taken out, back where they were (hosting again if the list was empty)"},
-	{"RedoRemove", windowStates, each(windowStates, "same", "empty", "stopping", "between"), "Edit > Redo (⇧⌘Z): out again"},
+		"Edit > Undo (⌘Z, Ctrl+Z): the rows last taken out, back where they were (hosting again if the list was empty)"},
+	{"RedoRemove", windowStates, each(windowStates, "same", "empty", "stopping", "between"), "Edit > Redo (⇧⌘Z, Ctrl+Shift+Z or Ctrl+Y): out again"},
 	{"LinkClicked", windowStates, merge(each(windowStates, "same"), each([]string{"nolink"}, "linking", "nolink")), "copy the link, or try again for one"},
-	{"SetSettingsText", windowStates, nil, "Party > Settings: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first)"},
+	{"SetSettingsText", windowStates, nil, "Settings > Security > Edit as Text: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first)"},
 	{"AddPaths", windowStates, nil, "files dropped (off the app's goroutine: no immediate state)"},
-	{"SetPrefs", windowStates, nil, "Party > Settings (⌘,): a setting changed in the Settings window, kept at once (off the app's goroutine: no immediate state)"},
+	{"SetPrefs", windowStates, nil, "Settings (⌘, or Ctrl+,): a setting changed in the Settings window, kept at once (off the app's goroutine: no immediate state)"},
 	{"AddURL", windowStates, nil, "Party > Add Download Link: a row downloading from a link (off the app's goroutine: no immediate state)"},
 }
 
@@ -117,6 +120,8 @@ var windowElsewhere = map[string]string{
 	"RestartToUpdate": "updates (updates_test.go): it quits the app, so it isn't walked",
 	"LogText":         "a question: Help > Show Log",
 	"Welcome":         "a question, asked once at load (the browser walk answers it)",
+	"About":           "a question: Help > About Mouse Party's sheet, off the Mac",
+	"Focused":         "the window's focus, as its page sees it: whether a notification is wanted (Linux)",
 }
 
 // socketDoc: the document up in a socket walk
@@ -236,7 +241,7 @@ func TestCommandGraphDoc(t *testing.T) {
 	b.WriteString("# The command graph\n\nEverything that can be done to Mouse Party, as the fuzzers walk it. Drawn from\n" +
 		"`graph_test.go` (`windowGraph`, `socketGraph`) and `apps/commands.go` (`apps.Commands`) by\n" +
 		"`UPDATE_GRAPH=1 go test -run TestCommandGraphDoc .`; `go test` fails while it's stale. How it's tested: `docs/testing.md`.\n\n")
-	b.WriteString("## The Mac window\n\nIts states are `App.state`'s; each command acts only in the states it leads from, and changes nothing in any other.\n\n```mermaid\nstateDiagram-v2\n")
+	b.WriteString("## The window\n\nIts states are `App.state`'s; each command acts only in the states it leads from, and changes nothing in any other.\n\n```mermaid\nstateDiagram-v2\n")
 	type arrow struct{ from, to string }
 	labels := map[arrow][]string{}
 	for _, c := range windowGraph {
@@ -686,11 +691,9 @@ func windowWalk(t *testing.T, data []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("HOME", t.TempDir()) // never the real party file
+	tempHome(t) // never the real party file
 	a := NewApp(standby)
-	a.hostSetup = func(h *Host) {
-		h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
-	}
+	a.hostSetup = testHosting
 	go a.run()
 	go a.watchFiles()
 	defer a.shutdown(nil)
@@ -813,10 +816,16 @@ func windowWalk(t *testing.T, data []byte) {
 			}
 			continue
 		case 12: // a drive unplugged, or plugged back in
-			if c.n(2) == 0 {
-				os.Rename(files["clip2"], files["clip2"]+".away")
-			} else {
-				os.Rename(files["clip2"]+".away", files["clip2"])
+			from, to := files["clip2"], files["clip2"]+".away"
+			if c.n(2) != 0 {
+				from, to = to, from
+			}
+			switch err := os.Rename(from, to); {
+			case err == nil, errors.Is(err, fs.ErrNotExist):
+			case runtime.GOOS == "windows":
+				t.Log(err)
+			default:
+				t.Fatal(err)
 			}
 			continue
 		default: // time passes: the app goes on by itself
@@ -828,7 +837,9 @@ func windowWalk(t *testing.T, data []byte) {
 		cmd := command(name)
 		step(name, fn, cmd.Acts, cmd.To)
 	}
-	os.Rename(files["clip2"]+".away", files["clip2"])
+	if err := os.Rename(files["clip2"]+".away", files["clip2"]); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
 	// however it went, Stop settles it: nothing left playing, and nothing stuck
 	a.wait(func() {
 		if a.playing {

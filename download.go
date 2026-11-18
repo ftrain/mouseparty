@@ -38,12 +38,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
-	"unicode"
 )
 
 const (
@@ -57,15 +59,16 @@ type download struct {
 	got, total int64  // bytes so far, and the file's size (0: the server didn't say)
 	ready      bool   // ffmpeg reads what's there: it plays while it downloads
 	refused    string // stopped by the app itself (too big for the cache): the row's note
+	done       chan struct{}
 }
 
 // downloadsDir: where downloads live ("" when there's no cache folder)
 func downloadsDir() string {
-	d, err := os.UserCacheDir()
-	if err != nil {
+	d := cacheDir()
+	if d == "" {
 		return ""
 	}
-	return filepath.Join(d, "Mouse Party", "downloads")
+	return filepath.Join(d, "downloads")
 }
 
 // downloadKey: a link's folder, a hash of it (nothing of the link readable in the folder's name)
@@ -99,23 +102,7 @@ func linkName(u *url.URL) string {
 }
 
 // cleanName: a name the server gave, made safe as a file's: no path in it, no leading dot, no control characters
-func cleanName(name string) string {
-	name = filepath.Base(strings.ReplaceAll(strings.ReplaceAll(name, "\\", "/"), "\x00", ""))
-	name = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, name)
-	name = strings.TrimLeft(strings.TrimSpace(name), ".")
-	if name == "" || name == "/" {
-		name = "download"
-	}
-	if len(name) > 200 {
-		name = name[len(name)-200:]
-	}
-	return name
-}
+func cleanName(name string) string { return safeName(name, runtime.GOOS == "windows") }
 
 // dispositionName: the name Content-Disposition gives, if it gives one
 func dispositionName(resp *http.Response) string {
@@ -146,7 +133,7 @@ func fetchInTurn(ctx context.Context, link, path string, login *siteLogin, step 
 // the path, once the server has named the file (which may change it), and the bytes as
 // they come. Returns the path.
 func fetch(ctx context.Context, link, path string, login *siteLogin, step func(path string, got, total int64)) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return path, err
 	}
 	var start int64
@@ -173,8 +160,14 @@ func fetch(ctx context.Context, link, path string, login *siteLogin, step func(p
 	}
 	defer resp.Body.Close()
 	switch {
+	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && start > 0 && rangeSize(resp) == start:
+		step(path, start, start)
+		return path, nil
 	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && start > 0: // what's there is stale: from the top
-		os.Remove(path)
+		resp.Body.Close()
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return path, fmt.Errorf("the server's file changed, and the part here can't be deleted to start again: %w", err)
+		}
 		return fetch(ctx, link, path, login, step)
 	case resp.StatusCode == http.StatusPartialContent && start > 0:
 	case resp.StatusCode == http.StatusOK:
@@ -188,8 +181,9 @@ func fetch(ctx context.Context, link, path string, login *siteLogin, step func(p
 	}
 	if name := dispositionName(resp); name != "" && name != filepath.Base(path) {
 		next := filepath.Join(filepath.Dir(path), name)
-		os.Rename(path, next)
-		path = next
+		if err := os.Rename(path, next); err == nil || errors.Is(err, os.ErrNotExist) {
+			path = next
+		}
 	}
 	total := int64(0)
 	if resp.ContentLength >= 0 {
@@ -246,6 +240,15 @@ func fetch(ctx context.Context, link, path string, login *siteLogin, step func(p
 	return path, nil
 }
 
+func rangeSize(resp *http.Response) int64 {
+	size, ok := strings.CutPrefix(resp.Header.Get("Content-Range"), "bytes */")
+	n, err := strconv.ParseInt(size, 10, 64)
+	if !ok || err != nil {
+		return -1
+	}
+	return n
+}
+
 // progress: a reader that says how many bytes went by
 type progress struct {
 	r     io.Reader
@@ -272,7 +275,7 @@ func shortNetError(err error) string {
 		return "stopped"
 	case strings.Contains(text, "no such host"):
 		return "no such site"
-	case strings.Contains(text, "connection refused"):
+	case errors.Is(err, syscall.ECONNREFUSED) || strings.Contains(text, "connection refused") || strings.Contains(text, "actively refused"):
 		return "the site refused the connection"
 	case errors.Is(err, context.DeadlineExceeded) || strings.Contains(text, "timeout"):
 		return "the site didn't answer"
@@ -372,10 +375,14 @@ func (a *App) startDownload(it *Item) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	d := &download{cancel: cancel}
+	d := &download{cancel: cancel, done: make(chan struct{})}
 	login := a.loginFor(it.URL)
-	it.dl, it.Note = d, ""
+	before := it.stopped
+	it.dl, it.Note, it.stopped = d, "", nil
 	go func() {
+		if before != nil {
+			<-before
+		}
 		ready, lookAt := false, int64(-1) // whether it plays yet, and the bytes at which to look next
 		path, err := fetchInTurn(ctx, it.URL, it.Path, login, func(path string, got, total int64) {
 			if !ready && got > 0 && lookAt < 0 {
@@ -423,6 +430,7 @@ func (a *App) startDownload(it *Item) {
 		if err == nil {
 			made = downloadedItem(path, a.log)
 		}
+		close(d.done)
 		a.do(func() {
 			if it.dl != d { // removed meanwhile
 				return
@@ -464,7 +472,26 @@ func downloadedItem(path string, log func(string)) *Item {
 func (a *App) stopDownload(it *Item) {
 	if it.dl != nil {
 		it.dl.cancel()
+		it.stopped = it.dl.done
 		it.dl = nil
+	}
+}
+
+func settleDownloads(items []*Item, most time.Duration) {
+	end := time.After(most)
+	for _, it := range items {
+		done := it.stopped
+		if it.dl != nil {
+			done = it.dl.done
+		}
+		if done == nil {
+			continue
+		}
+		select {
+		case <-done:
+		case <-end:
+			return
+		}
 	}
 }
 
@@ -533,14 +560,21 @@ func (a *App) pruneCache() {
 }
 
 // removeDownload: the row's gone: so is its folder
-func (a *App) removeDownload(it *Item) {
+func (a *App) removeDownload(it *Item) bool {
 	if it.URL == "" {
-		return
+		return true
 	}
 	a.stopDownload(it)
-	if dir := downloadsDir(); dir != "" {
-		os.RemoveAll(filepath.Join(dir, downloadKey(it.URL)))
+	settleDownloads([]*Item{it}, 3*time.Second)
+	dir := downloadsDir()
+	if dir == "" {
+		return true
 	}
+	if err := os.RemoveAll(filepath.Join(dir, downloadKey(it.URL))); err != nil {
+		a.log("Couldn't delete the download of " + filepath.Base(it.Path) + ": " + err.Error())
+		return false
+	}
+	return true
 }
 
 // downloadNote: what the row's length column says while it downloads
@@ -605,8 +639,8 @@ func (a *App) makeRoom(it *Item, total int64) {
 		return
 	}
 	if total > limit {
-		it.dl.refused = fmt.Sprintf("bigger than the cache limit (%s; cache_gb in Settings)", formatBytes(limit))
-		a.log(fmt.Sprintf("%s is %s, bigger than the cache limit of %s (cache_gb in Party > Settings).", filepath.Base(it.Path), formatBytes(total), formatBytes(limit)))
+		it.dl.refused = fmt.Sprintf("bigger than the cache limit (%s; Settings > Downloads)", formatBytes(limit))
+		a.log(fmt.Sprintf("%s is %s, bigger than the cache limit of %s (Settings > Downloads).", filepath.Base(it.Path), formatBytes(total), formatBytes(limit)))
 		it.dl.cancel()
 		return
 	}
@@ -644,7 +678,9 @@ func (a *App) trimCache(limit int64) {
 		if cacheSize() <= limit {
 			break
 		}
-		a.removeDownload(it)
+		if !a.removeDownload(it) {
+			continue
+		}
 		gone[it] = true
 		a.log("Removed " + filepath.Base(it.Path) + " to make room in the download cache (Settings > Downloads).")
 	}

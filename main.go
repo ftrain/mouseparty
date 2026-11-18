@@ -20,13 +20,12 @@ import (
 	"embed"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:frontend
@@ -40,22 +39,35 @@ var standby []byte
 
 func main() {
 	setToolPath()
+	if len(os.Args) > 1 && os.Args[1] == boxArg {
+		os.Exit(boxMain(os.Args[2:]))
+	}
+	if len(os.Args) > 1 && os.Args[1] == thenArg {
+		os.Exit(thenMain(os.Args[2:]))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "--selftest" {
+		attachConsole()
 		os.Exit(selftest())
 	}
 	if len(os.Args) > 1 && os.Args[1] == siteArg { // the viewer site, in its sandbox, started by the app (site.go)
 		os.Exit(siteMain())
 	}
 	app := NewApp(standby)
-	var ctx context.Context
+	var started atomic.Pointer[context.Context]
+	ctx := func() context.Context {
+		if c := started.Load(); c != nil {
+			return *c
+		}
+		return nil
+	}
 	go func() { // Terminal closed, logout, kill: still leave nothing behind
 		s := make(chan os.Signal, 1)
 		signal.Notify(s, syscall.SIGHUP, syscall.SIGTERM)
 		<-s
-		app.shutdown(ctx)
+		app.shutdown(ctx())
 		os.Exit(0)
 	}()
-	err := wails.Run(&options.App{
+	opts := &options.App{
 		Title:            "Mouse Party",
 		Width:            520,
 		Height:           620,
@@ -63,8 +75,8 @@ func main() {
 		MinHeight:        400,
 		AssetServer:      &assetserver.Options{Assets: frontend},
 		BackgroundColour: &options.RGBA{R: 236, G: 236, B: 236, A: 255},
-		OnStartup:        func(c context.Context) { ctx = c; app.startup(c) },
-		OnDomReady:       func(context.Context) { nativeKeepFrame() }, // where it was last time (native_darwin.go)
+		OnStartup:        func(c context.Context) { started.Store(&c); app.startup(c) },
+		OnDomReady:       app.domReady, // where it was last time
 		OnBeforeClose:    app.beforeClose,
 		OnShutdown:       app.shutdown,
 		DragAndDrop:      &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: true},
@@ -72,11 +84,15 @@ func main() {
 		Menu:             app.menu(),
 		// one copy: a second would find the ports taken and host nothing; it shows this one instead
 		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "io.github.ftrain.mouseparty",
-			OnSecondInstanceLaunch: func(options.SecondInstanceData) { runtime.WindowUnminimise(ctx); runtime.Show(ctx) }},
-		Mac: &mac.Options{
-			OnFileOpen: app.openFile, // dropped on the Dock icon (packaging/darwin/Info.plist says anything can be)
-		},
-	})
+			OnSecondInstanceLaunch: func(second options.SecondInstanceData) {
+				app.openArgs(second.WorkingDirectory, second.Args)
+				if c := ctx(); c != nil {
+					raise(c)
+				}
+			}},
+	}
+	platformOptions(app, opts)
+	err := wails.Run(opts)
 	if err != nil {
 		println("Error:", err.Error())
 		os.Exit(1)

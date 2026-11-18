@@ -2,7 +2,7 @@
 // as a Mac app's Settings has them, each change kept as it's made (SetPrefs: the Go side says
 // "" or why not, and a refused one is put back). Over the window, in its sheet (party.ts).
 import type { Prefs } from './wails.d.ts';
-import { askFrom, close } from './party.ts';
+import { askFrom, close, onMac } from './party.ts';
 
 const App = () => window.go.main.App;
 
@@ -147,7 +147,7 @@ const TABS: Tab[] = [
             row(
                 'Encoding effort',
                 select(PRESETS, p.preset, (q, v) => (q.preset = v)),
-                'More looks sharper. Lower this if your Mac runs hot.',
+                `More looks sharper. Lower this if your ${onMac() ? 'Mac' : 'computer'} runs hot.`,
             ),
             sound(p),
         ],
@@ -254,15 +254,12 @@ function sound(p: Prefs) {
 function updates(p: Prefs) {
     const u = p.update;
     const status = el('p', { className: 'pref-note pref-update', textContent: u.text });
-    const controls: HTMLElement[] = [
-        checkbox('Check automatically', p.checkUpdates, (q, on) => (q.checkUpdates = on)),
-        checkbox('Install automatically', p.installUpdates, (q, on) => (q.installUpdates = on)),
-        el(
-            'span',
-            { className: 'pref-inline' },
-            button('Check Now', () => void App().CheckForUpdates().then(follow)),
-        ),
-    ];
+    const controls: HTMLElement[] = [checkbox('Check automatically', p.checkUpdates, (q, on) => (q.checkUpdates = on))];
+    if (!u.manual) controls.push(checkbox('Install automatically', p.installUpdates, (q, on) => (q.installUpdates = on)));
+    const buttons = [button('Check Now', () => void App().CheckForUpdates().then(follow))];
+    const page = u.page;
+    if (page) buttons.push(button('Release Page', () => window.runtime.BrowserOpenURL(page)));
+    controls.push(el('span', { className: 'pref-inline' }, ...buttons));
     if (u.ready) controls.push(button('Restart to Update', () => void App().RestartToUpdate(), 'go-button'));
     controls.push(status);
     if (u.busy) follow();
