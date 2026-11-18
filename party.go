@@ -9,10 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
-	"syscall"
+	"slices"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -104,12 +102,21 @@ func (a *App) EraseAll() string {
 		}
 		a.party.close()
 		a.party = nil
+		settleDownloads(a.cfg.Queue, 5*time.Second)
+		left := false
 		for _, dir := range erasable() {
 			if err := os.RemoveAll(dir); err != nil {
-				result = err.Error()
+				if eraseFailureShown {
+					result = err.Error()
+					continue
+				}
+				a.log("Couldn't erase all of " + dir + " yet (" + err.Error() + "): the rest goes once Mouse Party has quit.")
+				left = true
 			}
 		}
-		a.log("Everything Mouse Party kept is erased.")
+		if result == "" && !left {
+			a.log("Everything Mouse Party kept is erased.")
+		}
 	})
 	if result == "" && a.ctx != nil {
 		runtime.Quit(a.ctx) // shutdown opens it again (erased)
@@ -119,35 +126,13 @@ func (a *App) EraseAll() string {
 
 // erasable: every folder of Mouse Party's own data, deleted by Erase All Data
 func erasable() []string {
-	dirs := []string{dataDir(), oldDataDir(), oldDataDir() + " (copied into Mouse Party)"}
-	if d, err := os.UserCacheDir(); err == nil {
-		dirs = append(dirs, filepath.Join(d, "Mouse Party"))
+	var dirs []string
+	for _, d := range []string{dataDir(), oldDataDir(), oldDataDir() + " (copied into Mouse Party)", cacheDir()} {
+		if filepath.IsAbs(d) && !slices.Contains(dirs, d) {
+			dirs = append(dirs, d)
+		}
 	}
 	return dirs
-}
-
-// afterErase: once this process has gone, what it couldn't delete while it ran (its window's
-// place and the web view's own storage, which AppKit and WebKit write as it quits), then the app
-// opened again, if it's an app (bundle "": wails dev, only the deleting)
-func afterErase(bundle string) {
-	const id = "io.github.ftrain.mouseparty" // packaging/darwin/Info.plist
-	home, _ := os.UserHomeDir()
-	lib := filepath.Join(home, "Library")
-	var paths []string
-	for _, p := range []string{"WebKit/" + id, "Caches/" + id, "HTTPStorages/" + id, "HTTPStorages/" + id + ".binarycookies",
-		"Saved Application State/" + id + ".savedState"} {
-		paths = append(paths, filepath.Join(lib, p))
-	}
-	paths = append(paths, erasable()...)
-	script := `while kill -0 "$0" 2>/dev/null; do sleep 0.2; done
-/usr/bin/defaults delete "$1" 2>/dev/null
-shift 2
-bundle=$1; shift
-rm -rf "$@"
-[ -n "$bundle" ] && exec /usr/bin/open "$bundle"`
-	cmd := exec.Command("/bin/sh", append([]string{"-c", script, strconv.Itoa(os.Getpid()), id, bundle}, paths...)...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // not stopped with us
-	cmd.Start()
 }
 
 // opened: the party is open; what was waiting on it starts (with a.locked still set while it does)
@@ -169,7 +154,7 @@ func (a *App) SetPasscode(current, next string) string {
 			result = errPasscode.Error()
 		default:
 			a.save()
-			if err := a.party.reseal(next); err != nil {
+			if err := a.party.reseal(current, next); err != nil {
 				result = err.Error()
 			}
 			a.setMenu()

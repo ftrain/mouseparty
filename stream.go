@@ -17,14 +17,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"unicode/utf8"
 )
 
 const (
-	canvasW, canvasH = 1280, 720 // every file is fitted into this, letterboxed, so the server can join them
-	cardFont         = "/System/Library/Fonts/Menlo.ttc"
+	canvasW, canvasH = 1280, 720  // every file is fitted into this, letterboxed, so the server can join them
 	green            = "0x00ff00" // host_web/host.css
 )
 
@@ -120,10 +118,10 @@ func iconCard(icon string, lines []CardLine, seconds int, o StreamOpts) (args, t
 		if !l.Literal {
 			f := textFile(l.Text)
 			temps = append(temps, f)
-			source = fmt.Sprintf("textfile='%s':expansion=none", f)
+			source = "textfile=" + filterValue(f) + ":expansion=none"
 		}
-		filters = append(filters, fmt.Sprintf("drawtext=fontfile=%s:%s:fontcolor=%s:fontsize=%d:x=(w-tw)/2:y=%s",
-			cardFont, source, l.Colour, l.Size, l.Y))
+		filters = append(filters, fmt.Sprintf("drawtext=%s%s:fontcolor=%s:fontsize=%d:x=(w-tw)/2:y=%s",
+			fontOption(), source, l.Colour, l.Size, l.Y))
 	}
 	length := ""
 	if seconds > 0 {
@@ -321,11 +319,11 @@ func audioCard(info SoundInfo, name string, coverInput int, soundIn string, soun
 		graph = fmt.Sprintf("[%d:v]scale=%d:%d:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[cover];",
 			coverInput, side, side) + graph + fmt.Sprintf("[card];[card][cover]overlay=%d:%d", margin, (h-side)/2)
 	}
-	graph += fmt.Sprintf(",drawtext=fontfile=%s:textfile='%s':expansion=none:fontcolor=white:fontsize=%d:x=%s:y=%d",
-		cardFont, files[0], titleSize, x, titleY)
+	graph += fmt.Sprintf(",drawtext=%stextfile=%s:expansion=none:fontcolor=white:fontsize=%d:x=%s:y=%d",
+		fontOption(), filterValue(files[0]), titleSize, x, titleY)
 	if artist != "" {
-		graph += fmt.Sprintf(",drawtext=fontfile=%s:textfile='%s':expansion=none:fontcolor=0x8e8e93:fontsize=%d:x=%s:y=%d",
-			cardFont, files[1], artistSize, x, titleY+titleSize+h/48)
+		graph += fmt.Sprintf(",drawtext=%stextfile=%s:expansion=none:fontcolor=0x8e8e93:fontsize=%d:x=%s:y=%d",
+			fontOption(), filterValue(files[1]), artistSize, x, titleY+titleSize+h/48)
 	}
 	return graph, files
 }
@@ -338,7 +336,25 @@ type Burn struct {
 	Offset     float64
 }
 
-func filterPath(p string) string { return strings.NewReplacer(`\`, `\\`, `:`, `\:`).Replace(p) }
+func filterValue(s string) string { return filterEscape(filterEscape(s, `\':`), `\'[],;`) }
+
+func filterEscape(s, special string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; strings.IndexByte(special, c) >= 0 || strings.IndexByte(" \t\n\r", c) >= 0 {
+			b.WriteByte('\\')
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+func fontOption() string {
+	if _, f := cardFontRef(); f != "" {
+		return "fontfile=" + filterValue(f) + ":"
+	}
+	return ""
+}
 
 // movieCommand: ffmpeg arguments for one file, starting start seconds in, with
 // audioTrack (0-based), its sound moved shift seconds (soundShift) and burn
@@ -360,11 +376,11 @@ func movieCommand(path string, start float64, duration float64, audioTrack int, 
 				temps = append(temps, shifted)
 				srt = shifted
 			}
-			videoFilters = append(videoFilters, burnTextSubtitles(fmt.Sprintf("subtitles='%s'", filterPath(srt)), start)...)
+			videoFilters = append(videoFilters, burnTextSubtitles("subtitles=filename="+filterValue(srt), start)...)
 		}
 	} else if burn.TextTrack >= 0 {
 		videoFilters = append(videoFilters, burnTextSubtitles(
-			fmt.Sprintf("subtitles='%s':si=%d", filterPath(path), burn.TextTrack), start-burn.Offset)...)
+			fmt.Sprintf("subtitles=filename=%s:si=%d", filterValue(path), burn.TextTrack), start-burn.Offset)...)
 	}
 
 	sound := soundInfo(path)
@@ -451,7 +467,10 @@ func (p *Player) Start(args, temps []string, start float64, checkURL string) err
 	}
 	full := append([]string{"-loglevel", "info", "-nostats", "-progress", "pipe:1"}, args...)
 	cmd := ffmpegCmd(nil, temps, full...) // in its box (sandbox.go): the inputs, and these files of ours
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if dir, _ := cardFontRef(); dir != "" {
+		cmd.Dir = dir
+	}
+	startGroup(cmd)
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 	p.Log("$ ffmpeg " + strings.Join(full, " "))
@@ -459,6 +478,7 @@ func (p *Player) Start(args, temps []string, start float64, checkURL string) err
 		removeAll(temps)
 		return err
 	}
+	adopt(cmd)
 	done := make(chan struct{})
 	p.mu.Lock()
 	p.cmd, p.done = cmd, done
@@ -536,11 +556,11 @@ func (p *Player) Stop() {
 	if done == nil || !p.Running() {
 		return
 	}
-	syscall.Kill(-cmd.Process.Pid, syscall.SIGINT)
+	interruptGroup(cmd)
 	select {
 	case <-done:
 	case <-time.After(8 * time.Second):
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		killGroup(cmd)
 		<-done
 	}
 }

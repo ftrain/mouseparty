@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Mouse Party
+GenericName=Watch Party
+Comment=Have friends over: movies, chat and games, hosted from this computer
+Exec=mouseparty %F
+Icon=io.github.ftrain.mouseparty
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=movie;watch;party;stream;chat;friends;
+StartupWMClass=mouseparty
+SingleMainWindow=true

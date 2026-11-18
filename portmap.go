@@ -256,9 +256,9 @@ func (m *PortMapper) Close() {
 func (m *PortMapper) Describe() string {
 	switch {
 	case m.Gateway == nil:
-		return "No router found (is this Mac online?)."
+		return "No router found (is " + thisComputer + " online?)."
 	case !m.connected():
-		return "The router answered neither NAT-PMP nor UPnP, so friends outside can't reach this Mac directly. " +
+		return "The router answered neither NAT-PMP nor UPnP, so friends outside can't reach " + thisComputer + " directly. " +
 			"Turn on UPnP on the router, or forward the ports by hand."
 	case m.PublicIP != "" && !isPublic(m.PublicIP):
 		return fmt.Sprintf("The router's outside address is %s, which is not public: your ISP (or another router) sits "+

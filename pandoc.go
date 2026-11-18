@@ -15,8 +15,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -103,20 +105,41 @@ func (h *Host) readDocument(ctx context.Context, name string, b []byte, app stri
 		}
 		return "", fmt.Errorf("couldn't read %s: %w", filepath.Base(name), err)
 	}
-	md, err := os.ReadFile(filepath.Join(dir, "out.md"))
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	md, err := root.ReadFile("out.md")
 	if err != nil {
 		return "", err
 	}
 	return tloOf(string(md), app, func(src string) (apps.Picture, bool) {
 		// a picture pandoc took out of the file, never anywhere else
-		p := filepath.Join(dir, filepath.Clean("/"+strings.TrimPrefix(src, "./")))
-		b, err := os.ReadFile(p)
-		if err != nil {
+		b, ok := extracted(root, src)
+		if !ok {
 			return apps.Picture{}, false
 		}
 		pic, err := h.pics.put(b, http.DetectContentType(b))
 		return pic, err == nil
 	}), nil
+}
+
+func extracted(root *os.Root, src string) ([]byte, bool) {
+	rel := strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(strings.ReplaceAll(src, `\`, "/"), "./")), "/")
+	if rel == "" {
+		return nil, false
+	}
+	f, err := root.Open(filepath.FromSlash(rel))
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+	if st, err := f.Stat(); err != nil || !st.Mode().IsRegular() || st.Size() > pictureMaxBytes {
+		return nil, false
+	}
+	b, err := io.ReadAll(io.LimitReader(f, pictureMaxBytes+1))
+	return b, err == nil && len(b) <= pictureMaxBytes
 }
 
 // tloOf: pandoc's Markdown (GitHub's, one line a paragraph) as Tiny Little

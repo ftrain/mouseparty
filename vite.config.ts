@@ -13,7 +13,7 @@
  * source does, less its types. What the pages fetch by URL (pdf.js, the editors, the apps) stays a dynamic import.
  */
 import { readdirSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 import { defineConfig } from 'vite';
 
 const here = import.meta.dirname;
@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
                     topLevelVar: false,
                     // what it's built from, for anyone who opens the file to change it
                     banner: (chunk: { facadeModuleId: string | null }) =>
-                        chunk.facadeModuleId ? `// Built from ${relative(here, chunk.facadeModuleId)} by \`npm run build\` (vite.config.ts): change it there.` : '',
+                        chunk.facadeModuleId ? `// Built from ${relative(here, chunk.facadeModuleId).split(sep).join('/')} by \`npm run build\` (vite.config.ts): change it there.` : '',
                 },
             },
         },

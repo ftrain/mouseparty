@@ -49,7 +49,14 @@ var datasetteMark = []byte("\x00MP ")
 // pythonHome: the WebAssembly Python and its libraries, in the app (Contents/Resources/python) or where
 // scripts/build_python.sh puts them; "" when this build has none
 func pythonHome() string {
-	for _, d := range []string{filepath.Join(bundledBin(), "..", "python"), filepath.Join("build", "python", "dist")} {
+	var places []string
+	if bin := bundledBin(); bin != "" {
+		places = append(places, filepath.Join(bin, "..", "python"))
+	}
+	if version == "dev" {
+		places = append(places, filepath.Join("build", "python", "dist"))
+	}
+	for _, d := range places {
 		if st, err := os.Stat(filepath.Join(d, "python.wasm")); err == nil && !st.IsDir() {
 			abs, _ := filepath.Abs(d)
 			return abs

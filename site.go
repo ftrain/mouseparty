@@ -41,7 +41,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -67,6 +66,7 @@ type SiteSetup struct {
 	Pandoc, Python string         // the tools it runs, where the app found them ("" none)
 	Stun           bool
 	MaxViewers     int
+	Port           int
 }
 
 // SiteTell: one thing the app tells the site (Do says which; the rest as it needs)
@@ -81,6 +81,7 @@ type SiteTell struct {
 	Page     int
 	Playing  apps.Playing
 	On       bool
+	Handle   uint64
 }
 
 // GobEncode: a guide row goes as its JSON (gob would lose a 0 behind a pointer)
@@ -122,6 +123,8 @@ type SiteFrame struct {
 // None: nothing to say (gob wants a field)
 type None struct{ X bool }
 
+type SitePid struct{ Pid int }
+
 // ---------- in the app ----------
 
 // siteProc: the site's process, as the app sees it
@@ -129,40 +132,29 @@ type siteProc struct {
 	h     *Host
 	cmd   *exec.Cmd
 	calls *netrpc.Client
-	files *net.UnixConn // the documents' files go over this, open
+	link  *siteLink     // the documents' files go over this, open
 	mu    sync.Mutex    // one thing told at a time, in order
 	done  chan struct{} // closed when it has gone
 	began time.Time
 	kept  atomic.Int64 // bytes of pictures it has put in the party file
 }
 
-// socketPair: two ends of a socket, for the app and the site
-func socketPair(kind int) (ours net.Conn, theirs *os.File, err error) {
-	syscall.ForkLock.RLock()
-	fds, err := syscall.Socketpair(syscall.AF_UNIX, kind, 0)
-	if err == nil {
-		syscall.CloseOnExec(fds[0])
-		syscall.CloseOnExec(fds[1])
-	}
-	syscall.ForkLock.RUnlock()
-	if err != nil {
-		return nil, nil, err
-	}
-	f := os.NewFile(uintptr(fds[0]), "site")
-	ours, err = net.FileConn(f)
-	f.Close()
-	return ours, os.NewFile(uintptr(fds[1]), "site"), err
-}
-
 // startSite: the site's port taken here (so it's this that says if it can't be), and the site started to answer on it
 func (h *Host) startSite() error {
-	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", h.HTTPPort))
+	l, err := takeSitePort(h.HTTPPort)
 	if err != nil {
 		return fmt.Errorf("the viewer site did not start: %w", err)
 	}
 	h.mu.Lock()
-	h.listener = l
+	stopped := h.tmp == ""
+	if !stopped {
+		h.listener = l
+	}
 	h.mu.Unlock()
+	if stopped {
+		l.Close()
+		return errors.New("hosting stopped")
+	}
 	return h.launchSite()
 }
 
@@ -170,79 +162,75 @@ func (h *Host) launchSite() error {
 	h.mu.Lock()
 	l, tmp, ports, key, stun := h.listener, h.tmp, h.ports, h.key, h.stun
 	h.mu.Unlock()
-	if l == nil || key == "" {
+	if l == nil || key == "" || tmp == "" {
 		return errors.New("hosting stopped")
 	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	listening, err := l.(*net.TCPListener).File()
+	link, err := newSiteLink(l)
 	if err != nil {
 		return err
 	}
-	defer listening.Close()
-	toSite, siteIn, err := socketPair(syscall.SOCK_STREAM)
-	if err != nil {
-		return err
-	}
-	defer siteIn.Close()
-	fromSite, siteOut, err := socketPair(syscall.SOCK_STREAM)
-	if err != nil {
-		return err
-	}
-	defer siteOut.Close()
-	files, siteFiles, err := socketPair(syscall.SOCK_DGRAM)
-	if err != nil {
-		return err
-	}
-	defer siteFiles.Close()
+	defer link.closeTheirs()
 
 	own := filepath.Join(tmp, "site")
 	canary := filepath.Join(tmp, "outside")
 	os.MkdirAll(own, 0o700)
 	os.WriteFile(canary, []byte("the site must not be able to read this\n"), 0o600)
+	holdCanary(canary)
 	cache := wasmCacheFor(true) // the site's own: nothing outside its box loads from it (wasm.go)
-	if cache != "" && os.MkdirAll(cache, 0o755) != nil {
+	if cache != "" && os.MkdirAll(cache, 0o700) != nil {
 		cache = ""
 	}
 	setup := SiteSetup{Key: key, Ports: ports, Tmp: realPath(own), Canary: canary, Kept: h.Party != nil,
-		Pandoc: findWasm("pandoc"), Python: pythonHome(), Stun: stun, MaxViewers: h.MaxViewers}
+		Pandoc: findWasm("pandoc"), Python: pythonHome(), Stun: stun, MaxViewers: h.MaxViewers, Port: h.HTTPPort}
 	if setup.Pandoc != "" {
 		setup.Pandoc = realPath(setup.Pandoc)
 	}
-	resources := filepath.Join(filepath.Dir(exe), "..", "Resources") // the app's own: the pages, the tools
+	resources := resourcesDir() // the app's own: the pages, the tools
 	if st, err := os.Stat(resources); err != nil || !st.IsDir() {
 		resources = ""
 	}
-	cmd := siteBox(exe, h.HTTPPort, ports, []string{resources, setup.Pandoc, setup.Python}, []string{own, cache}).command(nil, siteArg)
+	b := siteBox(exe, h.HTTPPort, ports, []string{resources, setup.Pandoc, setup.Python}, []string{own, cache})
+	link.give(b)
+	cmd := b.command(nil, siteArg)
 	cmd.Dir = own
 	cmd.Env = append(os.Environ(), "TMPDIR="+setup.Tmp)
-	cmd.ExtraFiles = []*os.File{listening, siteIn, siteOut, siteFiles} // 3, 4, 5, 6 there (siteMain)
-	said := &lineLog{log: h.Log, prefix: "site: "}                     // anything it prints: a crash
+	link.attach(cmd)
+	said := &lineLog{log: h.Log, prefix: "site: "} // anything it prints: a crash
 	cmd.Stdout, cmd.Stderr = said, said
 	if err := cmd.Start(); err != nil {
-		toSite.Close()
-		fromSite.Close()
-		files.Close()
+		link.closeOurs()
 		return fmt.Errorf("the viewer site did not start: %w", err)
 	}
-	s := &siteProc{h: h, cmd: cmd, calls: netrpc.NewClient(toSite), files: files.(*net.UnixConn), done: make(chan struct{}), began: time.Now()}
+	adopt(cmd)
+	s := &siteProc{h: h, cmd: cmd, calls: netrpc.NewClient(link.toSite), link: link, done: make(chan struct{}), began: time.Now()}
 	asked := netrpc.NewServer()
 	asked.RegisterName("Mac", &MacCalls{h: h, s: s})
-	go asked.ServeConn(fromSite)
+	go asked.ServeConn(link.fromSite)
 	go func() {
 		err := cmd.Wait()
 		close(s.done)
 		s.calls.Close()
-		files.Close()
+		link.closeOurs()
 		h.siteGone(s, err)
 	}()
 	if err := s.call("Site.Start", setup); err != nil {
-		cmd.Process.Kill()
+		killBoxed(cmd)
+		return fmt.Errorf("the viewer site did not start: %w", err)
+	}
+	if err := link.started(s); err != nil {
+		killBoxed(cmd)
 		return fmt.Errorf("the viewer site did not start: %w", err)
 	}
 	h.mu.Lock()
+	if h.listener != l {
+		h.mu.Unlock()
+		killBoxed(cmd)
+		return errors.New("hosting stopped")
+	}
 	h.site = s
 	// what's on, for a site started again part-way through
 	token, tracks, clock, rows, playing := h.subsToken, h.subs, h.clock, h.schedule, h.playing
@@ -274,10 +262,9 @@ func (h *Host) launchSite() error {
 // folder and the cache of compiled tools, answer on the site's port, and of all this Mac's
 // ports reach only MediaMTX's (not its RTSP one: the site publishes nothing)
 func siteBox(exe string, port int, ports map[string]int, reads, writes []string) *box {
-	b := newBox(exe).read(reads...).write(writes...).allow(
-		fmt.Sprintf(`(allow network-bind network-inbound (local tcp "*:%d"))`, port))
+	b := newBox(exe).read(reads...).write(writes...).serveTCP(port)
 	for _, name := range []string{"api", "hls", "webrtc"} {
-		b.allow(fmt.Sprintf(`(allow network-outbound (remote tcp "localhost:%d"))`, ports[name]))
+		b.reachLocal(ports[name])
 	}
 	return b
 }
@@ -311,15 +298,17 @@ func (h *Host) siteGone(s *siteProc, err error) {
 }
 
 // call: one call to the site, answered in time or the site is stopped (and started again: siteGone)
-func (s *siteProc) call(method string, args any) error {
-	c := s.calls.Go(method, args, &None{}, make(chan *netrpc.Call, 1))
+func (s *siteProc) call(method string, args any) error { return s.ask(method, args, &None{}) }
+
+func (s *siteProc) ask(method string, args, reply any) error {
+	c := s.calls.Go(method, args, reply, make(chan *netrpc.Call, 1))
 	select {
 	case <-c.Done:
 		return c.Error
 	case <-s.done:
 		return errors.New("the viewer site has stopped")
 	case <-time.After(siteAnswer):
-		s.cmd.Process.Kill()
+		killBoxed(s.cmd)
 		return errors.New("the viewer site didn't answer")
 	}
 }
@@ -332,8 +321,7 @@ func (s *siteProc) tell(t SiteTell) error {
 	if t.Do == "doc" {
 		if f, err := os.Open(t.Doc.Path); err == nil {
 			if st, err := f.Stat(); err == nil && st.Mode().IsRegular() {
-				_, _, err = s.files.WriteMsgUnix([]byte(t.Doc.Token), syscall.UnixRights(int(f.Fd())), nil)
-				t.File = err == nil
+				t.File = s.link.send(&t, f)
 			}
 			f.Close()
 		}
@@ -345,7 +333,7 @@ func (s *siteProc) tell(t SiteTell) error {
 // stop: the site told to end its session (its apps keep what they hold, through MacCalls), then ended
 func (s *siteProc) stop() {
 	s.tell(SiteTell{Do: "stop"})
-	s.cmd.Process.Kill()
+	killBoxed(s.cmd)
 	select {
 	case <-s.done:
 	case <-time.After(5 * time.Second):
@@ -501,26 +489,17 @@ type siteSide struct {
 // (launchSite), which hands it the site's port (3) and its three sockets (4, 5, 6).
 func siteMain() int {
 	inSiteBox = true
-	conn := func(fd uintptr) net.Conn {
-		f := os.NewFile(fd, "app")
-		c, err := net.FileConn(f)
-		f.Close()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "the site is started by the app, not by hand:", err)
-			os.Exit(2)
-		}
-		return c
+	if err := siteLocked(); err != nil {
+		fmt.Fprintln(os.Stderr, "the site:", err)
+		return 2
 	}
-	listening := os.NewFile(3, "site")
-	l, err := net.FileListener(listening)
-	listening.Close()
+	l, told, asks, files, err := siteEnds()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "the site is started by the app, not by hand:", err)
 		return 2
 	}
-	told, asks, files := conn(4), conn(5), conn(6)
 	s := &siteSide{l: l, mac: netrpc.NewClient(asks), events: make(chan SiteEvent, 1024), handed: map[string]*os.File{}}
-	go s.takeFiles(files.(*net.UnixConn))
+	go s.takeFiles(files)
 	go func() { // what viewers did, to the app in the order it happened, holding nothing up here
 		for e := range s.events {
 			s.mac.Call("Mac.Event", e, &None{})
@@ -536,30 +515,6 @@ func (s *siteSide) event(kind, text string, n int) {
 	select {
 	case s.events <- SiteEvent{Kind: kind, Text: text, N: n}:
 	default: // the app isn't taking them: it has stopped, or is about to stop us
-	}
-}
-
-// takeFiles: each document's file arrives open, named by the document's token
-func (s *siteSide) takeFiles(c *net.UnixConn) {
-	name, oob := make([]byte, 256), make([]byte, syscall.CmsgSpace(4*4))
-	for {
-		n, oobn, _, _, err := c.ReadMsgUnix(name, oob)
-		if err != nil {
-			return
-		}
-		msgs, _ := syscall.ParseSocketControlMessage(oob[:oobn])
-		for _, m := range msgs {
-			fds, _ := syscall.ParseUnixRights(&m)
-			for _, fd := range fds {
-				syscall.CloseOnExec(fd)
-				s.mu.Lock()
-				if old := s.handed[string(name[:n])]; old != nil {
-					old.Close()
-				}
-				s.handed[string(name[:n])] = os.NewFile(uintptr(fd), "document")
-				s.mu.Unlock()
-			}
-		}
 	}
 }
 
@@ -618,8 +573,15 @@ func (c *SiteCalls) Start(setup SiteSetup, _ *None) error {
 	if s.h != nil {
 		return errors.New("started already")
 	}
-	if _, err := os.ReadFile(setup.Canary); err == nil {
+	if canaryReached(setup.Canary) {
 		return errors.New("it isn't in its sandbox, and won't answer strangers without one")
+	}
+	if s.l == nil {
+		l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", setup.Port))
+		if err != nil {
+			return err
+		}
+		s.l = l
 	}
 	h := &Host{HTTPPort: s.l.Addr().(*net.TCPAddr).Port, urls: map[string]string{}, mac: s,
 		key: setup.Key, ports: setup.Ports, tmp: setup.Tmp, stun: setup.Stun, MaxViewers: setup.MaxViewers}
@@ -644,6 +606,11 @@ func (c *SiteCalls) Start(setup SiteSetup, _ *None) error {
 	return nil
 }
 
+func (c *SiteCalls) Pid(_ None, r *SitePid) error {
+	r.Pid = os.Getpid()
+	return nil
+}
+
 func (c *SiteCalls) Tell(t SiteTell, _ *None) error {
 	h := c.s.h
 	if h == nil {
@@ -660,7 +627,7 @@ func (c *SiteCalls) Tell(t SiteTell, _ *None) error {
 		h.SetSchedule(t.Rows)
 	case "doc":
 		if t.File {
-			t.Doc.file = c.s.file(t.Doc.Token)
+			t.Doc.file = c.s.received(t)
 		}
 		if t.Doc.file == nil {
 			t.Doc.Path = "" // its file couldn't be opened by the app: there's nothing here to open either

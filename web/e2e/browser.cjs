@@ -17,6 +17,7 @@
 // Any uncaught error on any page fails it. BROWSER_SHOTS=<dir> keeps a picture
 // of each app as Ann's page shows it, once the robots have played it.
 'use strict';
+const path = require('path');
 const { chromium } = require('playwright');
 
 const [base, seedText] = process.argv.slice(2);
@@ -70,6 +71,77 @@ async function rowCenter(page, i) {
     return box && { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
+let platform = '';
+
+async function ctrlKey(page, keys, method) {
+    function calls() {
+        return page.evaluate((m) => window.__calls[m] ?? 0, method);
+    }
+    const before = await calls();
+    await page.keyboard.press(keys);
+    await sleep(100);
+    const made = (await calls()) - before;
+    if (made !== (platform === 'darwin' ? 0 : 1)) fail(`${keys} on ${platform} called ${method} ${made} times`);
+}
+
+async function editsInTheWindow(page) {
+    const kept = await page.evaluate(() => {
+        window.__clipboard = 'kept';
+        for (const what of ['selectAll', 'copy', 'cut', 'paste']) window.__edit(what);
+        window.getSelection().removeAllRanges();
+        return window.__clipboard;
+    });
+    if (kept !== 'kept') fail(`Edit > Copy took ${JSON.stringify(kept)} from the window, where nothing can be selected`);
+}
+
+async function editsInFields(page, link) {
+    function valueIs(name, want, what) {
+        return until(page, what, ([n, w]) => document.querySelector(`#sheet [name="${n}"]`).value === w, [name, want]);
+    }
+    function listUndos() {
+        return page.evaluate(() => (window.__calls.UndoRemove ?? 0) + (window.__calls.RedoRemove ?? 0));
+    }
+    await page.focus('#sheet [name="pass"]');
+    const kept = await page.evaluate(() => {
+        window.__clipboard = 'kept';
+        for (const what of ['selectAll', 'copy', 'cut']) window.__edit(what);
+        return window.__clipboard;
+    });
+    if (kept !== 'kept' || (await page.inputValue('#sheet [name="pass"]')) !== 'pw') fail('Edit > Copy or Cut took the password');
+    await page.focus('#sheet [name="link"]');
+    await page.evaluate(() => ['selectAll', 'copy'].forEach((what) => window.__edit(what)));
+    await until(page, 'copied the link with Edit > Copy', (l) => window.__clipboard === l, link);
+    await page.evaluate(() => window.__edit('cut'));
+    await valueIs('link', '', 'cut the link with Edit > Cut');
+    await page.evaluate(() => window.__edit('paste'));
+    await valueIs('link', link, 'pasted the link with Edit > Paste');
+    const before = await listUndos();
+    await page.evaluate(() => ['undo', 'redo'].forEach((what) => window.__edit(what)));
+    if ((await listUndos()) !== before) fail('Edit > Undo or Redo in a field undid the list');
+    await valueIs('user', 'ann', 'filled in the saved login again after the paste');
+}
+
+async function ctrlShortcuts(page) {
+    function sheetHidden() {
+        return page.evaluate(() => document.getElementById('sheet').hidden);
+    }
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.keyboard.press('Control+,');
+    if (platform === 'windows') {
+        await until(page, 'opened Settings for Ctrl+,', () => !document.getElementById('sheet').hidden && !!document.querySelector('#sheet .pref-tab'));
+        await page.keyboard.press('Escape');
+        await sheetGone(page, 'Escape from Settings');
+    }
+    await page.keyboard.press('Control+/');
+    if (platform === 'windows') {
+        await sheetUp(page, 'Keyboard Shortcuts');
+        await page.keyboard.press('Escape');
+        await sheetGone(page, 'Escape from the shortcuts');
+    }
+    await sleep(300);
+    if (!(await sheetHidden())) fail(`Ctrl+, or Ctrl+/ left a sheet open on ${platform}`);
+}
+
 // the slider, by the mouse: it follows the movie playing, still after a click on it that moves nothing, and a drag moves the movie
 async function sliderFollows(page, long) {
     const now = () => page.evaluate(() => Number(document.getElementById('slider').value));
@@ -117,6 +189,7 @@ async function walkWindow(browser) {
     const page = await browser.newPage({ viewport: { width: 420, height: 640 } });
     watch(page, 'window');
     await page.goto(`${base}/window/`);
+    platform = (await page.evaluate(() => window.runtime.Environment())).platform;
     // someone new, with nothing in the list: welcomed, once
     await sheetUp(page, 'Welcome to Mouse Party');
     await page.keyboard.press('Escape');
@@ -132,6 +205,10 @@ async function walkWindow(browser) {
         ['Return', async () => page.keyboard.press('Enter')],
         ['Edit > Undo', async () => page.evaluate(() => window.__edit('undo'))],
         ['Edit > Redo', async () => page.evaluate(() => window.__edit('redo'))],
+        ['Ctrl+Z', async () => ctrlKey(page, 'Control+z', 'UndoRemove')],
+        ['Ctrl+Y', async () => ctrlKey(page, 'Control+y', 'RedoRemove')],
+        ['Shift+Ctrl+Z', async () => ctrlKey(page, 'Control+Shift+z', 'RedoRemove')],
+        ['Edit > Select All, Copy, Cut and Paste', async () => editsInTheWindow(page)],
         ['the link', async () => page.click('#link')],
         [
             'a click on a row',
@@ -507,6 +584,7 @@ async function settingsWindow(page) {
         );
     });
     if (process.env.BROWSER_SHOTS) await page.screenshot({ path: `${process.env.BROWSER_SHOTS}/link-sheet.png` });
+    await editsInFields(page, 'https://cdn.example.com/Some.Movie.mkv');
     await page.keyboard.press('Escape');
     await sheetGone(page, 'Escape');
     await page.evaluate(() => window.__ask('prefs'));
@@ -523,9 +601,13 @@ async function settingsWindow(page) {
     await page.keyboard.press('Escape');
     await sheetGone(page, 'Escape from Settings');
     await windowMatches(page, 'the Settings window used');
+    await ctrlShortcuts(page);
     // Help's sheets: the shortcuts, and the log, which has what the app said and copies it
     await page.evaluate(() => window.__ask('keys'));
     await sheetUp(page, 'Keyboard Shortcuts');
+    const shown = await page.textContent('#sheet table');
+    const ours = platform === 'darwin' ? '⌘Z' : platform === 'windows' ? 'Ctrl+Y' : 'Shift+Ctrl+Z';
+    if (!shown.includes(ours) || shown.includes('⌘') !== (platform === 'darwin')) fail(`the shortcuts shown on ${platform}: ${shown}`);
     await page.click('#sheet .go');
     await sheetGone(page, 'Done');
     await page.evaluate(() => window.__ask('log'));
@@ -546,7 +628,7 @@ async function party(page) {
     await sheetSays(page, 'no link', 'Paste a link');
     await fillSheet(page, { link: 'Some.Clip.mkv' });
     await sheetSays(page, 'not a link', "isn't a web link");
-    await page.fill('#sheet [name="link"]', `${base}/served/${files.clip.split('/').pop()}`);
+    await page.fill('#sheet [name="link"]', `${base}/served/${path.basename(files.clip)}`);
     await until(page, 'offered to save a login for the link’s site', () => {
         const label = document.querySelector('#sheet [name="save"]')?.closest('label');
         return label && !label.hidden && label.textContent === 'Save this login for 127.0.0.1';
@@ -665,7 +747,9 @@ async function party(page) {
 }
 
 (async () => {
-    const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'] });
+    const browser = await chromium.launch({
+        args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required', '--allow-loopback-in-peer-connection'],
+    });
     try {
         const win = await walkWindow(browser);
         await viewers(browser);

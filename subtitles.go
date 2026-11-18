@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -119,18 +118,32 @@ func sameLanguage(a, b string) bool {
 	return a != "" && b != "" && a != "und" && b != "und" && short(a) == short(b)
 }
 
-// hostLanguage: the Mac's first preferred language, two letters ("en"): System Settings, then $LANG
-func hostLanguage() string {
-	if out, err := exec.Command("defaults", "read", "-g", "AppleLanguages").Output(); err == nil {
-		if m := regexp.MustCompile(`\(\s*"?([A-Za-z]{2,3})\b`).FindSubmatch(out); m != nil {
-			return short(string(m[1]))
-		}
-	}
-	if m := regexp.MustCompile(`^([A-Za-z]{2,3})(?:[_.\-]|$)`).FindStringSubmatch(os.Getenv("LANG")); m != nil &&
+var localeTag = regexp.MustCompile(`^([A-Za-z]{2,3})(?:[_.@\-]|$)`)
+
+func localeLanguage(locale string) string {
+	if m := localeTag.FindStringSubmatch(strings.TrimSpace(locale)); m != nil &&
 		!strings.EqualFold(m[1], "c") && !strings.EqualFold(m[1], "posix") {
 		return short(m[1])
 	}
-	return "en"
+	return ""
+}
+
+func firstLanguage(locales []string) string {
+	for _, l := range locales {
+		if code := localeLanguage(l); code != "" {
+			return code
+		}
+	}
+	return ""
+}
+
+func envLanguage(getenv func(string) string) string {
+	for _, name := range []string{"LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"} {
+		if code := firstLanguage(strings.Split(getenv(name), ":")); code != "" {
+			return code
+		}
+	}
+	return ""
 }
 
 func audioTracks(movie string) []AudioTrack {
@@ -200,7 +213,7 @@ func subtitlesBeside(movie string) []Track {
 	var found []Track
 	for _, e := range entries { // ReadDir is sorted by name
 		name := e.Name()
-		if subExts[ext(name)] && strings.HasPrefix(strings.ToLower(stem(name)), s) && !strings.HasPrefix(name, ".") {
+		if subExts[ext(name)] && strings.HasPrefix(strings.ToLower(stem(name)), s) && !hiddenFile(e) {
 			found = append(found, subtitleFile(filepath.Join(filepath.Dir(movie), name), movie))
 		}
 	}

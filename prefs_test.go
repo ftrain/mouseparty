@@ -11,11 +11,8 @@ import (
 // range (nothing changing then); the accounts listed without their passwords, added by a site's
 // name or a link to it, replaced, removed; and the login the Add Download Link sheet fills in.
 func TestPrefs(t *testing.T) {
-	t.Setenv("HOME", t.TempDir()) // never the real party file
-	t.Setenv("XDG_CACHE_HOME", "")
-	a := NewApp(standby)
-	go a.run()
-	defer a.shutdown(nil)
+	tempHome(t) // never the real party file
+	a := testApp(t)
 
 	p := a.Prefs()
 	if p.Countdown != 10 || p.Bitrate != 2500 || p.Preset != "veryfast" || p.CacheGB != 20 || !p.OpenRouterPorts || p.Sealed || len(p.Accounts) != 0 {
@@ -113,17 +110,14 @@ func TestPrefs(t *testing.T) {
 // were, played still, and Redo takes them out again; a download's file stays while they can come back,
 // and goes once they can't
 func TestClearPlayed(t *testing.T) {
-	t.Setenv("HOME", t.TempDir()) // never the real party file, nor the real cache
-	t.Setenv("XDG_CACHE_HOME", "")
+	tempHome(t) // never the real party file, nor the real cache
 	dir := t.TempDir()
 	mine := filepath.Join(dir, "Mine.mkv")
 	os.WriteFile(mine, []byte("x"), 0o644)
 	got := filepath.Join(downloadsDir(), downloadKey("https://example.com/Got.mkv"), "Got.mkv")
 	os.MkdirAll(filepath.Dir(got), 0o755)
 	os.WriteFile(got, []byte("x"), 0o644)
-	a := NewApp(standby)
-	go a.run()
-	defer a.shutdown(nil)
+	a := testApp(t)
 	next := &Item{Path: filepath.Join(dir, "Next.mkv")}
 	a.wait(func() {
 		a.cfg.Queue = []*Item{{Path: mine}, {Path: got, URL: "https://example.com/Got.mkv", Got: true}, next, {Path: filepath.Join(dir, "Last.mkv")}}
@@ -171,11 +165,8 @@ func TestClearPlayed(t *testing.T) {
 // Backspace with nothing playing, everything played: undone, the row comes back played; the one
 // unplayed row taken out of a list played to its end comes back to play next
 func TestUndoRemove(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CACHE_HOME", "")
-	a := NewApp(standby)
-	go a.run()
-	defer a.shutdown(nil)
+	tempHome(t)
+	a := testApp(t)
 	one, two := &Item{Path: "/nowhere/One.mkv"}, &Item{Path: "/nowhere/Two.mkv"}
 	a.wait(func() {
 		a.cfg.Queue, a.cfg.Position, a.selected = []*Item{one, two}, 2, 0

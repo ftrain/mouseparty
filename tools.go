@@ -10,17 +10,14 @@ import (
 	"time"
 )
 
-// Finder launches apps with a bare PATH; Homebrew and MacPorts live here.
-var extraToolDirs = []string{"/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"}
-
 // bundledBin is where the built app keeps ffmpeg, MediaMTX and cloudflared:
 // Mouse Party.app/Contents/Resources/bin (scripts/build_mac_app.sh puts them there).
 func bundledBin() string {
-	exe, err := os.Executable()
-	if err != nil {
+	r := resourcesDir()
+	if r == "" {
 		return ""
 	}
-	return filepath.Join(filepath.Dir(exe), "..", "Resources", "bin")
+	return filepath.Join(r, "bin")
 }
 
 // setToolPath puts the bundled tools first on PATH and the usual macOS tool

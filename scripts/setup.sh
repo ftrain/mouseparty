@@ -28,7 +28,14 @@ echo "== MediaMTX and cloudflared"
 scripts/fetch_tools.sh
 echo "== pandoc"
 scripts/fetch_pandoc.sh
-if [ "$quick" != --quick ]; then
+case "$(uname -s)" in
+MINGW* | MSYS*) WINDOWS=1 ;;
+*) WINDOWS= ;;
+esac
+if [ "$quick" != --quick ] && [ -n "$WINDOWS" ]; then
+    echo "== Python with Datasette and ffmpeg: built on Linux, not here"
+    echo "   (scripts/build_python.sh, and TARGET=windows-amd64 scripts/build_ffmpeg.sh: put its ffmpeg.exe in build/ffmpeg/bin)"
+elif [ "$quick" != --quick ]; then
     echo "== Python with Datasette (the first time: a long while)"
     scripts/build_python.sh
     if [ ! -x build/ffmpeg/bin/ffmpeg ]; then
@@ -49,6 +56,8 @@ if [ -z "$FF" ]; then
     ok "ffmpeg" "MISSING: scripts/build_ffmpeg.sh"
 elif ! grep -q ' drawtext ' <<<"$("$FF" -hide_banner -filters 2>/dev/null)"; then   # read whole: grep -q stops early, and pipefail counts ffmpeg's broken pipe
     ok "ffmpeg" "$FF has no drawtext: the cards fail with it (scripts/build_ffmpeg.sh)"
+elif ! grep -q ' libx264 ' <<<"$("$FF" -hide_banner -encoders 2>/dev/null)"; then
+    ok "ffmpeg" "$FF has no libx264: it can't stream (scripts/build_ffmpeg.sh)"
 else
     ok "ffmpeg" "$FF"
 fi
@@ -59,4 +68,5 @@ else
     ok "" "npm install -g playwright@1.63.0 && npx playwright@1.63.0 install chromium"
 fi
 echo
-echo "Then: scripts/test.sh, and scripts/build_mac_app.sh on a Mac."
+echo "Then: scripts/test.sh, and the app: scripts/build_mac_app.sh on a Mac; on Linux, scripts/build_linux_app.sh"
+echo "(the AppImage, and the RPM with RPM=1) and scripts/build_windows_app.sh (the Windows installer)."

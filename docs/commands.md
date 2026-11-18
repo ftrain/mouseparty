@@ -4,7 +4,7 @@ Everything that can be done to Mouse Party, as the fuzzers walk it. Drawn from
 `graph_test.go` (`windowGraph`, `socketGraph`) and `apps/commands.go` (`apps.Commands`) by
 `UPDATE_GRAPH=1 go test -run TestCommandGraphDoc .`; `go test` fails while it's stale. How it's tested: `docs/testing.md`.
 
-## The Mac window
+## The window
 
 Its states are `App.state`'s; each command acts only in the states it leads from, and changes nothing in any other.
 
@@ -68,16 +68,16 @@ Besides those, the app moves on its own (the link made, a countdown over, a movi
 | `Select` | a row clicked | every state |
 | `Move` | a row dragged | every state |
 | `Remove` | Backspace: the selected row | every state |
-| `ClearPlayed` | Party > Clear Played Files (⌘R): every row above the one playing, or next to play | every state |
-| `UndoRemove` | Edit > Undo (⌘Z): the rows last taken out, back where they were (hosting again if the list was empty) | every state |
-| `RedoRemove` | Edit > Redo (⇧⌘Z): out again | every state |
+| `ClearPlayed` | Party > Clear Played Files (⌘R, Ctrl+R): every row above the one playing, or next to play | every state |
+| `UndoRemove` | Edit > Undo (⌘Z, Ctrl+Z): the rows last taken out, back where they were (hosting again if the list was empty) | every state |
+| `RedoRemove` | Edit > Redo (⇧⌘Z, Ctrl+Shift+Z or Ctrl+Y): out again | every state |
 | `LinkClicked` | copy the link, or try again for one | every state |
-| `SetSettingsText` | Party > Settings: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first) | every state |
+| `SetSettingsText` | Settings > Security > Edit as Text: the settings and the list, as JSON (off the app's goroutine; while playing it says Stop first) | every state |
 | `AddPaths` | files dropped (off the app's goroutine: no immediate state) | every state |
-| `SetPrefs` | Party > Settings (⌘,): a setting changed in the Settings window, kept at once (off the app's goroutine: no immediate state) | every state |
+| `SetPrefs` | Settings (⌘, or Ctrl+,): a setting changed in the Settings window, kept at once (off the app's goroutine: no immediate state) | every state |
 | `AddURL` | Party > Add Download Link: a row downloading from a link (off the app's goroutine: no immediate state) | every state |
 
-Not walked: `CacheText`, a question: what the download cache holds; `CheckForUpdates`, updates (updates_test.go): looked for, downloaded, checked and put in, from a stand-in GitHub; `ClearCache`, the download cache (download_test.go): every download deleted, and its row; `EraseAll`, Party > Erase All Data (store_test.go): it quits the app, so it isn't walked; `GetView`, a question, not a command: every step reads the view; `LogText`, a question: Help > Show Log; `LoginFor`, a question: the login the Add Download Link sheet fills in (download_test.go); `Prefs`, a question: SetPrefs is walked; `RemoveAccount`, the Settings window's accounts (prefs_test.go); `RestartToUpdate`, updates (updates_test.go): it quits the app, so it isn't walked; `SaveAccount`, the Settings window's accounts (prefs_test.go); `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz; `Welcome`, a question, asked once at load (the browser walk answers it).
+Not walked: `About`, a question: Help > About Mouse Party's sheet, off the Mac; `CacheText`, a question: what the download cache holds; `CheckForUpdates`, updates (updates_test.go): looked for, downloaded, checked and put in, from a stand-in GitHub; `ClearCache`, the download cache (download_test.go): every download deleted, and its row; `EraseAll`, Party > Erase All Data (store_test.go): it quits the app, so it isn't walked; `Focused`, the window's focus, as its page sees it: whether a notification is wanted (Linux); `GetView`, a question, not a command: every step reads the view; `LogText`, a question: Help > Show Log; `LoginFor`, a question: the login the Add Download Link sheet fills in (download_test.go); `Prefs`, a question: SetPrefs is walked; `RemoveAccount`, the Settings window's accounts (prefs_test.go); `RestartToUpdate`, updates (updates_test.go): it quits the app, so it isn't walked; `SaveAccount`, the Settings window's accounts (prefs_test.go); `SetPasscode`, the sealed party (store_test.go); `SettingsText`, a question: SetSettingsText is walked; `StartOver`, the sealed party (store_test.go); `Unlock`, the sealed party (store_test.go): Argon2 is too slow to fuzz; `Welcome`, a question, asked once at load (the browser walk answers it).
 
 ## A viewer's page, on its socket
 

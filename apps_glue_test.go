@@ -117,7 +117,7 @@ func TestAppsOverChat(t *testing.T) {
 // Chat is never kept: what's said, with every app open over a real party file,
 // is in no file once the session is over
 func TestChatIsNeverKept(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	tempHome(t)
 	party, err := openParty(partyPath(), "")
 	if err != nil {
 		t.Fatal(err)
