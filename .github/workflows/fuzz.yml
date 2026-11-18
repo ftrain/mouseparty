@@ -32,7 +32,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: actions/setup-node@v4 # the pages' TypeScript (scripts/build_web.sh)
+      - uses: actions/setup-node@v7 # the pages' TypeScript (scripts/build_web.sh)
         with:
           node-version: 24
           cache: npm
