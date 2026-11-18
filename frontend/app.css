@@ -33,7 +33,7 @@ html, body {
     height: 100%;
     background: var(--bg);
     color: var(--text);
-    font: 14px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    font: 14px -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, "Segoe UI", Cantarell, "Noto Sans", sans-serif;
     -webkit-user-select: none;
     user-select: none;
     cursor: default;
@@ -65,7 +65,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    font: 600 14px -apple-system, sans-serif;
+    font: 600 14px -apple-system, system-ui, "Segoe UI", Cantarell, "Noto Sans", sans-serif;
     padding: 0;
 }
 
@@ -97,7 +97,7 @@ body {
     text-align: right;
     color: var(--muted);
     /* digits that don't jitter as the clock ticks */
-    font: 13px Menlo, ui-monospace, monospace;
+    font: 13px Menlo, ui-monospace, Consolas, "Cascadia Mono", "DejaVu Sans Mono", "Noto Sans Mono", monospace;
 }
 
 /* the list */
@@ -193,7 +193,7 @@ body {
     border-radius: 8px;
     padding: 8px 10px;
 }
-.sheet-box textarea { font: 12px ui-monospace, Menlo, monospace; resize: vertical; }
+.sheet-box textarea { font: 12px ui-monospace, Menlo, Consolas, "Cascadia Mono", "DejaVu Sans Mono", "Noto Sans Mono", monospace; resize: vertical; }
 .sheet-error { margin: 0; min-height: 1.2em; color: var(--stop); }
 .sheet-buttons { display: flex; justify-content: flex-end; gap: 8px; }
 .sheet-box button {
@@ -297,12 +297,16 @@ body {
 /* Help's sheets (party.ts) */
 .keys { border-collapse: collapse; width: 100%; }
 .keys td { padding: 5px 0; border-bottom: 1px solid rgba(127,127,127,.2); }
-.keys td.key { width: 9em; font: 13px ui-monospace, Menlo, monospace; color: var(--muted); white-space: pre; }
+.keys td.key { width: 9em; font: 13px ui-monospace, Menlo, Consolas, "Cascadia Mono", "DejaVu Sans Mono", "Noto Sans Mono", monospace; color: var(--muted); white-space: pre; }
+.keys.wide td.key { width: 13em; }
+.about { display: flex; flex-direction: column; gap: 8px; }
+.about p { margin: 0; color: var(--muted); line-height: 1.4; -webkit-user-select: text; user-select: text; }
+input[type="range"], input[type="checkbox"] { --default-contextmenu: hide; }
 .welcome { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 10px; }
 .welcome li { line-height: 1.4; }
 .welcome strong { display: block; }
 .welcome span { color: var(--muted); }
 .log-box { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .log { margin: 0; width: 100%; box-sizing: border-box; height: 300px; overflow: auto; padding: 8px; border-radius: 6px;
-       background: rgba(127,127,127,.12); font: 11px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; user-select: text; }
+       background: rgba(127,127,127,.12); font: 11px/1.45 ui-monospace, Menlo, Consolas, "Cascadia Mono", "DejaVu Sans Mono", "Noto Sans Mono", monospace; white-space: pre-wrap; word-break: break-word; user-select: text; }
 .sheet-box:has(.log) { width: min(100%, 640px); }

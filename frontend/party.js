@@ -107,9 +107,29 @@ function close() {
 const sheetOpen = () => !sheet.hidden;
 const twice = (v) => !v.next ? "Type a passcode" : v.next !== v.again ? "The two passcodes aren't the same" : "";
 const FORGET = "A forgotten passcode can’t be recovered.";
+let platform = "darwin";
+async function learnPlatform() {
+	const env = window.runtime.Environment ? await window.runtime.Environment().catch(() => null) : null;
+	if (env) platform = env.platform;
+}
+function onMac() {
+	return platform === "darwin";
+}
+function onWindows() {
+	return platform === "windows";
+}
+const HELP = [
+	"keys",
+	"welcome",
+	"log",
+	"about"
+];
 async function ask(mode) {
-	back = null;
+	if (locked && !HELP.includes(mode)) return;
+	back = locked ? passcode : null;
 	if (mode === "prefs") await openPrefs();
+	else if (mode === "security") await openPrefs("security");
+	else if (mode === "about") await about();
 	else if (mode === "updates") await openPrefs("general");
 	else if (mode === "settings") {
 		const text = await App().SettingsText();
@@ -219,11 +239,43 @@ const KEYS = [
 	["⌥⌘L", "Show the log"],
 	["⌘?", "Help"]
 ];
+const LINUX_KEYS = [
+	["↑ ↓", "Select a row"],
+	["Enter", "Play it"],
+	["Delete", "Remove it"],
+	["Ctrl+Z  Shift+Ctrl+Z", "Undo, redo"],
+	["← →", "Turn the page"],
+	["Ctrl+L", "Add a download link"],
+	["Ctrl+R", "Clear played files"],
+	["Ctrl+,", "Preferences"],
+	["Shift+Ctrl+L", "Show the log"],
+	["F1", "Help"]
+];
+const WINDOWS_KEYS = [
+	["↑ ↓", "Select a row"],
+	["Enter", "Play it"],
+	["Delete", "Remove it"],
+	["Ctrl+Z  Ctrl+Y", "Undo, redo"],
+	["← →", "Turn the page"],
+	["Ctrl+L", "Add a download link"],
+	["Ctrl+R", "Clear played files"],
+	["Ctrl+,", "Settings"],
+	["Ctrl+Shift+L", "Show the log"],
+	["F1", "Help"]
+];
+function keys() {
+	return onMac() ? KEYS : onWindows() ? WINDOWS_KEYS : LINUX_KEYS;
+}
 function shortcuts() {
-	return el("table", { className: "keys" }, ...KEYS.map(([k, what]) => el("tr", {}, el("td", {
+	return el("table", { className: onMac() ? "keys" : "keys wide" }, ...keys().map(([k, what]) => el("tr", {}, el("td", {
 		className: "key",
 		textContent: k
 	}), el("td", { textContent: what }))));
+}
+async function about() {
+	const a = await App().About();
+	const credits = a.credits.split("\n\n").map((p) => el("p", { textContent: p }));
+	info("About Mouse Party", a.version === "dev" ? "Development build" : `Version ${a.version}`, el("div", { className: "about" }, ...credits));
 }
 function welcome() {
 	return el("ol", { className: "welcome" }, ...[
@@ -259,8 +311,22 @@ async function logSheet() {
 }
 function edit(what) {
 	const f = document.activeElement;
+	if (what !== "undo" && what !== "redo") return clipboard(what, f instanceof HTMLInputElement || f instanceof HTMLTextAreaElement ? f : null);
 	if (f instanceof HTMLInputElement || f instanceof HTMLTextAreaElement) document.execCommand(what);
 	else if (!sheetOpen()) what === "undo" ? App().UndoRemove() : App().RedoRemove();
+}
+function clipboard(what, field) {
+	if (what === "selectAll") return field ? field.select() : void document.execCommand("selectAll");
+	if (what === "paste") {
+		if (field && window.runtime.ClipboardGetText) window.runtime.ClipboardGetText().then((text) => {
+			if (document.activeElement === field && text) document.execCommand("insertText", false, text);
+		});
+		return;
+	}
+	const text = field ? field.type === "password" ? "" : field.value.slice(field.selectionStart ?? 0, field.selectionEnd ?? 0) : String(window.getSelection() ?? "");
+	if (!text) return;
+	window.runtime.ClipboardSetText(text);
+	if (what === "cut" && field) document.execCommand("delete");
 }
 function linkSheet() {
 	let site = "";
@@ -326,6 +392,9 @@ function lock(v) {
 	if (v.locked === locked) return;
 	locked = v.locked;
 	if (!locked) return close();
+	passcode();
+}
+function passcode() {
 	const startOver = el("button", {
 		type: "button",
 		className: "quiet",
@@ -341,7 +410,7 @@ function lock(v) {
 			type: "button",
 			className: "quiet",
 			textContent: "Back",
-			onclick: () => (locked = false, lock(v))
+			onclick: passcode
 		}),
 		cancel: false
 	});
@@ -358,4 +427,4 @@ function lock(v) {
 		more: startOver
 	});
 }
-export { ask, askFrom, close, edit, el, lock, sheetOpen, show };
+export { ask, askFrom, close, edit, el, learnPlatform, lock, onMac, onWindows, sheetOpen, show };

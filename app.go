@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -130,6 +131,11 @@ type App struct {
 	openMu   sync.Mutex // files dropped on the Dock icon, gathered (openFile)
 	opening  []string
 	openSoon *time.Timer
+
+	readyOnce     sync.Once
+	closing       atomic.Bool
+	linkForgotten atomic.Bool
+	sessionEnding atomic.Bool
 }
 
 func NewApp(standby []byte) *App {
@@ -173,6 +179,9 @@ func (a *App) every(d time.Duration, job func()) {
 }
 
 func (a *App) publish() {
+	if a.closing.Load() {
+		return
+	}
 	v := a.view()
 	b, _ := json.Marshal(v)
 	if string(b) != string(a.lastView) && a.ctx != nil {
@@ -185,12 +194,19 @@ func (a *App) publish() {
 // startup is Wails's OnStartup
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	sandboxLog = a.log
 	go a.run()
 	a.every(500*time.Millisecond, func() {})            // the playhead moves
 	a.every(2*time.Second, func() { a.sendSchedule() }) // and the guide follows
 	a.every(time.Hour, a.autoUpdate)                    // a newer Mouse Party, once a day (updates.go)
 	a.after(20*time.Second, a.autoUpdate)
 	go a.watchFiles()
+	if !startsAtDomReady {
+		a.begin()
+	}
+}
+
+func (a *App) begin() {
 	a.do(func() {
 		a.checkTools()
 		if !a.locked {
@@ -312,7 +328,7 @@ func (a *App) view() View {
 		if time.Now().Before(a.copiedUntil) {
 			v.LinkNote = "Copied"
 		} else if link == a.host.URLs()["lan"] {
-			v.LinkNote = "Wi-Fi only"
+			v.LinkNote = lanNote
 		}
 	case (a.hostFailed != "" || (a.host != nil && a.host.Running())) && len(a.cfg.Queue) > 0:
 		v.LinkPress, v.LinkNote = true, "No link – try again" // hosting, but Cloudflare said no
@@ -389,7 +405,7 @@ func (a *App) playhead() (float64, float64, bool) {
 func (a *App) checkTools() {
 	for _, t := range []string{"ffmpeg"} {
 		if findTool(t) == "" {
-			a.log("Missing: " + t + ". Install with: brew install ffmpeg")
+			a.log(missing(t))
 		}
 	}
 }
@@ -466,7 +482,11 @@ func (a *App) addPaths(paths []string, row, at int) {
 	walk := func(dir string) []string {
 		var found []string
 		filepath.WalkDir(dir, func(f string, d os.DirEntry, err error) error {
-			if err == nil && !d.IsDir() && shareable(f) && d.Name()[0] != '.' {
+			switch {
+			case err != nil:
+			case d.IsDir() && f != dir && hiddenFile(d):
+				return filepath.SkipDir
+			case !d.IsDir() && !hiddenFile(d) && shareable(f):
 				found = append(found, f)
 			}
 			return nil
@@ -1324,19 +1344,24 @@ func (a *App) linkClicked() {
 	}
 }
 
+var hostingInTests bool
+
 func (a *App) hostStart() {
 	if a.locked || a.hostStarting || (a.host != nil && a.host.Running()) {
 		return
 	}
+	if hostingInTests && a.hostSetup == nil {
+		panic("a test is hosting without hostSetup, on the default ports (8765, 8189) with the router and a tunnel: use testApp(t), or set a.hostSetup = testHosting")
+	}
 	mediamtx := findTool("mediamtx")
 	if mediamtx == "" {
-		a.log("MediaMTX is missing (brew install mediamtx); it is what sends the video to viewers.")
+		a.log(missing("mediamtx"))
 		a.hostFailed, a.playing = "MediaMTX is missing", false
 		return
 	}
 	cloudflared := findTool("cloudflared")
 	if cloudflared == "" {
-		a.log("cloudflared is missing (brew install cloudflared); the link will be a direct one.")
+		a.log(missing("cloudflared"))
 	}
 	sandboxOff.Store(a.cfg.NoSandbox)
 	h := NewHost(a.log, mediamtx, cloudflared, a.standby)
@@ -1480,19 +1505,25 @@ func (a *App) sendSchedule() {
 
 // beforeClose is Wails's OnBeforeClose: true keeps the app open
 func (a *App) beforeClose(ctx context.Context) bool {
-	var streaming bool
-	a.wait(func() { streaming = a.player.Running() })
-	if !streaming {
-		return false
+	if a.player.Running() {
+		answer, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{Type: runtime.QuestionDialog,
+			Title: quitTitle, Message: "Something is playing. Stop it and quit?", Buttons: []string{"Quit", "Cancel"},
+			DefaultButton: "Quit", CancelButton: "Cancel"})
+		if err != nil || answer != "Quit" && answer != "Yes" {
+			a.do(func() { a.update.restart = false })
+			return true
+		}
 	}
-	answer, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{Type: runtime.QuestionDialog,
-		Title: "Quit", Message: "Something is playing. Stop it and quit?", Buttons: []string{"Quit", "Cancel"},
-		DefaultButton: "Quit", CancelButton: "Cancel"})
-	return err != nil || answer != "Quit"
+	a.saveFrame(ctx)
+	if clearsLinkAtClose {
+		a.forgetLink(ctx, a.hostLinks())
+	}
+	return false
 }
 
 // shutdown stops ffmpeg and hosting; they run in their own process groups and would outlive us
 func (a *App) shutdown(ctx context.Context) {
+	a.closing.Store(true)
 	var links map[string]string
 	a.wait(func() {
 		a.keepPlace() // quitting mid-movie: on from there next time
@@ -1505,30 +1536,77 @@ func (a *App) shutdown(ctx context.Context) {
 		a.party.close()
 		a.party = nil
 	})
-	var restart bool
+	var restart, erased bool
 	var bundle string
-	a.wait(func() { // a newer Mouse Party downloaded: in its place now (updates.go)
-		restart = a.update.restart
-		bundle, _ = a.thisBundle()
-		if err := a.installUpdate(); err != nil {
-			a.log("Couldn't put the update in: " + err.Error())
-			restart = false
-		}
-	})
-	var erased bool
-	a.wait(func() { erased = a.erased })
+	if !a.sessionEnding.Load() {
+		a.wait(func() { // a newer Mouse Party downloaded: in its place now (updates.go)
+			restart = a.update.restart
+			bundle, _ = a.thisBundle()
+			if err := a.installUpdate(); err != nil {
+				a.log("Couldn't put the update in: " + err.Error())
+				restart = false
+			}
+		})
+		a.wait(func() { erased = a.erased })
+	}
 	if erased && ctx != nil { // Erase All Data: the rest deleted once we've gone, and opened again
 		afterErase(bundle)
 	} else if restart && ctx != nil {
 		reopen(bundle)
 	}
-	if ctx != nil && len(links) > 0 { // and the link not left on the clipboard either
-		if text, err := runtime.ClipboardGetText(ctx); err == nil {
-			for _, l := range links {
-				if text == l {
-					runtime.ClipboardSetText(ctx, "")
-				}
-			}
+	if !a.linkForgotten.Load() { // and the link not left on the clipboard either
+		a.forgetLink(ctx, links)
+	}
+}
+
+func (a *App) hostLinks() map[string]string {
+	var links map[string]string
+	a.wait(func() {
+		if a.host != nil {
+			links = a.host.URLs()
+		}
+	})
+	return links
+}
+
+const sessionGrace = 4 * time.Second
+
+func (a *App) quitAtSessionEnd(ctx context.Context) {
+	a.sessionEnding.Store(true)
+	done := make(chan struct{})
+	go func() {
+		a.saveFrame(ctx)
+		a.shutdown(ctx)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(sessionGrace):
+	}
+}
+
+func (a *App) forgetLink(ctx context.Context, links map[string]string) {
+	if ctx == nil {
+		return
+	}
+	a.linkForgotten.Store(true)
+	if len(links) == 0 {
+		return
+	}
+	for i := 0; i < 3 && onClipboard(ctx, links); i++ {
+		runtime.ClipboardSetText(ctx, "")
+	}
+}
+
+func onClipboard(ctx context.Context, links map[string]string) bool {
+	text, err := runtime.ClipboardGetText(ctx)
+	if err != nil || text == "" {
+		return false
+	}
+	for _, l := range links {
+		if l == text {
+			return true
 		}
 	}
+	return false
 }

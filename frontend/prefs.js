@@ -1,5 +1,5 @@
 // Built from web/window/prefs.ts by `npm run build` (vite.config.ts): change it there.
-import { askFrom, close } from "./party.js";
+import { askFrom, close, onMac } from "./party.js";
 const App = () => window.go.main.App;
 function el(tag, props = {}, ...kids) {
 	const e = Object.assign(document.createElement(tag), props);
@@ -119,7 +119,7 @@ const TABS = [
 		icon: "gauge",
 		draw: (p) => [
 			row("Bandwidth", select(BITRATES.map(([k, label]) => [String(k), label]), String(p.bitrate), (q, v) => q.bitrate = Number(v)), `Lower this if the video stutters. 4 friends need ${mbit((p.bitrate + 128) * 4)} of upload.`),
-			row("Encoding effort", select(PRESETS, p.preset, (q, v) => q.preset = v), "More looks sharper. Lower this if your Mac runs hot."),
+			row("Encoding effort", select(PRESETS, p.preset, (q, v) => q.preset = v), `More looks sharper. Lower this if your ${onMac() ? "Mac" : "computer"} runs hot.`),
 			sound(p)
 		]
 	},
@@ -193,11 +193,12 @@ function updates(p) {
 		className: "pref-note pref-update",
 		textContent: u.text
 	});
-	const controls = [
-		checkbox("Check automatically", p.checkUpdates, (q, on) => q.checkUpdates = on),
-		checkbox("Install automatically", p.installUpdates, (q, on) => q.installUpdates = on),
-		el("span", { className: "pref-inline" }, button("Check Now", () => void App().CheckForUpdates().then(follow)))
-	];
+	const controls = [checkbox("Check automatically", p.checkUpdates, (q, on) => q.checkUpdates = on)];
+	if (!u.manual) controls.push(checkbox("Install automatically", p.installUpdates, (q, on) => q.installUpdates = on));
+	const buttons = [button("Check Now", () => void App().CheckForUpdates().then(follow))];
+	const page = u.page;
+	if (page) buttons.push(button("Release Page", () => window.runtime.BrowserOpenURL(page)));
+	controls.push(el("span", { className: "pref-inline" }, ...buttons));
 	if (u.ready) controls.push(button("Restart to Update", () => void App().RestartToUpdate(), "go-button"));
 	controls.push(status);
 	if (u.busy) follow();

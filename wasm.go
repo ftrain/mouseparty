@@ -39,23 +39,27 @@ var inSiteBox bool
 // nothing outside the box ever loads from the site's folder: a site taken over
 // could put anything there.
 func wasmCacheFor(boxed bool) string {
-	d, err := os.UserCacheDir()
-	if err != nil {
+	d := cacheDir()
+	if d == "" {
 		return ""
 	}
 	if boxed {
-		return filepath.Join(d, "Mouse Party", "wasm")
+		return filepath.Join(d, "wasm")
 	}
-	return filepath.Join(d, "Mouse Party", "wasm-unboxed")
+	return filepath.Join(d, "wasm-unboxed")
 }
 
 // findWasm: a tool's module, in the app (Contents/Resources/wasm) or, building
 // and testing, where its fetch script put it (build/<name>/<name>.wasm)
 func findWasm(name string) string {
-	for _, p := range []string{
-		filepath.Join(bundledBin(), "..", "wasm", name+".wasm"),
-		filepath.Join("build", name, name+".wasm"),
-	} {
+	var places []string
+	if bin := bundledBin(); bin != "" {
+		places = append(places, filepath.Join(bin, "..", "wasm", name+".wasm"))
+	}
+	if version == "dev" {
+		places = append(places, filepath.Join("build", name, name+".wasm"))
+	}
+	for _, p := range places {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p
 		}

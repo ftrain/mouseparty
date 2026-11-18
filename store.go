@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -228,11 +229,14 @@ func (p *party) prunePictures() {
 
 // reseal writes the party again sealed with passcode ("" for plain), in place:
 // a copy made whole beside it, then put over it, then opened
-func (p *party) reseal(passcode string) error {
+func (p *party) reseal(current, passcode string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.conn == nil {
 		return errors.New("the party is closed")
+	}
+	if !p.sealed {
+		current = ""
 	}
 	tmp := p.path + ".new"
 	os.Remove(tmp)
@@ -244,14 +248,17 @@ func (p *party) reseal(passcode string) error {
 		os.Remove(tmp)
 		return err
 	}
-	if f, err := os.Open(tmp); err == nil {
+	if f, err := os.OpenFile(tmp, os.O_RDWR, 0); err == nil {
 		f.Sync()
 		f.Close()
 	}
 	p.conn.Close()
 	p.conn = nil
-	if err := os.Rename(tmp, p.path); err != nil {
+	if err := renameOver(tmp, p.path); err != nil {
 		os.Remove(tmp)
+		if old, oerr := openParty(p.path, current); oerr == nil {
+			p.conn = old.conn
+		}
 		return err
 	}
 	next, err := openParty(p.path, passcode)
@@ -260,6 +267,15 @@ func (p *party) reseal(passcode string) error {
 	}
 	p.conn, p.sealed = next.conn, next.sealed
 	return nil
+}
+
+func renameOver(from, to string) error {
+	err := os.Rename(from, to)
+	for try := 0; err != nil && try < 20; try++ {
+		time.Sleep(100 * time.Millisecond)
+		err = os.Rename(from, to)
+	}
+	return err
 }
 
 // uriEscape: every byte but letters and digits as %XX (SQLite's URIs don't read '+' as a space)
@@ -319,6 +335,9 @@ func (p *party) importOld(old string) error {
 
 // oldDataDir: where Open House Party kept things
 func oldDataDir() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
 	dir, _ := os.UserConfigDir()
 	return filepath.Join(dir, "Open House Party")
 }

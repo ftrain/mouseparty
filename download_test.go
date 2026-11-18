@@ -1,16 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // A download link: added as a row counting its bytes, then a movie like any
@@ -23,8 +27,7 @@ func TestDownloadLink(t *testing.T) {
 	if findTool("ffmpeg") == "" {
 		t.Skip("needs ffmpeg")
 	}
-	t.Setenv("HOME", t.TempDir()) // never the real party file, nor the real cache
-	t.Setenv("XDG_CACHE_HOME", "")
+	tempHome(t) // never the real party file, nor the real cache
 	dir := t.TempDir()
 	clip := filepath.Join(dir, "Some.Clip.2026.mkv")
 	out, err := exec.Command(findTool("ffmpeg"), "-v", "error", "-f", "lavfi", "-i", "testsrc=s=320x240:r=30:d=3",
@@ -48,18 +51,9 @@ func TestDownloadLink(t *testing.T) {
 		http.ServeFile(w, r, clip)
 	})
 	server := httptest.NewServer(mux)
-	defer server.Close()
+	t.Cleanup(server.Close)
 
-	newApp := func() *App {
-		a := NewApp(standby)
-		a.hostSetup = func(h *Host) { // never the default ports (CLAUDE.md)
-			h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
-		}
-		go a.run()
-		return a
-	}
-	a := newApp()
-	defer a.shutdown(nil)
+	a := testApp(t)
 	until := func(what string, ok func(View) bool) View {
 		t.Helper()
 		for end := time.Now().Add(20 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
@@ -202,8 +196,8 @@ func TestDownloadLink(t *testing.T) {
 		a.cfg.Queue = []*Item{{URL: link + "?old=1", Path: filepath.Join(downloadsDir(), downloadKey(link+"?old=1"), "Old.mkv"), Cleared: true}}
 		a.save()
 	})
-	a.shutdown(nil)
-	a = newApp()
+	quitApp(a)
+	a = testApp(t)
 	a.wait(a.started)
 	if v := a.GetView(); len(v.Rows) != 0 {
 		t.Fatalf("an old cleared row at start: %+v", v.Rows)
@@ -220,14 +214,19 @@ func TestDownloadLink(t *testing.T) {
 		a.save()
 	})
 	os.MkdirAll(filepath.Join(downloadsDir(), "0123456789abcdef"), 0o755)
-	a.shutdown(nil)
-	a = newApp()
-	defer a.shutdown(nil)
+	quitApp(a)
+	a = testApp(t)
 	a.wait(a.started)
 	if entries, _ := os.ReadDir(downloadsDir()); len(entries) != 1 {
 		t.Fatalf("%d folders in the cache after a start, not 1", len(entries))
 	}
 	until("downloaded again after a start", func(v View) bool { return len(v.Rows) == 1 && !v.Rows[0].Off })
+}
+
+func quitApp(a *App) {
+	for end := time.Now().Add(30 * time.Second); hostStarting(a) && time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+	}
+	a.shutdown(nil)
 }
 
 // fetch goes on from what's there (Range), takes the server's name, and says why when it can't
@@ -285,6 +284,92 @@ func TestFetch(t *testing.T) {
 	}
 }
 
+// A part already as long as the server's file (its 416 says so) is the whole file; a longer one goes
+// again from the top; one that can't be deleted (held open on Windows) is said after one request; one
+// that can't be renamed to the name the server gives goes on under its own
+func TestFetchWhatsAlreadyThere(t *testing.T) {
+	body := []byte(strings.Repeat("0123456789", 1000))
+	var asked atomic.Int64
+	mux := http.NewServeMux()
+	mux.HandleFunc("/file.bin", func(w http.ResponseWriter, r *http.Request) {
+		asked.Add(1)
+		http.ServeContent(w, r, "file.bin", time.Time{}, bytes.NewReader(body))
+	})
+	mux.HandleFunc("/named.bin", func(w http.ResponseWriter, r *http.Request) {
+		asked.Add(1)
+		w.Header().Set("Content-Disposition", `attachment; filename="Named File.bin"`)
+		http.ServeContent(w, r, "named.bin", time.Time{}, bytes.NewReader(body))
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	dir := t.TempDir()
+	part := func(name string, b []byte) string {
+		path := filepath.Join(dir, name, "file.bin")
+		os.MkdirAll(filepath.Dir(path), 0o755)
+		if err := os.WriteFile(path, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	fetched := func(link, path string) (string, int64, error) {
+		asked.Store(0)
+		got, err := fetch(t.Context(), server.URL+link, path, nil, func(string, int64, int64) {})
+		return got, asked.Load(), err
+	}
+	whole := func(path string) {
+		t.Helper()
+		if b, _ := os.ReadFile(path); !bytes.Equal(b, body) {
+			t.Fatalf("%s is %d bytes, not the %d sent", path, len(b), len(body))
+		}
+	}
+	longer := append(slices.Clone(body), "and more"...)
+
+	all := part("all", body)
+	if got, n, err := fetched("/file.bin", all); got != all || n != 1 || err != nil {
+		t.Fatal(got, n, err)
+	}
+	whole(all)
+
+	stale := part("stale", longer)
+	if got, n, err := fetched("/file.bin", stale); got != stale || n != 2 || err != nil {
+		t.Fatal(got, n, err)
+	}
+	whole(stale)
+
+	if held := part("held", longer); hold(t, held) {
+		if _, n, err := fetched("/file.bin", held); n != 1 || err == nil {
+			t.Fatal("a part that can't be deleted:", n, err)
+		}
+	}
+	if kept := part("kept", body[:4000]); hold(t, kept) {
+		if got, n, err := fetched("/named.bin", kept); got != kept || n != 1 || err != nil {
+			t.Fatal("a part that can't be renamed:", got, n, err)
+		}
+		whole(kept)
+	}
+}
+
+func hold(t *testing.T, path string) bool {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		f, err := os.Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { f.Close() })
+		return true
+	}
+	if os.Geteuid() == 0 {
+		return false
+	}
+	dir := filepath.Dir(path)
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+	return true
+}
+
 func TestLinkName(t *testing.T) {
 	for link, want := range map[string]string{
 		"https://example.com/dl/Some.Movie.2026.1080p.mkv?sig=abc": "Some.Movie.2026.1080p.mkv",
@@ -310,6 +395,109 @@ func TestLinkName(t *testing.T) {
 			t.Errorf("%q passed", bad)
 		}
 	}
+	u, _, _ := checkLink("https://example.com/" + strings.Repeat("%C3%A9", 150) + ".mkv")
+	if name := linkName(u); !utf8.ValidString(name) || !strings.HasSuffix(name, "é.mkv") || len(name) > 200 {
+		t.Errorf("a long name cut inside a letter: %q", name)
+	}
+}
+
+// A name a server gives is a file's name on every system: on Windows no device, no stream, no
+// character it refuses, nothing it would quietly drop; elsewhere only the path and controls go
+func TestSafeName(t *testing.T) {
+	for name, want := range map[string]string{
+		"COM1":                "_COM1",
+		"prn":                 "_prn",
+		"Aux.mkv":             "_Aux.mkv",
+		"lpt9.mp4":            "_lpt9.mp4",
+		"COM¹.mp4":            "_COM¹.mp4",
+		"CONIN$":              "_CONIN$",
+		"conout$.txt":         "_conout$.txt",
+		"con .mp4":            "_con .mp4",
+		"NUL.txt":             "_NUL.txt",
+		"COM10.mkv":           "COM10.mkv",
+		"Console.mkv":         "Console.mkv",
+		"movie:1080p.mp4":     "movie_1080p.mp4",
+		"movie.mkv:stream":    "movie.mkv_stream",
+		`what?.mp4`:           "what_.mp4",
+		`a<b>|c*"d".mp4`:      "a_b__c__d_.mp4",
+		"film.mkv. . ":        "film.mkv",
+		"...":                 "download",
+		`C:\Windows\x.mkv`:    "x.mkv",
+		"//server/share":      "share",
+		"/":                   "download",
+		"films/\x00movie.mkv": "movie.mkv",
+		"tab\tname.mkv":       "tabname.mkv",
+	} {
+		if got := safeName(name, true); got != want {
+			t.Errorf("Windows: %q is %q, not %q", name, got, want)
+		}
+	}
+	for name, want := range map[string]string{
+		"COM1":            "COM1",
+		"movie:1080p.mp4": "movie:1080p.mp4",
+		`a<b>.mp4`:        "a<b>.mp4",
+		"film.mkv. ":      "film.mkv.",
+		`dir\x.mkv`:       "x.mkv",
+		".hidden":         "hidden",
+		"bell\a.mkv":      "bell.mkv",
+	} {
+		if got := safeName(name, false); got != want {
+			t.Errorf("%q is %q, not %q", name, got, want)
+		}
+	}
+	long := strings.Repeat("日本", 100) + ".mkv"
+	for _, windows := range []bool{false, true} {
+		got := safeName(long, windows)
+		if !utf8.ValidString(got) || !strings.HasSuffix(got, "本.mkv") || len(got) > 200 || windows && len(got) > 120 {
+			t.Errorf("windows %v: cut to %q", windows, got)
+		}
+	}
+}
+
+// Making room in the cache takes away only the rows whose downloads really went: one that
+// can't be deleted (held open on Windows) stays, and the next oldest goes in its place
+func TestTrimKeepsWhatItCannotDelete(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a folder its owner can't delete from")
+	}
+	tempHome(t)
+	a := testApp(t)
+	var rows []*Item
+	for i, name := range []string{"old.mkv", "new.mkv"} {
+		link := "https://example.com/" + name
+		path := filepath.Join(downloadsDir(), downloadKey(link), name)
+		os.MkdirAll(filepath.Dir(path), 0o700)
+		if err := os.WriteFile(path, make([]byte, 2000), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		when := time.Now().Add(time.Duration(i-2) * time.Hour)
+		os.Chtimes(path, when, when)
+		rows = append(rows, &Item{Path: path, URL: link, Got: true})
+	}
+	held := filepath.Dir(rows[0].Path)
+	os.Chmod(held, 0o500)
+	defer os.Chmod(held, 0o700)
+	a.wait(func() {
+		a.cfg.Queue = rows
+		a.cfg.Position = len(rows)
+		a.cfg.CacheGB = Number(10000.0 / (1 << 30))
+		a.trimCache(2500)
+	})
+	var left []string
+	a.wait(func() {
+		for _, it := range a.cfg.Queue {
+			left = append(left, filepath.Base(it.Path))
+		}
+	})
+	if strings.Join(left, " ") != "old.mkv" {
+		t.Fatal("left in the list:", left)
+	}
+	if _, err := os.Stat(rows[0].Path); err != nil {
+		t.Fatal("the one that couldn't go went:", err)
+	}
+	if _, err := os.Stat(filepath.Dir(rows[1].Path)); !os.IsNotExist(err) {
+		t.Fatal("the next oldest is still there")
+	}
 }
 
 // A movie plays while it downloads: served slower than it plays, it starts once ffmpeg can
@@ -319,8 +507,7 @@ func TestPlayWhileDownloading(t *testing.T) {
 	if findTool("mediamtx") == "" || findTool("ffmpeg") == "" {
 		t.Skip("needs mediamtx and ffmpeg")
 	}
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CACHE_HOME", "")
+	tempHome(t)
 	clip := filepath.Join(t.TempDir(), "Slow.Clip.mkv")
 	out, err := exec.Command(findTool("ffmpeg"), "-v", "error", "-f", "lavfi", "-i", "testsrc=s=320x240:r=30:d=8",
 		"-f", "lavfi", "-i", "sine=f=440:d=8", "-c:v", "libx264", "-c:a", "libopus", clip).CombinedOutput()
@@ -338,15 +525,10 @@ func TestPlayWhileDownloading(t *testing.T) {
 			time.Sleep(750 * time.Millisecond)
 		}
 	}))
-	defer server.Close()
+	t.Cleanup(server.Close)
 
-	a := NewApp(standby)
-	a.hostSetup = func(h *Host) {
-		h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
-	}
-	go a.run()
+	a := testApp(t)
 	go a.watchFiles()
-	defer a.shutdown(nil)
 	a.wait(func() { a.cfg.Countdown = 1 })
 	state := func() (s string) { a.wait(func() { s = a.state() }); return }
 	until := func(what string, seconds int, ok func(View) bool) View {
@@ -397,8 +579,7 @@ func TestDownloadLogin(t *testing.T) {
 	if findTool("ffmpeg") == "" {
 		t.Skip("needs ffmpeg")
 	}
-	t.Setenv("HOME", t.TempDir()) // never the real party file, nor the real cache
-	t.Setenv("XDG_CACHE_HOME", "")
+	tempHome(t) // never the real party file, nor the real cache
 	dir := t.TempDir()
 	clip := filepath.Join(dir, "Locked.Clip.mkv")
 	out, err := exec.Command(findTool("ffmpeg"), "-v", "error", "-f", "lavfi", "-i", "testsrc=s=320x240:r=30:d=2",
@@ -418,13 +599,8 @@ func TestDownloadLogin(t *testing.T) {
 		}
 		http.ServeFile(w, r, clip)
 	}))
-	defer server.Close()
-	a := NewApp(standby)
-	a.hostSetup = func(h *Host) { // never the default ports (CLAUDE.md)
-		h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
-	}
-	go a.run()
-	defer a.shutdown(nil)
+	t.Cleanup(server.Close)
+	a := testApp(t)
 	until := func(what string, ok func(View) bool) View {
 		t.Helper()
 		for end := time.Now().Add(20 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
