@@ -852,6 +852,7 @@ func FuzzWindow(f *testing.F) {
 	if findTool("mediamtx") == "" || findTool("ffmpeg") == "" {
 		f.Skip("needs mediamtx and ffmpeg")
 	}
+	requireToolSandbox(f)
 	f.Cleanup(func() {
 		if testing.Verbose() {
 			var edges []string

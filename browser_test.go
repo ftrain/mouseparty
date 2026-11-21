@@ -115,6 +115,7 @@ func playwrightNode() string {
 
 func TestBrowser(t *testing.T) {
 	node := playwrightNode()
+	requireToolSandbox(t)
 	if testing.Short() || node == "" || findTool("mediamtx") == "" || findTool("ffmpeg") == "" {
 		t.Skip("needs node with Playwright, ffmpeg and mediamtx (and not -short)")
 	}

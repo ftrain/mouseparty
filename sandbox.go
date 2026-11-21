@@ -1,8 +1,7 @@
 package main
 
-// The sandbox: everything a stranger's bytes can reach runs in a box of macOS's
-// own (Seatbelt, through /usr/bin/sandbox-exec), which says no to all but what
-// it's told here. Each program gets a profile written for the one run:
+// The sandbox: on macOS, the tools a stranger's bytes can reach run in Seatbelt
+// (through /usr/bin/sandbox-exec). Each program gets a profile for the one run:
 //
 //	the viewer site (site.go)  reads the app's own pages and tools, writes its own
 //	                           temporary folder, listens on the site's port, and
@@ -19,9 +18,16 @@ package main
 // process of its own, handed what it serves (site.go), rather than part of the app,
 // which has to read whatever is dragged into it.
 //
+// On Linux the viewer and offline ffmpeg have private networks. The viewer
+// accepts on an inherited listener and reaches MediaMTX over connected sockets
+// handed over by the parent. Its seccomp filter denies exec; bubblewrap's
+// runtime mounts can contain executables. Publishing ffmpeg, MediaMTX and
+// cloudflared share the host's network: they can connect and listen, including
+// on host abstract Unix sockets. Bubblewrap has no port ACL. See SECURITY.md.
+//
 // Apple calls sandbox-exec deprecated and has for a decade; browsers and build
 // tools use the same boxes. The party file's "no_sandbox" (Edit as Text) turns
-// it all off, for a macOS where a profile here turns out to be wrong.
+// it all off.
 
 import (
 	"context"
@@ -157,15 +163,13 @@ func realPath(path string) string {
 
 // ---------- ffmpeg ----------
 
-// ffmpegCmd: the publishing path, unchanged on Linux.
-// In its macOS box it reads the files it's given as inputs
-// (-i) and nothing else of the Mac's, reads and writes own (temporary files the app
-// made for it, such as a card's words), and reaches only the port it
-// publishes to (an rtsp:// on this Mac among args). A file it reads may be a
-// stranger's (a download), and it is the one big parser of them here that isn't
-// memory-safe: this is what it can do if one gets the better of it.
-func ffmpegCmd(ctx context.Context, own []string, args ...string) *exec.Cmd {
-	return ffmpegBox(firstTool("ffmpeg"), own, args).command(ctx, args...)
+// ffmpegCmd starts the publisher. Its box grants the inputs (-i), the app's
+// temporary files (card text, subtitles, cover art), and system fonts. macOS
+// allows writing the temporary files and limits the network to the RTSP port
+// in args. On Linux those file grants are read-only pins and the network is
+// the host's, not restricted to that port.
+func ffmpegCmd(ctx context.Context, own []string, args ...string) (*exec.Cmd, error) {
+	return publishFFmpegCommand(ctx, firstTool("ffmpeg"), own, args)
 }
 
 // offlineFFmpeg is for a one-shot operation on one app-selected local file.

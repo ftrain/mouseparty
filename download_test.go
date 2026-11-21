@@ -319,6 +319,7 @@ func TestPlayWhileDownloading(t *testing.T) {
 	if findTool("mediamtx") == "" || findTool("ffmpeg") == "" {
 		t.Skip("needs mediamtx and ffmpeg")
 	}
+	requireToolSandbox(t)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", "")
 	clip := filepath.Join(t.TempDir(), "Slow.Clip.mkv")

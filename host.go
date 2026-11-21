@@ -451,11 +451,15 @@ func (h *Host) viewers() int {
 	return len(h.chat.conns)
 }
 
-// spawn runs a tool under the watchdog, in the session's folder (anything a tool
-// writes beside itself, like MediaMTX's certificates, goes with the session)
+// spawn runs a tool under the watchdog and in its box (toolWrap). The watchdog
+// starts in the session's folder; the Linux box sets its own working directory.
 func (h *Host) spawn(name, bin string, args ...string) (*exec.Cmd, error) {
-	run, argv := h.boxFor(name, bin).argv(args...)
-	cmd := exec.Command("/bin/sh", append([]string{"-c", watchdog, "mouseparty-watch", run}, argv...)...)
+	tool, err := h.toolWrap(name, bin, args)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command("/bin/sh", append([]string{"-c", watchdog, "mouseparty-watch"}, tool.Args...)...)
+	cmd.Env = tool.Env // empty in the Linux box; nil inherits on macOS and when unboxed
 	cmd.Dir = h.tmp
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdin, err := cmd.StdinPipe()

@@ -28,6 +28,7 @@ func TestPlayThroughTheList(t *testing.T) {
 	if findTool("mediamtx") == "" || findTool("ffmpeg") == "" {
 		t.Skip("needs mediamtx and ffmpeg")
 	}
+	requireToolSandbox(t)
 	t.Setenv("HOME", t.TempDir()) // never the real settings (dataDir)
 	dir := t.TempDir()
 	var clips []string

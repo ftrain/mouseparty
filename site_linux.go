@@ -30,7 +30,7 @@ func siteCommand(exe string, _ int, setup *SiteSetup) (*exec.Cmd, error) {
 		setup.Python = "/app/python"
 	}
 	setup.Tmp = "/tmp"
-	cmd, err := bubblewrapCommand(context.Background(), "viewer", mounts, "/app/viewer", siteArg)
+	cmd, err := bubblewrapCommand(context.Background(), "viewer", false, "", mounts, "/app/viewer", siteArg)
 	if err != nil {
 		return nil, err
 	}

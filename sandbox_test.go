@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -114,8 +115,13 @@ func TestSubtitlesAreDrawnTheSameInTheBox(t *testing.T) {
 		defer os.Remove(ours)
 		out := filepath.Join(dir, name+".png")
 		os.WriteFile(out, nil, 0o600)
-		said, err := ffmpegCmd(context.Background(), []string{ours, out}, "-v", "error", "-y", "-ss", "1", "-i", clip,
-			"-vf", fmt.Sprintf("subtitles='%s'", filterPath(ours)), "-frames:v", "1", "-update", "1", out).CombinedOutput()
+		cmd, err := ffmpegCmd(context.Background(), []string{ours, out}, "-v", "error", "-y", "-ss", "1", "-i", clip,
+			"-vf", fmt.Sprintf("subtitles='%s'", filterPath(ours)), "-frames:v", "1", "-update", "1", out)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		defer closeExtra(cmd)
+		said, err := cmd.CombinedOutput()
 		png, _ := os.ReadFile(out)
 		if err != nil || len(png) == 0 {
 			t.Fatalf("%s: %v %s", name, err, said)
@@ -220,4 +226,17 @@ func TestTheSiteInItsOwnProcess(t *testing.T) {
 func unboxed(t *testing.T) {
 	sandboxOff.Store(true)
 	t.Cleanup(func() { sandboxOff.Store(false) })
+}
+
+// requireToolSandbox: on Linux the host's tools (MediaMTX, cloudflared, the
+// publishing ffmpeg) run in bubblewrap boxes and are not run without them, so a
+// test that plays through them needs bwrap on the machine (or no_sandbox).
+func requireToolSandbox(t testing.TB) {
+	t.Helper()
+	if runtime.GOOS != "linux" || sandboxOff.Load() {
+		return
+	}
+	if _, err := exec.LookPath("bwrap"); err != nil {
+		t.Skip("needs bubblewrap")
+	}
 }

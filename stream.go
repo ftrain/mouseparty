@@ -7,6 +7,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/url"
@@ -443,9 +444,10 @@ type Player struct {
 	OnPosition func(float64)
 	OnExit     func(code int)
 
-	mu   sync.Mutex
-	cmd  *exec.Cmd
-	done chan struct{}
+	mu    sync.Mutex
+	cmd   *exec.Cmd
+	stdin io.WriteCloser
+	done  chan struct{}
 }
 
 // Start runs ffmpeg with args (from the commands above); start is the movie time
@@ -456,18 +458,30 @@ func (p *Player) Start(args, temps []string, start float64, checkURL string) err
 		return fmt.Errorf("nothing is accepting the stream at %s: the app's MediaMTX has stopped", checkURL)
 	}
 	full := append([]string{"-loglevel", "info", "-nostats", "-progress", "pipe:1"}, args...)
-	cmd := ffmpegCmd(nil, temps, full...) // in its box (sandbox.go): the inputs, and these files of ours
+	cmd, err := ffmpegCmd(nil, temps, full...) // in its box (sandbox.go): the inputs, and these files of ours
+	if err != nil {
+		removeAll(temps)
+		return err
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		removeAll(temps)
+		closeExtra(cmd)
+		return err
+	}
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 	p.Log("$ ffmpeg " + strings.Join(full, " "))
 	if err := cmd.Start(); err != nil {
 		removeAll(temps)
+		closeExtra(cmd)
 		return err
 	}
+	closeExtra(cmd) // Linux: the pinned descriptors, consumed by bwrap as it started
 	done := make(chan struct{})
 	p.mu.Lock()
-	p.cmd, p.done = cmd, done
+	p.cmd, p.stdin, p.done = cmd, stdin, done
 	p.mu.Unlock()
 
 	var tail []string // the last of what ffmpeg said, for when it fails
@@ -534,13 +548,27 @@ func (p *Player) Running() bool {
 	}
 }
 
-// Stop: SIGINT, so ffmpeg closes the stream itself; killed if it won't
+// Stop asks ffmpeg to close the stream itself, then falls back to group signals.
 func (p *Player) Stop() {
 	p.mu.Lock()
-	cmd, done := p.cmd, p.done
+	cmd, stdin, done := p.cmd, p.stdin, p.done
 	p.mu.Unlock()
-	if done == nil || !p.Running() {
+	if done == nil {
 		return
+	}
+	select {
+	case <-done:
+		return
+	default:
+	}
+	// Bubblewrap's --new-session puts ffmpeg outside the launcher's process
+	// group. Its stdin still reaches it so it can finish the stream gracefully.
+	if _, err := io.WriteString(stdin, "q\n"); err == nil {
+		select {
+		case <-done:
+			return
+		case <-time.After(time.Second):
+		}
 	}
 	syscall.Kill(-cmd.Process.Pid, syscall.SIGINT)
 	select {
@@ -572,5 +600,13 @@ func serverUp(rawURL string) bool {
 func removeAll(paths []string) {
 	for _, p := range paths {
 		os.Remove(p)
+	}
+}
+
+// closeExtra: the descriptors a command was handed (a boxed ffmpeg's pinned
+// files), no longer the app's to hold once it has started
+func closeExtra(cmd *exec.Cmd) {
+	for _, f := range cmd.ExtraFiles {
+		f.Close()
 	}
 }

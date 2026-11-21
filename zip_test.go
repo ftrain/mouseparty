@@ -102,6 +102,7 @@ func TestDroppedDocumentsAndZip(t *testing.T) {
 	if findTool("mediamtx") == "" {
 		t.Skip("needs mediamtx (adding starts hosting)")
 	}
+	requireToolSandbox(t)
 	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	zipPath := filepath.Join(dir, "Class.zip")
@@ -138,6 +139,7 @@ func TestDockDrop(t *testing.T) {
 	if findTool("mediamtx") == "" {
 		t.Skip("needs mediamtx (adding starts hosting)")
 	}
+	requireToolSandbox(t)
 	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	var files []string
@@ -174,6 +176,7 @@ func TestDroppedWhereDropped(t *testing.T) {
 	if findTool("mediamtx") == "" {
 		t.Skip("needs mediamtx (adding starts hosting)")
 	}
+	requireToolSandbox(t)
 	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	file := func(name string) string {
