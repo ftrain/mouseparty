@@ -192,6 +192,7 @@ type Host struct {
 
 	tunnelURL        string
 	tunnelRegistered time.Time
+	mediaTransport   http.RoundTripper // Linux site: connected MediaMTX streams handed over by the parent
 }
 
 func NewHost(log func(string), mediamtx, cloudflared string, standby []byte) *Host {
@@ -228,7 +229,7 @@ func (h *Host) start() error {
 	if h.Party != nil {
 		h.Party.prunePictures()
 	}
-	elsewhere := h.Sandbox && sandboxing() // the site in its own process: it holds the session, and this only what it's told
+	elsewhere := h.Sandbox && siteSandboxing() // the site in its own process: it holds the session, and this only what it's told
 	if !elsewhere {
 		var shelf apps.Shelf
 		var keep pictureKeeper

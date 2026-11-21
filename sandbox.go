@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,7 +44,7 @@ var (
 
 // sandboxing: programs are run in their boxes
 func sandboxing() bool {
-	if sandboxOff.Load() {
+	if runtime.GOOS != "darwin" || sandboxOff.Load() {
 		return false
 	}
 	if _, err := os.Stat(sandboxExec); err != nil {

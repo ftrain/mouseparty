@@ -187,55 +187,69 @@ func (h *Host) launchSite() error {
 		return err
 	}
 	defer siteIn.Close()
+	defer func() {
+		if toSite != nil {
+			toSite.Close()
+		}
+	}()
 	fromSite, siteOut, err := socketPair(syscall.SOCK_STREAM)
 	if err != nil {
 		return err
 	}
 	defer siteOut.Close()
-	files, siteFiles, err := socketPair(syscall.SOCK_DGRAM)
+	defer func() {
+		if fromSite != nil {
+			fromSite.Close()
+		}
+	}()
+	files, siteFiles, err := socketPair(siteFileSocket)
 	if err != nil {
 		return err
 	}
 	defer siteFiles.Close()
+	defer func() {
+		if files != nil {
+			files.Close()
+		}
+	}()
 
 	own := filepath.Join(tmp, "site")
 	canary := filepath.Join(tmp, "outside")
-	os.MkdirAll(own, 0o700)
-	os.WriteFile(canary, []byte("the site must not be able to read this\n"), 0o600)
-	cache := wasmCacheFor(true) // the site's own: nothing outside its box loads from it (wasm.go)
-	if cache != "" && os.MkdirAll(cache, 0o755) != nil {
-		cache = ""
+	if err := os.MkdirAll(own, 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(canary, []byte("the site must not be able to read this\n"), 0o600); err != nil {
+		return err
 	}
 	setup := SiteSetup{Key: key, Ports: ports, Tmp: realPath(own), Canary: canary, Kept: h.Party != nil,
 		Pandoc: findWasm("pandoc"), Python: pythonHome(), Stun: stun, MaxViewers: h.MaxViewers}
 	if setup.Pandoc != "" {
 		setup.Pandoc = realPath(setup.Pandoc)
 	}
-	resources := filepath.Join(filepath.Dir(exe), "..", "Resources") // the app's own: the pages, the tools
-	if st, err := os.Stat(resources); err != nil || !st.IsDir() {
-		resources = ""
+	cmd, err := siteCommand(exe, h.HTTPPort, &setup)
+	if err != nil {
+		return err
 	}
-	cmd := siteBox(exe, h.HTTPPort, ports, []string{resources, setup.Pandoc, setup.Python}, []string{own, cache}).command(nil, siteArg)
-	cmd.Dir = own
-	cmd.Env = append(os.Environ(), "TMPDIR="+setup.Tmp)
-	cmd.ExtraFiles = []*os.File{listening, siteIn, siteOut, siteFiles} // 3, 4, 5, 6 there (siteMain)
-	said := &lineLog{log: h.Log, prefix: "site: "}                     // anything it prints: a crash
+	// Platform-specific descriptors follow the listener and the three RPC/file sockets.
+	for _, f := range cmd.ExtraFiles {
+		defer f.Close()
+	}
+	cmd.ExtraFiles = append([]*os.File{listening, siteIn, siteOut, siteFiles}, cmd.ExtraFiles...)
+	said := &lineLog{log: h.Log, prefix: "site: "} // anything it prints: a crash
 	cmd.Stdout, cmd.Stderr = said, said
 	if err := cmd.Start(); err != nil {
-		toSite.Close()
-		fromSite.Close()
-		files.Close()
 		return fmt.Errorf("the viewer site did not start: %w", err)
 	}
 	s := &siteProc{h: h, cmd: cmd, calls: netrpc.NewClient(toSite), files: files.(*net.UnixConn), done: make(chan struct{}), began: time.Now()}
 	asked := netrpc.NewServer()
 	asked.RegisterName("Mac", &MacCalls{h: h, s: s})
 	go asked.ServeConn(fromSite)
+	toSite, fromSite, files = nil, nil, nil // owned by the RPC clients/server and siteProc
 	go func() {
 		err := cmd.Wait()
 		close(s.done)
 		s.calls.Close()
-		files.Close()
+		s.files.Close()
 		h.siteGone(s, err)
 	}()
 	if err := s.call("Site.Start", setup); err != nil {
@@ -374,6 +388,11 @@ type MacCalls struct {
 	s *siteProc
 }
 
+func (m *MacCalls) Live(_ None, r *LiveStatus) error {
+	*r = m.h.liveStatus()
+	return nil
+}
+
 func keptName(name string) bool {
 	_, ok := apps.Lookup(name)
 	return ok || name == "reel"
@@ -501,6 +520,10 @@ type siteSide struct {
 // (launchSite), which hands it the site's port (3) and its three sockets (4, 5, 6).
 func siteMain() int {
 	inSiteBox = true
+	if err := restrictSite(); err != nil {
+		fmt.Fprintln(os.Stderr, "site sandbox:", err)
+		return 2
+	}
 	conn := func(fd uintptr) net.Conn {
 		f := os.NewFile(fd, "app")
 		c, err := net.FileConn(f)
@@ -623,6 +646,9 @@ func (c *SiteCalls) Start(setup SiteSetup, _ *None) error {
 	}
 	h := &Host{HTTPPort: s.l.Addr().(*net.TCPAddr).Port, urls: map[string]string{}, mac: s,
 		key: setup.Key, ports: setup.Ports, tmp: setup.Tmp, stun: setup.Stun, MaxViewers: setup.MaxViewers}
+	if err := configureSiteMedia(h); err != nil {
+		return err
+	}
 	h.Log = func(line string) { s.event("log", line, 0) }
 	h.DocAt = func(at string) { s.event("docAt", at, 0) }
 	h.DocPages = func(pages int) { s.event("docPages", "", pages) }

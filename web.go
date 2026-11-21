@@ -146,24 +146,44 @@ func (h *Host) videoFull() bool {
 	if h.MaxViewers <= 0 {
 		return false
 	}
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(fmt.Sprintf("http://127.0.0.1:%d/v3/paths/get/live", h.ports["api"]))
+	return h.liveStatus().Readers >= h.MaxViewers
+}
+
+type LiveStatus struct {
+	Standby bool
+	Readers int
+}
+
+func (h *Host) liveStatus() (s LiveStatus) {
+	if h.mediaTransport != nil { // Linux site: never give it the writable control API
+		h.mac.mac.Call("Mac.Live", None{}, &s)
+		return s
+	}
+	h.mu.Lock()
+	port := h.ports["api"]
+	h.mu.Unlock()
+	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/v3/paths/get/live", port))
 	if err != nil {
-		return false
+		return s
 	}
 	defer resp.Body.Close()
 	var p struct {
+		Online  *bool `json:"online"`
 		Readers []struct {
 			Type string `json:"type"`
 		} `json:"readers"`
 	}
-	json.NewDecoder(resp.Body).Decode(&p)
-	n := 0
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&p) != nil {
+		return s
+	}
+	s.Standby = p.Online != nil && !*p.Online
 	for _, r := range p.Readers {
 		if r.Type == "webRTCSession" {
-			n++
+			s.Readers++
 		}
 	}
-	return n >= h.MaxViewers
+	return s
 }
 
 // onlyWithKey: nothing answers without the session key; a wrong one gets the same
@@ -207,6 +227,7 @@ type webrtcWhere struct{}
 
 func (h *Host) webrtcProxy(kind string, where func(r *http.Request) (path, public string, ok bool)) http.Handler {
 	proxy := &httputil.ReverseProxy{
+		Transport: h.mediaTransport,
 		Rewrite: func(r *httputil.ProxyRequest) {
 			path, _, _ := where(r.In)
 			tail := ""
@@ -250,6 +271,7 @@ func (h *Host) webrtcProxy(kind string, where func(r *http.Request) (path, publi
 // cookie goes back to the browser unflagged.
 func (h *Host) hlsProxy() http.Handler {
 	return &httputil.ReverseProxy{
+		Transport: h.mediaTransport,
 		Rewrite: func(r *httputil.ProxyRequest) {
 			q := r.In.URL.Query()
 			q.Set("cookieCheck", "1")
@@ -281,19 +303,9 @@ func (h *Host) hlsProxy() http.Handler {
 }
 
 func (h *Host) status(w http.ResponseWriter, r *http.Request) {
-	var online *bool
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(fmt.Sprintf("http://127.0.0.1:%d/v3/paths/get/live", h.ports["api"]))
-	if err == nil {
-		var p struct {
-			Online *bool `json:"online"`
-		}
-		if resp.StatusCode == 200 && json.NewDecoder(resp.Body).Decode(&p) == nil {
-			online = p.Online
-		}
-		resp.Body.Close()
-	}
+	live := h.liveStatus()
 	out := h.hello()
-	out["standby"] = online != nil && !*online
+	out["standby"] = live.Standby
 	out["viewers"] = h.viewers()
 	h.mu.Lock()
 	ice := []map[string]string{}
