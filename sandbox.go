@@ -157,14 +157,35 @@ func realPath(path string) string {
 
 // ---------- ffmpeg ----------
 
-// ffmpegCmd: ffmpeg with args, in its box: it reads the files it's given as inputs
+// ffmpegCmd: the publishing path, unchanged on Linux.
+// In its macOS box it reads the files it's given as inputs
 // (-i) and nothing else of the Mac's, reads and writes own (temporary files the app
-// made for it: a card's words, a cover to fill), and reaches only the port it
+// made for it, such as a card's words), and reaches only the port it
 // publishes to (an rtsp:// on this Mac among args). A file it reads may be a
 // stranger's (a download), and it is the one big parser of them here that isn't
 // memory-safe: this is what it can do if one gets the better of it.
 func ffmpegCmd(ctx context.Context, own []string, args ...string) *exec.Cmd {
 	return ffmpegBox(firstTool("ffmpeg"), own, args).command(ctx, args...)
+}
+
+// offlineFFmpeg is for a one-shot operation on one app-selected local file.
+// Nothing is written back to the host; results and diagnostics use stdout/stderr.
+func offlineFFmpeg(ctx context.Context, path string, read func(*exec.Cmd) ([]byte, error), beforeInput []string, output ...string) ([]byte, error) {
+	bin, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return nil, err
+	}
+	cmd, err := offlineFFmpegCommand(ctx, bin, path, func(input string) []string {
+		args := append([]string{}, beforeInput...)
+		return append(append(args, "-i", input), output...)
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range cmd.ExtraFiles {
+		defer f.Close()
+	}
+	return read(cmd)
 }
 
 func ffmpegBox(bin string, own, args []string) *box {

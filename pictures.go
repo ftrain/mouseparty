@@ -18,6 +18,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"net/http"
+	"os/exec"
 	"regexp"
 	"sync"
 	"time"
@@ -182,11 +183,14 @@ func (h *Host) Frame() ([]byte, apps.Picture, error) {
 	defer h.grabbing.Unlock()
 	ctx, cancel := contextTimeout(15 * time.Second)
 	defer cancel()
-	out, err := ffmpegCmd(ctx, nil, "-v", "error", "-nostdin", "-ss", fmt.Sprintf("%.3f", at),
-		"-i", showing.path, "-frames:v", "1", "-an", "-sn",
-		"-vf", "scale=trunc(iw*sar/2)*2:ih,setsar=1,scale='min(1280,iw)':-2", "-f", "image2", "-update", "1", "-c:v", "png", "pipe:1").Output()
-	if err != nil || len(out) == 0 {
-		return nil, apps.Picture{}, fmt.Errorf("no frame: %v", err)
+	out, err := offlineFFmpeg(ctx, showing.path, (*exec.Cmd).Output, []string{"-v", "error", "-nostdin", "-ss", fmt.Sprintf("%.3f", at)},
+		"-frames:v", "1", "-an", "-sn",
+		"-vf", "scale=trunc(iw*sar/2)*2:ih,setsar=1,scale='min(1280,iw)':-2", "-f", "image2", "-update", "1", "-c:v", "png", "pipe:1")
+	if err != nil {
+		return nil, apps.Picture{}, fmt.Errorf("no frame: %w", err)
+	}
+	if len(out) == 0 {
+		return nil, apps.Picture{}, errors.New("no frame")
 	}
 	pic := apps.Picture{At: at, Title: showing.title}
 	if c, _, err := image.DecodeConfig(bytes.NewReader(out)); err == nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -116,8 +117,11 @@ var (
 func inspect(path string) MediaInfo {
 	ctx, cancel := contextTimeout(30 * time.Second)
 	defer cancel()
-	out, _ := ffmpegCmd(ctx, nil, "-hide_banner", "-nostdin", "-i", path).CombinedOutput()
-	return parseInspect(string(out))
+	said, err := offlineFFmpeg(ctx, path, (*exec.Cmd).CombinedOutput, []string{"-hide_banner", "-nostdin"})
+	if len(said) == 0 && err != nil {
+		return MediaInfo{Error: err.Error()}
+	}
+	return parseInspect(string(said))
 }
 
 // parseInspect reads ffmpeg's description of an input. Its indents say what a

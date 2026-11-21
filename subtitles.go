@@ -243,13 +243,15 @@ func cues(t Track, movie string, offset float64) []Cue {
 	if !t.Text {
 		return nil
 	}
-	args := []string{"-v", "error", "-i", t.Path, "-f", "webvtt", "-"}
+	path := t.Path
+	var output []string
 	if t.Kind != "file" {
-		args = []string{"-v", "error", "-i", movie, "-map", fmt.Sprintf("0:s:%d", t.Index), "-f", "webvtt", "-"}
+		path = movie
+		output = []string{"-map", fmt.Sprintf("0:s:%d", t.Index)}
 	}
 	ctx, cancel := contextTimeout(300 * time.Second)
 	defer cancel()
-	out, err := ffmpegCmd(ctx, nil, args...).Output()
+	out, err := offlineFFmpeg(ctx, path, (*exec.Cmd).Output, []string{"-v", "error", "-nostdin"}, append(output, "-f", "webvtt", "-")...)
 	if err != nil && len(out) == 0 {
 		return nil
 	}

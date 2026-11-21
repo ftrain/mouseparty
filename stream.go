@@ -253,13 +253,19 @@ func extractCover(path string, index int) string {
 	if err != nil {
 		return ""
 	}
-	f.Close()
+	defer f.Close()
 	ctx, cancel := contextTimeout(30 * time.Second)
 	defer cancel()
-	err = ffmpegCmd(ctx, []string{f.Name()}, "-v", "error", "-y", "-i", path, "-map",
-		fmt.Sprintf("0:v:%d", index), "-frames:v", "1", f.Name()).Run()
-	if st, e := os.Stat(f.Name()); err == nil && e == nil && st.Size() > 0 {
-		return f.Name()
+	// Read one file in the offline box; stdout goes directly to our open PNG.
+	_, err = offlineFFmpeg(ctx, path, func(cmd *exec.Cmd) ([]byte, error) {
+		cmd.Stdout = f
+		return nil, cmd.Run()
+	}, []string{"-v", "error"},
+		"-map", fmt.Sprintf("0:v:%d", index), "-frames:v", "1", "-c:v", "png", "-f", "image2", "pipe:1")
+	if err == nil {
+		if st, err := f.Stat(); err == nil && st.Size() > 0 {
+			return f.Name()
+		}
 	}
 	os.Remove(f.Name())
 	return ""
