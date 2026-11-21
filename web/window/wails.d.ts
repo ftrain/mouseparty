@@ -138,6 +138,7 @@ export interface Runtime {
     OnFileDrop(callback: (x: number, y: number, paths: string[]) => void, useDropTarget: boolean): void;
     EventsOn(name: 'view', callback: (v: View) => void): () => void;
     EventsOn(name: 'ask', callback: (mode: Ask) => void): () => void;
+    EventsOn(name: 'about', callback: (version: string) => void): () => void;
     EventsOn(name: 'edit', callback: (what: 'undo' | 'redo') => void): () => void; // Edit > Undo, Redo (mac.go)
     ClipboardSetText(text: string): Promise<boolean>;
 }

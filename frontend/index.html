@@ -19,6 +19,15 @@
         <div id="hint" class="hint">Drag movies here</div>
     </div>
     <div id="sheet" class="sheet" role="dialog" aria-modal="true" hidden></div>
+    <dialog id="about" class="sheet-box" aria-labelledby="about-title">
+        <h1 id="about-title">About Mouse Party</h1>
+        <p class="sheet-words">Version <span id="about-version"></span> · By Paul Ford</p>
+        <p class="sheet-words">Made with FFmpeg, x264, Opus, libass, FreeType, HarfBuzz, FriBidi, MediaMTX,
+            cloudflared, pandoc, Python, Datasette, SQLite, Wails, wazero, pdfcpu, hls.js, pdf.js,
+            Tiny Little Office, Lucide and the ENABLE word list.</p>
+        <p class="sheet-words">MIT licence, no warranty.</p>
+        <form class="sheet-buttons" method="dialog"><button class="go" type="submit" autofocus>Done</button></form>
+    </dialog>
     <script type="module" src="app.js"></script>
 </body>
 </html>

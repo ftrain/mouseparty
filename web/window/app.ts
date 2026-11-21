@@ -195,6 +195,11 @@ window.addEventListener('load', async () => {
     }, false);
     window.runtime.EventsOn('view', render);
     window.runtime.EventsOn('ask', ask); // the Party menu
+    window.runtime.EventsOn('about', (version: string) => {
+        const about = $<HTMLDialogElement>('about');
+        $('about-version').textContent = version;
+        if (!about.open) about.showModal();
+    });
     window.runtime.EventsOn('edit', edit); // Edit > Undo, Redo
     render(await App().GetView());
     if (await App().Welcome()) void ask('welcome'); // someone new

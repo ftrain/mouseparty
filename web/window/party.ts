@@ -115,7 +115,7 @@ export function close() {
 }
 
 // whether a sheet is up (the window's own keys leave it alone then)
-export const sheetOpen = () => !sheet.hidden;
+export const sheetOpen = () => !sheet.hidden || (document.getElementById('about') as HTMLDialogElement).open;
 
 const twice = (v: Record<string, string>) => (!v.next ? 'Type a passcode' : v.next !== v.again ? "The two passcodes aren't the same" : '');
 const FORGET = 'A forgotten passcode can’t be recovered.';

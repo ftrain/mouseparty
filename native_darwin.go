@@ -1,6 +1,6 @@
 package main
 
-// What Wails v2 leaves out of a Mac app, asked of AppKit directly: the standard About panel,
+// What Wails v2 leaves out of a Mac app, asked of AppKit directly:
 // Hide Others and Show All (the app menu is our own, so Settings… can be in it), the Dock
 // icon's badge, the window's frame kept between launches, and whether the app is in front.
 // Each runs on the main thread; with no app (tests), AppKit's nil makes each nothing.
@@ -10,22 +10,6 @@ package main
 #cgo LDFLAGS: -framework Cocoa
 #import <Cocoa/Cocoa.h>
 #include <stdlib.h>
-
-static void mpAbout(const char *credits) {
-	@autoreleasepool {
-		NSString *text = [NSString stringWithUTF8String:credits];
-		dispatch_async(dispatch_get_main_queue(), ^{
-			NSFont *font = [NSFont systemFontOfSize:[NSFont smallSystemFontSize]];
-			NSMutableParagraphStyle *centred = [[NSMutableParagraphStyle new] autorelease];
-			centred.alignment = NSTextAlignmentCenter;
-			NSAttributedString *c = [[[NSAttributedString alloc] initWithString:text
-				attributes:@{NSFontAttributeName: font, NSForegroundColorAttributeName: [NSColor secondaryLabelColor],
-				             NSParagraphStyleAttributeName: centred}] autorelease];
-			[NSApp activateIgnoringOtherApps:YES];
-			[NSApp orderFrontStandardAboutPanelWithOptions:@{NSAboutPanelOptionCredits: c}];
-		});
-	}
-}
 
 static void mpHideOthers(void) {
 	dispatch_async(dispatch_get_main_queue(), ^{ [NSApp hideOtherApplications:nil]; });
@@ -72,12 +56,6 @@ static int mpActive(void) {
 import "C"
 
 import "unsafe"
-
-func nativeAbout(credits string) {
-	c := C.CString(credits)
-	defer C.free(unsafe.Pointer(c))
-	C.mpAbout(c)
-}
 
 func nativeHideOthers() { C.mpHideOthers() }
 func nativeShowAll()    { C.mpShowAll() }

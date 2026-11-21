@@ -28,7 +28,7 @@ func (a *App) menu() *menu.Menu {
 	cb := func(f func()) menu.Callback { return func(*menu.CallbackData) { f() } }
 
 	app := m.AddSubmenu("Mouse Party") // the first menu is the app's, whatever it's called
-	app.AddText("About Mouse Party", nil, cb(a.about))
+	app.AddText("About Mouse Party", nil, cb(func() { a.emit("about", version) }))
 	if a.update.state == "ready" {
 		app.AddText("Restart to Update to "+a.update.latest, nil, cb(func() { go a.RestartToUpdate() }))
 	} else {
@@ -104,15 +104,6 @@ func (a *App) emit(name string, data ...any) {
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, name, data...)
 	}
-}
-
-// about: the Mac's own About panel (the icon, the name, the version from Info.plist): who made it, and
-// the open source it's made with (licenses/README.md has every one, and its licence)
-func (a *App) about() {
-	nativeAbout("By Paul Ford\n\n" +
-		"Made with FFmpeg, x264, Opus, libass, FreeType, HarfBuzz, FriBidi, MediaMTX, cloudflared, pandoc, " +
-		"Python, Datasette, SQLite, Wails, wazero, pdfcpu, hls.js, pdf.js, Tiny Little Office, Lucide " +
-		"and the ENABLE word list.\n\nMIT licence, no warranty.")
 }
 
 // ---------- the log ----------

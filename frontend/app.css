@@ -211,6 +211,19 @@ body {
 .sheet-box label.sheet-check input { padding: 0; margin: 0; }
 .sheet-box label[hidden] { display: none; }
 
+/* About can sit above another sheet without replacing it. */
+#about {
+    width: min(calc(100% - 40px), 440px);
+    max-height: calc(100% - 40px);
+    color: var(--text);
+}
+#about:not([open]) { display: none; }
+#about::backdrop {
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+}
+
 /* the Settings window (web/window/prefs.ts): tabs along the top, as a Mac app's Settings has them; held at
    the top, so that it doesn't jump as tabs of other heights are chosen */
 .sheet:has(.prefs) { align-items: flex-start; }

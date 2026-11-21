@@ -178,6 +178,11 @@ window.addEventListener("load", async () => {
 	}, false);
 	window.runtime.EventsOn("view", render);
 	window.runtime.EventsOn("ask", ask);
+	window.runtime.EventsOn("about", (version) => {
+		const about = $("about");
+		$("about-version").textContent = version;
+		if (!about.open) about.showModal();
+	});
 	window.runtime.EventsOn("edit", edit);
 	render(await App().GetView());
 	if (await App().Welcome()) ask("welcome");

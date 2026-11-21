@@ -104,7 +104,7 @@ function close() {
 	back = null;
 	then?.();
 }
-const sheetOpen = () => !sheet.hidden;
+const sheetOpen = () => !sheet.hidden || document.getElementById("about").open;
 const twice = (v) => !v.next ? "Type a passcode" : v.next !== v.again ? "The two passcodes aren't the same" : "";
 const FORGET = "A forgotten passcode can’t be recovered.";
 async function ask(mode) {
