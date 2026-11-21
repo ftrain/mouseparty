@@ -84,7 +84,7 @@ failing one to the fewest steps.
 - A missing piece skips its tests (no MediaMTX, no Datasette Python, no
   Playwright), and a skip passes quietly in plain `go test`. So
   `scripts/test.sh` lists every skip and why (`scripts/testreport`), and with
-  `NO_SKIPS=1`, as both workflows set, a skip fails the run unless it matches
+  `NO_SKIPS=1`, as CI sets, a skip fails the run unless it matches
   `ALLOW_SKIPS`. `scripts/setup.sh` gets every piece.
 - `scripts/fuzz.sh` searches further: two minutes each (`FUZZTIME=30m`;
   `FUZZWINDOWTIME` for the window's), or one (`scripts/fuzz.sh FuzzApps`).
@@ -96,6 +96,56 @@ failing one to the fewest steps.
 `-fuzzminimizetime` matters: shrinking a new input replays it thousands of
 times, and without a limit that stalls the search for minutes (the fuzzer reports
 0 runs a second meanwhile). `scripts/fuzz.sh` sets it.
+
+## Linux sandbox and desktop smoke test
+
+The [Linux workflow](../.github/workflows/linux.yml) runs on pull requests,
+pushes to `main`, and by manual dispatch. Like the Mac job, it runs `go vet` and
+the `apps` package tests, including the saved `FuzzApps` inputs. It also requires
+all fourteen selected host tests to pass: a skip, missing test, or launch
+failure fails the job. The Linux viewer and offline ffmpeg tests exercise the
+real bubblewrap policies, including real media inspection, frame grabs and
+subtitle conversion. The tool-box tests check the networked roles' file grants,
+including MediaMTX's read-only session, cloudflared's CA pool, and publishing
+ffmpeg's pinned regular inputs. The player test checks progress on stdout and a
+graceful stop over stdin. See [SECURITY.md](../SECURITY.md) for the differences
+between the role policies.
+`TestTheSiteInItsOwnProcess` checks the boxed viewer
+against real MediaMTX, including recovery after the viewer process is killed.
+
+To run the same check on Ubuntu 26.04 (amd64 or arm64), install the Go version
+in [`go.mod`](../go.mod) and the distro dependencies:
+
+```sh
+sudo apt-get update
+sudo apt-get install --no-install-recommends apparmor bubblewrap build-essential \
+  ca-certificates curl ffmpeg fonts-dejavu-core libgtk-3-dev libwebkit2gtk-4.1-dev perl pkg-config
+```
+
+If `sysctl -n kernel.apparmor_restrict_unprivileged_userns` reports `1`, Ubuntu's
+AppArmor `bwrap` profile must be loaded. The workflow loads the distro profile
+with `sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict`; ask your
+system administrator if it is not already loaded locally. Do not disable
+AppArmor or run the tests as root. On another distro use bubblewrap 0.10 or
+newer (`--disable-userns` and `--ro-bind-fd`), with working unprivileged user
+namespaces and seccomp. A container that blocks namespace creation is not a
+substitute for a Linux host or VM with those facilities.
+
+From the checkout, as a normal user:
+
+```sh
+scripts/test_linux.sh
+```
+
+The script uses the version and checksums from
+[`scripts/fetch_tools.sh`](../scripts/fetch_tools.sh) for MediaMTX, and distro
+ffmpeg with `drawtext`, `libx264` and `libopus`. It builds a Wails desktop binary
+with `desktop,production,webkit2_41` (Ubuntu uses WebKitGTK 4.1), then invokes its
+existing `--selftest` headlessly from a scratch directory with a temporary
+`HOME`. The host uses free ports, with no tunnel or router mapping. This checks
+hosting and publishing, not the desktop UI, browser playback, or packaging.
+It uses the checked-in web assets and does not build the optional Datasette
+Python; `--selftest` reports that one out-of-scope check as skipped.
 
 ## The pages in a browser
 

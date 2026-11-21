@@ -4,6 +4,7 @@
 // `go test`, so a missing tool (MediaMTX, the Datasette Python, Playwright)
 // can hide a whole layer of tests: with NO_SKIPS=1 (as CI sets) any skip fails
 // the run, except tests whose names match ALLOW_SKIPS, a regular expression.
+// For a single package, pass test names as args to require a pass for each one.
 package main
 
 import (
@@ -28,6 +29,10 @@ func main() {
 	allow := regexp.MustCompile(`^$`)
 	if a := os.Getenv("ALLOW_SKIPS"); a != "" {
 		allow = regexp.MustCompile(a)
+	}
+	required := map[string]bool{}
+	for _, name := range os.Args[1:] {
+		required[name] = false
 	}
 	output := map[string][]string{} // package/test -> its lines
 	var failed, skipped []string
@@ -61,12 +66,25 @@ func main() {
 		case "pass":
 			if e.Test == "" {
 				fmt.Printf("ok\t%s\t%.1fs\n", e.Package, e.Elapsed)
+			} else if _, ok := required[e.Test]; ok {
+				required[e.Test] = true
 			}
 		}
 		if e.Action == "pass" || e.Action == "fail" || e.Action == "skip" {
 			delete(output, key) // done with: only failures and skips are told
 		}
 	}
+	if err := in.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "reading test output:", err)
+		broken = true
+	}
+	var missing []string
+	for name, passed := range required {
+		if !passed {
+			missing = append(missing, name)
+		}
+	}
+	sort.Strings(missing)
 	sort.Strings(skipped)
 	unexpected := 0
 	if len(skipped) > 0 {
@@ -79,6 +97,9 @@ func main() {
 			fmt.Printf("  %s: %s%s\n", k, why[k], mark)
 		}
 	}
+	for _, name := range missing {
+		fmt.Printf("Missing required pass: %s\n", name)
+	}
 	switch {
 	case broken || len(failed) > 0:
 		fmt.Printf("\n%d failed\n", len(failed))
@@ -86,6 +107,10 @@ func main() {
 	case unexpected > 0:
 		fmt.Printf("\n%d skipped where everything should run (NO_SKIPS; ALLOW_SKIPS=%q)\n", unexpected, os.Getenv("ALLOW_SKIPS"))
 		os.Exit(1)
+	case len(missing) > 0:
+		os.Exit(1)
+	case len(required) > 0:
+		fmt.Printf("%d required tests passed\n", len(required))
 	}
 }
 
