@@ -451,7 +451,7 @@ func TestUpdateDroppedWhenItCantGoIn(t *testing.T) {
 				t.Fatal(err)
 			}
 			return []string{installed}
-		}, false, "rename "},
+		}, false, "didn't check again"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			tempHome(t)

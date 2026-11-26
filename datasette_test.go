@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -178,9 +179,15 @@ func TestDatasetteOddNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"films #2.db", "100% films.db", "films?.db"} {
+	names := []string{"films #2.db", "100% films.db", "films?.db"}
+	if runtime.GOOS == "windows" {
+		names = names[:2] // Windows names no file with a ?
+	}
+	for _, name := range names {
 		path := filepath.Join(t.TempDir(), name)
-		os.WriteFile(path, b, 0o644)
+		if err := os.WriteFile(path, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
 		d := startDatasette(py, pythonHome(), path, "Films", "/k/data/t/", func(s string) { t.Log(s) })
 		a, err := d.ask("GET", "/k/data/t/.json", "", nil)
 		d.stop()
