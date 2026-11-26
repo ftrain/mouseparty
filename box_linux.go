@@ -503,8 +503,15 @@ func sandboxMissing() string {
 }
 
 func sandboxLimits() string {
-	if landlockABI() < 4 {
-		return "This Linux's Landlock is too old to box network ports (it needs 6.7 or later): programs are kept to their files, not to their ports."
+	abi := landlockABI()
+	note := "On this Linux the sandbox keeps ffmpeg, MediaMTX, cloudflared and the viewer site to their own files and from starting programs. " +
+		"Their network is kept to their ports, but on any address, not only this computer's."
+	if abi < 4 {
+		note = "On this Linux the sandbox keeps ffmpeg, MediaMTX, cloudflared and the viewer site to their own files and from starting programs, " +
+			"but its Landlock is too old to keep them to their network ports (that needs Linux 6.7 or later)."
 	}
-	return ""
+	if abi < 6 {
+		note += " Nor can it keep them from signalling other programs, Mouse Party too (that needs Linux 6.12 or later)."
+	}
+	return note
 }

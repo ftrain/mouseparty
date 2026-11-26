@@ -147,11 +147,18 @@ const TABS = [
 		icon: "lock",
 		draw: (p) => {
 			const again = () => void openPrefs("security");
-			return [row("Party file", p.sealed ? [
-				el("span", { textContent: "Encrypted" }),
-				button("Change Passcode…", () => askFrom("change", again)),
-				button("Stop Using Encryption…", () => askFrom("off", again))
-			] : [el("span", { textContent: "Not encrypted" }), button("Use Encryption…", () => askFrom("on", again))], "Locks your list and settings with a passcode."), row("As text", button("Edit as Text…", () => askFrom("settings", again)), "Every setting, for people who like to edit them by hand.")];
+			return [
+				row("Party file", p.sealed ? [
+					el("span", { textContent: "Encrypted" }),
+					button("Change Passcode…", () => askFrom("change", again)),
+					button("Stop Using Encryption…", () => askFrom("off", again))
+				] : [el("span", { textContent: "Not encrypted" }), button("Use Encryption…", () => askFrom("on", again))], "Locks your list and settings with a passcode."),
+				row("As text", button("Edit as Text…", () => askFrom("settings", again)), "Every setting, for people who like to edit them by hand."),
+				row("Sandbox", el("span", {
+					className: "pref-note",
+					textContent: p.sandbox
+				}))
+			];
 		}
 	}
 ];

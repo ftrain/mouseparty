@@ -38,6 +38,20 @@ func sandboxing() bool {
 	return true
 }
 
+// sandboxText: what Settings > Security says of the sandbox
+func sandboxText() string {
+	if sandboxOff.Load() {
+		return "Off: no_sandbox is set in the party file (Edit as Text), so what reads guests' files and messages runs with all of your access."
+	}
+	if why := sandboxMissing(); why != "" {
+		return why + ", so what reads guests' files and messages runs without a sandbox, with all of your access."
+	}
+	if note := sandboxLimits(); note != "" {
+		return note
+	}
+	return "On: ffmpeg, MediaMTX, cloudflared and the viewer site, which read what guests send, can't see your files or start programs."
+}
+
 func (b *box) command(ctx context.Context, args ...string) *exec.Cmd {
 	bin, argv := b.argv(args...)
 	var cmd *exec.Cmd

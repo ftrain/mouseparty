@@ -29,11 +29,15 @@ nothing is left behind when you quit.
   call, and shared documents, slides and sheets.
 - Subtitles from the movie or a file beside it, turned on by each viewer.
 - Up to ten viewers by default (`max_viewers` in Settings).
-- Guest-facing parts run in a sandbox: macOS's own (Seatbelt) on a Mac,
-  Landlock and seccomp on Linux, and on Windows a job object with a
-  low-integrity token, which keeps them from writing your files, starting
-  programs and outliving the app, though not from reading files, using the
-  network or reaching one another. Only send the link to people you trust.
+- Guest-facing parts run in a sandbox: macOS's own (Seatbelt) on a Mac, which
+  keeps them from your files, from starting programs and from all but the
+  network they need; Landlock and seccomp on Linux, the same but that their
+  ports are held on any address (and with Linux older than 6.12, they can
+  signal other programs); and on Windows a job object with a low-integrity
+  token, which keeps them from writing your files, starting programs and
+  outliving the app, though not from reading files, using the network or
+  reaching one another. Settings > Security says which, on this computer.
+  Only send the link to people you trust.
 - Keeps one file, `party.sqlite` (beside it on Linux and Windows a `window.json`
   with the window's place, and on Windows WebView2's folder), which you can
   encrypt with a passcode or erase from the Party menu: in `~/Library/Application Support/Mouse Party` on

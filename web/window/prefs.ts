@@ -210,6 +210,7 @@ const TABS: Tab[] = [
                     button('Edit as Text…', () => askFrom('settings', again)),
                     'Every setting, for people who like to edit them by hand.',
                 ),
+                row('Sandbox', el('span', { className: 'pref-note', textContent: p.sandbox })),
             ];
         },
     },

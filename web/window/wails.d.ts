@@ -107,6 +107,7 @@ export interface Prefs {
     update: UpdateStatus; // only shown
     soundFor: string; // only shown: the movie up now ("" for none), whose sound SetSound moves
     sound: number; // only shown: how far it's moved, in seconds (positive: later)
+    sandbox: string; // only shown: what the sandbox keeps guests' bytes from, on this computer
 }
 
 // updates.go's UpdateStatus
