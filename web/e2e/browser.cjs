@@ -65,8 +65,11 @@ async function windowMatches(page, what) {
     if (wrong) fail(`the window, after ${what}: ${wrong}`);
 }
 
+// where row i is, scrolled into sight first, as a person would scroll to it (a long list runs past the window's foot)
 async function rowCenter(page, i) {
-    const box = await page.locator('#list .row').nth(i).boundingBox();
+    const row = page.locator('#list .row').nth(i);
+    await row.scrollIntoViewIfNeeded().catch(() => {});
+    const box = await row.boundingBox();
     return box && { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
