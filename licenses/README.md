@@ -86,6 +86,7 @@ with its licence file in `go/<module path>/`. All are MIT, BSD or Apache-2.0.
 | github.com/ncruces/go-sqlite3, SQLite for the party file (`store.go`), with ncruces/julianday | MIT |
 | github.com/ncruces/go-sqlite3-wasm/v6, SQLite itself as WebAssembly translated to Go (SQLite is public domain) | MIT-0 |
 | lukechampine.com/adiantum, the party file's encryption (through go-sqlite3's adiantum VFS) | MIT |
+| aead.dev/minisign, checking the release key's signature on an update (`internal/releasesig`) | MIT |
 | golang.org/x/text, x/crypto, x/image, x/net, x/sync, x/sys | BSD-3-Clause |
 | github.com/clipperhouse/uax29/v2, gabriel-vasile/mimetype, leaanthony/go-ansi-parser, leaanthony/slicer, leaanthony/u, mattn/go-runewidth, rivo/uniseg, samber/lo, go.yaml.in/yaml/v3 | MIT |
 | github.com/hhrutter/tiff, pkg/browser, pkg/errors | BSD |
