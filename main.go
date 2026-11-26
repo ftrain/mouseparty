@@ -20,6 +20,7 @@ import (
 	"embed"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync/atomic"
 	"syscall"
 
@@ -42,7 +43,7 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == boxArg {
 		os.Exit(boxMain(os.Args[2:]))
 	}
-	if len(os.Args) > 1 && os.Args[1] == thenArg {
+	if len(os.Args) > 1 && os.Args[1] == thenArg && runtime.GOOS != "darwin" { // the Mac's Erase All Data uses /bin/sh (party_darwin.go)
 		os.Exit(thenMain(os.Args[2:]))
 	}
 	if len(os.Args) > 1 && os.Args[1] == "--selftest" {
