@@ -52,6 +52,7 @@ type Prefs struct {
 	Update          UpdateStatus `json:"update"`          // only shown: this version, and where updating has got to
 	SoundFor        string       `json:"soundFor"`        // only shown: the movie up now, whose sound SetSound moves ("" for none)
 	Sound           float64      `json:"sound"`           // only shown: how far it's moved now, in seconds (positive: later)
+	Sandbox         string       `json:"sandbox"`         // only shown: what the sandbox keeps guests' bytes from, on this computer (sandboxText)
 }
 
 // Account: a site's kept login, as the window lists it (never its password)
@@ -97,6 +98,7 @@ func (a *App) Prefs() Prefs {
 		}
 	})
 	p.Cache = a.CacheText()
+	p.Sandbox = sandboxText()
 	return p
 }
 

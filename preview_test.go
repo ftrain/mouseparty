@@ -16,10 +16,12 @@ func TestPreviewAudioCard(t *testing.T) {
 	}
 	graph, files := audioCard(SoundInfo{Title: "So What", Artist: "Miles Davis"}, "song", 2, "0:a:0", nil)
 	defer removeAll(files)
-	out, err := exec.Command(os.Getenv("FF"), "-v", "error", "-y", "-ss", "40", "-t", "10", "-i", os.Getenv("SONG"),
+	cmd := exec.Command(os.Getenv("FF"), "-v", "error", "-y", "-ss", "40", "-t", "10", "-i", os.Getenv("SONG"),
 		"-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30", "-loop", "1", "-framerate", "30", "-i", filepath.Join(dir, "cover.png"),
 		"-filter_complex", graph+"[v]", "-map", "[v]", "-map", "[a]", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-		"-c:a", "aac", filepath.Join(dir, "clip.mp4")).CombinedOutput()
+		"-c:a", "aac", filepath.Join(dir, "clip.mp4"))
+	cmd.Dir, _ = cardFontRef()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatal(err, string(out))
 	}

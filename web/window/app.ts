@@ -1,7 +1,7 @@
 // The window: it draws the View the Go side sends (app.go) and tells it what was
 // pressed. It keeps nothing of its own but a drag in progress and a held slider.
 import type { Icon, View } from './wails.d.ts';
-import { ask, edit, lock, sheetOpen } from './party.ts';
+import { ask, edit, learnPlatform, lock, onMac, onWindows, sheetOpen } from './party.ts';
 
 const App = () => window.go.main.App;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -111,8 +111,15 @@ function showInsert(at: number | null) {
     if (at < 0) rows[rows.length - 1].classList.add('insert-after');
     else rows[at].classList.add('insert-before');
 }
-window.addEventListener('dragover', (e) => showInsert(insertAt(e.clientY)));
+window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    showInsert(insertAt(e.clientY));
+});
 window.addEventListener('dragleave', (e) => e.relatedTarget === null && showInsert(null));
+window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    showInsert(null);
+});
 
 $('play').addEventListener('click', () => view?.playOn && App().PlayClicked());
 $('link').addEventListener('click', () => view?.linkPress && App().LinkClicked());
@@ -147,6 +154,7 @@ window.addEventListener('mouseup', () => {
 
 // keys: ↑/↓ select, Return plays, Backspace removes the selected one; ←/→ and Page Up/Down turn a PDF's pages
 window.addEventListener('keydown', (e) => {
+    if (!onMac() && ctrlKey(e)) return e.preventDefault();
     if (sheetOpen() || e.metaKey || e.ctrlKey || e.altKey) return; // typing a passcode, or the settings; the menus' keys
     const rows = view?.rows.length ?? 0;
     const sel = view?.selected ?? -1;
@@ -161,6 +169,23 @@ window.addEventListener('keydown', (e) => {
     else return;
     e.preventDefault();
 });
+
+function ctrlKey(e: KeyboardEvent) {
+    if (!e.ctrlKey || e.altKey || e.metaKey) return false;
+    const key = e.key.toLowerCase();
+    if (onWindows() && !e.shiftKey && (key === ',' || key === '/')) {
+        void ask(key === ',' ? 'prefs' : 'keys');
+        return true;
+    }
+    const undo = key === 'z' && !e.shiftKey;
+    const redo = (key === 'z' && e.shiftKey) || (key === 'y' && !e.shiftKey);
+    if ((!undo && !redo) || sheetOpen()) return false;
+    void (undo ? App().UndoRemove() : App().RedoRemove());
+    return true;
+}
+
+window.addEventListener('focus', () => void App().Focused(true));
+window.addEventListener('blur', () => void App().Focused(false));
 
 // the slider: drag to move around in the movie, or to another page
 const slider = $<HTMLInputElement>('slider');
@@ -191,11 +216,14 @@ slider.addEventListener('keydown', (e) => e.stopPropagation());
 window.addEventListener('load', async () => {
     window.runtime.OnFileDrop((x, y, paths) => {
         showInsert(null);
-        App().AddPaths(paths, rowAt(x, y) ?? -1, insertAt(y));
+        const files = paths.filter((p) => p !== '');
+        if (files.length) App().AddPaths(files, rowAt(x, y) ?? -1, insertAt(y));
     }, false);
     window.runtime.EventsOn('view', render);
     window.runtime.EventsOn('ask', ask); // the Party menu
     window.runtime.EventsOn('edit', edit); // Edit > Undo, Redo
+    await learnPlatform();
+    void App().Focused(document.hasFocus());
     render(await App().GetView());
     if (await App().Welcome()) void ask('welcome'); // someone new
 });

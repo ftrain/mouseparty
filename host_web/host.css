@@ -1,4 +1,4 @@
-/* The page a hosting Mac serves (viewer.html). Terminal green on black.
+/* The page a host serves (viewer.html). Terminal green on black.
    Three layouts, chosen by host.js as data-mode on .app:
      side     desktop: video left, chat column right (YouTube live)
      stacked  upright phone: video on top, chat below

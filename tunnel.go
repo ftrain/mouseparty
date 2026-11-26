@@ -46,6 +46,8 @@ func (h *Host) ShareViaCloudflare() bool {
 	return false
 }
 
+func tunnelOrigin(port int) string { return fmt.Sprintf("http://127.0.0.1:%d", port) }
+
 // tryTunnel starts cloudflared once. It hands the link out only once the tunnel
 // is connected and its name has had a moment to be published: a lookup that comes
 // too early is cached as "no such name" by the resolver (yours or a friend's), and
@@ -54,8 +56,7 @@ func (h *Host) tryTunnel() bool {
 	h.mu.Lock()
 	h.tunnelURL, h.tunnelRegistered = "", time.Time{}
 	h.mu.Unlock()
-	tunnel, err := h.spawn("cloudflared", h.Cloudflared, "tunnel", "--no-autoupdate", "--url",
-		fmt.Sprintf("http://127.0.0.1:%d", h.HTTPPort))
+	tunnel, err := h.spawn("cloudflared", h.Cloudflared, "tunnel", "--no-autoupdate", "--url", tunnelOrigin(h.HTTPPort))
 	if err != nil {
 		h.Log("The Cloudflare tunnel did not start: " + err.Error())
 		return false

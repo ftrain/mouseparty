@@ -49,6 +49,7 @@ type Item struct {
 	Cleared   bool          `json:"cleared,omitempty"`   // an earlier Mouse Party's row kept, greyed, when its download was cleared: taken out at start (syncDownloads)
 	Missing   bool          `json:"-"`                   // its file isn't there now (App.watchFiles)
 	dl        *download     // the download under way (download.go); nil otherwise
+	stopped   chan struct{}
 }
 
 // isDoc: a PDF, a database or another document, which viewers' pages show themselves (the stream carries a card)
@@ -96,10 +97,12 @@ func (n *Number) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// dataDir: everything the app keeps, ~/Library/Application Support/Mouse Party
-func dataDir() string {
-	dir, _ := os.UserConfigDir()
-	return filepath.Join(dir, "Mouse Party")
+func cacheDir() string {
+	d, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(d, "Mouse Party")
 }
 
 // loadConfig: the settings kept in the party, or the defaults (p nil: nothing kept)

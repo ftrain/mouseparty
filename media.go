@@ -182,7 +182,7 @@ type Probe struct {
 
 func probe(path string) Probe {
 	if findTool("ffmpeg") == "" {
-		return Probe{Error: "ffmpeg not found (brew install ffmpeg)"}
+		return Probe{Error: "ffmpeg not found (" + toolHint("ffmpeg") + ")"}
 	}
 	info := inspect(path)
 	if info.Error != "" {
@@ -202,6 +202,8 @@ func probe(path string) Probe {
 	}
 	return p
 }
+
+func init() { api.DisableConfigDir() }
 
 // pdfPages: how many pages a PDF has (0: not one that can be opened)
 func pdfPages(path string) int {

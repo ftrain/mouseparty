@@ -1,0 +1,76 @@
+#!/bin/sh
+self=$(readlink -f "$0")
+here=$(dirname "$self")
+cache=$({ ldconfig -p || /sbin/ldconfig -p || /usr/sbin/ldconfig -p; } 2>/dev/null)
+tab=$(printf '\t')
+
+has() {
+    case $cache in
+    *"$tab$1 (libc6,x86-64"*) return 0 ;;
+    esac
+    found=1
+    set -f
+    IFS=:
+    for dir in $LD_LIBRARY_PATH /usr/lib64 /lib64 /usr/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu /usr/lib /lib; do
+        if [ -n "$dir" ] && [ -e "$dir/$1" ]; then
+            found=0
+            break
+        fi
+    done
+    unset IFS
+    set +f
+    return $found
+}
+
+unpacked() {
+    case ${here##*/} in
+    appimage_extracted_*) ;;
+    *) return 1 ;;
+    esac
+    [ -z "${NO_CLEANUP+set}" ] && [ -n "${APPDIR:-}" ] && [ "$(readlink -f "$APPDIR")" = "$here" ] &&
+        [ "$(dirname "$here")" = "$(readlink -f "${TMPDIR:-/tmp}")" ]
+}
+
+shared=
+if unpacked && command -v flock >/dev/null 2>&1; then
+    exec 9<"$self"
+    if flock -s 9; then
+        shared=1
+        trap : HUP INT TERM
+    else
+        exec 9<&-
+    fi
+fi
+
+finish() {
+    if [ -n "$shared" ] && flock -n -x 9 && mv "$here" "$here.$$"; then
+        rm -rf "$here.$$"
+    fi
+    exit "$1"
+}
+
+missing=
+has libgtk-3.so.0 || missing="GTK 3"
+has libwebkit2gtk-4.1.so.0 || missing="${missing:+$missing and }WebKitGTK 4.1"
+if [ -z "$missing" ]; then
+    [ -n "$shared" ] || exec "$here/mouseparty" "$@"
+    "$here/mouseparty" "$@" 9<&-
+    finish $?
+fi
+
+text="Mouse Party needs WebKitGTK 4.1 and GTK 3, and this computer doesn't have $missing.
+
+To install them on Fedora, run this in a terminal:
+
+    sudo dnf install webkit2gtk4.1
+
+On another Linux, install its WebKitGTK 4.1 package. Then open Mouse Party again."
+printf '%s\n' "$text" >&2
+if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    if command -v zenity >/dev/null 2>&1; then
+        zenity --error --title="Mouse Party" --no-wrap --text="$text" >/dev/null 2>&1
+    elif command -v kdialog >/dev/null 2>&1; then
+        kdialog --title "Mouse Party" --error "$text" >/dev/null 2>&1
+    fi
+fi
+finish 1

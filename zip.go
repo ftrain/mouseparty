@@ -12,9 +12,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 const (
@@ -48,21 +53,23 @@ func unzip(path string) (string, error) {
 	}
 
 	// a zip of one folder is that folder, not a folder in a folder
-	top := ""
+	var entries []zipEntry
 	for _, f := range r.File {
-		name := strings.TrimSuffix(f.Name, "/")
-		if !keepInZip(name) {
-			continue
+		if name, ok := zipName(f, runtime.GOOS); ok {
+			entries = append(entries, zipEntry{f, name})
 		}
-		first, _, _ := strings.Cut(name, "/")
+	}
+	top := ""
+	for _, e := range entries {
+		first, _, _ := strings.Cut(e.name, "/")
 		if top == "" {
 			top = first
 		}
-		if first != top || first == name && !f.FileInfo().IsDir() {
+		if first != top || first == e.name && !zipDir(e.f) {
 			top = "\x00" // two things at the top, or a file there
 		}
 	}
-	base := strings.TrimSuffix(path, filepath.Ext(path))
+	base := zipFolder(path, runtime.GOOS)
 	strip := ""
 	if top != "" && top != "\x00" {
 		base, strip = filepath.Join(filepath.Dir(path), top), top+"/"
@@ -77,55 +84,105 @@ func unzip(path string) (string, error) {
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		return "", err
 	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return dir, err
+	}
+	defer root.Close()
+	mark := zoneMark(path)
 	var written uint64
-	for _, f := range r.File {
-		name := strings.TrimSuffix(f.Name, "/")
-		if !keepInZip(name) || f.Mode()&os.ModeSymlink != 0 {
+	var clash error
+	for _, e := range entries {
+		if e.f.Mode()&os.ModeSymlink != 0 {
 			continue
 		}
-		inner := strings.TrimPrefix(name, strings.TrimSuffix(strip, "/"))
-		inner = strings.TrimPrefix(inner, "/")
+		inner := strings.TrimPrefix(strings.TrimPrefix(e.name, strings.TrimSuffix(strip, "/")), "/")
 		if inner == "" {
 			continue // the one folder itself
 		}
-		to := filepath.Join(dir, filepath.FromSlash(inner))
-		if f.FileInfo().IsDir() {
-			os.MkdirAll(to, 0o755)
+		rel := filepath.FromSlash(inner)
+		if zipDir(e.f) {
+			root.MkdirAll(rel, 0o755)
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
-			return dir, err
+		if parent := filepath.Dir(rel); parent != "." {
+			if err := root.MkdirAll(parent, 0o755); err != nil {
+				return dir, fmt.Errorf("%s: %w", e.f.Name, err)
+			}
 		}
-		got, err := unzipFile(f, to, unzipBytesMax-written)
+		got, err := unzipFile(e.f, root, rel, unzipBytesMax-written)
 		written += got
-		if err != nil {
-			return dir, fmt.Errorf("%s: %w", name, err)
+		switch {
+		case errors.Is(err, fs.ErrExist):
+			if clash == nil {
+				clash = fmt.Errorf("%s: %w", e.f.Name, err)
+			}
+		case err != nil:
+			return dir, fmt.Errorf("%s: %w", e.f.Name, err)
+		default:
+			mark(filepath.Join(dir, rel))
 		}
 	}
-	return dir, nil
+	return dir, clash
 }
 
-// keepInZip: a name inside the zip that is unpacked: one that stays in the folder, and isn't hidden or macOS's
-func keepInZip(name string) bool {
-	if name == "" || !filepath.IsLocal(filepath.FromSlash(name)) {
-		return false
+func zipFolder(path, goos string) string {
+	if goos != "windows" {
+		return strings.TrimSuffix(path, filepath.Ext(path))
 	}
-	for _, part := range strings.Split(name, "/") {
-		if part == "__MACOSX" || strings.HasPrefix(part, ".") {
-			return false
+	return filepath.Join(filepath.Dir(path), safeName(strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)), true))
+}
+
+type zipEntry struct {
+	f    *zip.File
+	name string
+}
+
+var zipJunk = map[string]bool{"__macosx": true, "thumbs.db": true, "desktop.ini": true}
+
+func zipName(f *zip.File, goos string) (string, bool) {
+	name := f.Name
+	if goos != "darwin" && !utf8.ValidString(name) {
+		name, _ = charmap.CodePage437.NewDecoder().String(name)
+	}
+	name = strings.ReplaceAll(name, `\`, "/")
+	if strings.HasPrefix(name, "/") || zipHidden(f) {
+		return "", false
+	}
+	var parts []string
+	for _, part := range strings.Split(strings.TrimSuffix(name, "/"), "/") {
+		switch {
+		case part == "":
+			continue
+		case strings.HasPrefix(part, ".") || zipJunk[strings.ToLower(part)]:
+			return "", false
 		}
+		if goos == "windows" {
+			part = safeName(part, true)
+		}
+		parts = append(parts, part)
 	}
-	return true
+	return strings.Join(parts, "/"), len(parts) > 0
+}
+
+func zipDir(f *zip.File) bool { return f.FileInfo().IsDir() || strings.HasSuffix(f.Name, `\`) }
+
+func zipHidden(f *zip.File) bool {
+	switch f.CreatorVersion >> 8 {
+	case 0, 10, 14:
+		return f.ExternalAttrs&0x06 != 0
+	}
+	return false
 }
 
 // unzipFile writes one file, no more than room bytes of it (its size in the zip can be a lie)
-func unzipFile(f *zip.File, to string, room uint64) (uint64, error) {
+func unzipFile(f *zip.File, root *os.Root, to string, room uint64) (uint64, error) {
 	in, err := f.Open()
 	if err != nil {
 		return 0, err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	out, err := root.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return 0, err
 	}

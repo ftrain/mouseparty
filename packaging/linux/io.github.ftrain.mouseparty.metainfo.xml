@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ftrain.mouseparty</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Mouse Party</name>
+  <summary>Have friends over online: movies, chat and games</summary>
+  <developer id="io.github.ftrain">
+    <name>Paul Ford</name>
+  </developer>
+  <description>
+    <p>
+      Mouse Party hosts a watch party from this computer. Drag in movies, music, PDFs, documents and
+      SQLite databases, copy the link, and friends open it in their browsers to watch together, chat,
+      play games and draw.
+    </p>
+    <p>
+      There is no server: the party runs from this computer, and nothing of it is left behind when the
+      app quits.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.ftrain.mouseparty.desktop</launchable>
+  <provides>
+    <binary>mouseparty</binary>
+  </provides>
+  <url type="homepage">https://ftrain.github.io/mouseparty/</url>
+  <url type="bugtracker">https://github.com/ftrain/mouseparty/issues</url>
+  <url type="vcs-browser">https://github.com/ftrain/mouseparty</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://ftrain.github.io/mouseparty/shots/window.png</image>
+      <caption>The list of what's playing</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://ftrain.github.io/mouseparty/shots/together.png</image>
+      <caption>Friends watching together in their browsers</caption>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+  </content_rating>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+</component>

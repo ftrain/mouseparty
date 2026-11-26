@@ -1,9 +1,11 @@
 # Builds (scripts/build_mac_app.sh): Wails writes the app to packaging/bin,
-# the script copies it to dist; build/vendor holds the static ffmpeg
+# the script copies it to dist
 packaging/bin/
 dist/
 /build
 /mouseparty
+/mouseparty.exe
+*.syso
 
 # Claude Code's worktrees for helpers
 .claude/worktrees/

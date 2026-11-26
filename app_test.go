@@ -1,23 +1,41 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/menu"
 )
 
-// Every test's HOME is its own data folder (dataDir): on Linux, XDG_CONFIG_HOME
-// (set on GitHub's runners) would put them all in one, each seeing the others' lists
-func TestMain(m *testing.M) {
-	os.Unsetenv("XDG_CONFIG_HOME")
-	if len(os.Args) > 1 && os.Args[1] == siteArg { // the viewer site of a host under test, in its sandbox (site.go)
-		os.Exit(siteMain())
-	}
-	os.Exit(m.Run())
+func testApp(t *testing.T) *App {
+	t.Helper()
+	a := NewApp(standby)
+	a.hostSetup = testHosting
+	go a.run()
+	t.Cleanup(func() {
+		for end := time.Now().Add(30 * time.Second); hostStarting(a) && time.Now().Before(end); {
+			time.Sleep(50 * time.Millisecond)
+		}
+		a.shutdown(nil)
+	})
+	return a
+}
+
+func testHosting(h *Host) {
+	h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
+}
+
+func hostStarting(a *App) bool {
+	var starting bool
+	a.wait(func() { starting = a.hostStarting })
+	return starting
 }
 
 // The whole app without its window: host on free ports (no router, no tunnel),
@@ -28,7 +46,7 @@ func TestPlayThroughTheList(t *testing.T) {
 	if findTool("mediamtx") == "" || findTool("ffmpeg") == "" {
 		t.Skip("needs mediamtx and ffmpeg")
 	}
-	t.Setenv("HOME", t.TempDir()) // never the real settings (dataDir)
+	tempHome(t) // never the real settings (dataDir)
 	dir := t.TempDir()
 	var clips []string
 	for i, tone := range []int{440, 660, 880} {
@@ -41,13 +59,8 @@ func TestPlayThroughTheList(t *testing.T) {
 		clips = append(clips, clip)
 	}
 
-	a := NewApp(standby)
-	a.hostSetup = func(h *Host) {
-		h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers, h.Cloudflared = freePort(), freeICEPort(), false, false, ""
-	}
-	go a.run()
+	a := testApp(t)
 	go a.watchFiles()
-	defer a.shutdown(nil)
 	a.wait(func() { a.cfg.Countdown = 1 })
 	until := func(what string, seconds int, ok func(View) bool) View {
 		t.Helper()
@@ -68,7 +81,7 @@ func TestPlayThroughTheList(t *testing.T) {
 	a.AddPaths(clips, -1, -1)
 	until("making the link", 10, func(v View) bool { return v.Link == "spinner" && len(v.Rows) == 3 && !v.PlayOn })
 	v := until("link ready", 20, func(v View) bool { return v.LinkPress && v.PlayOn })
-	if v.LinkNote != "Wi-Fi only" || v.Rows[0].Title != "Clip 1" || v.Rows[0].Length != "0:00:04" {
+	if v.LinkNote != lanNote || v.Rows[0].Title != "Clip 1" || v.Rows[0].Length != "0:00:04" {
 		t.Fatalf("%+v", v)
 	}
 
@@ -78,6 +91,9 @@ func TestPlayThroughTheList(t *testing.T) {
 	a.PlayClicked()
 	until("Stop, counting down", 5, func(v View) bool { return v.Play == "stop" && v.Rows[0].Now && !v.Slider.On })
 	until("the first clip, seekable", 10, func(View) bool { return state() == "movie" })
+	if log := a.LogText(); strings.Contains(log, "The countdown exited with code") {
+		t.Errorf("the countdown card failed:\n%s", log)
+	}
 	until("the playhead moving", 5, func(v View) bool { return v.Slider.On && v.Slider.Max > 3.9 && v.Slider.Value > 0.3 })
 	a.Seek(2.5)
 	until("back from the seek", 10, func(v View) bool { return state() == "movie" && v.Slider.Value >= 2.5 })
@@ -105,7 +121,7 @@ func TestPlayThroughTheList(t *testing.T) {
 
 // Stop, a quit or another row keeps a video's place; played through, or barely started, it's from the top
 func TestKeepPlace(t *testing.T) {
-	t.Setenv("HOME", t.TempDir()) // never the real party file
+	tempHome(t) // never the real party file
 	movie := &Item{Path: filepath.Join(t.TempDir(), "Movie.mkv"), Kind: "video", Duration: 3600}
 	a := NewApp(standby)
 	go a.run()
@@ -153,4 +169,148 @@ func TestKeepPlace(t *testing.T) {
 			t.Errorf("after a quit: %+v", b.cfg.Queue)
 		}
 	})
+}
+
+func TestDroppedFolderLeavesHiddenOut(t *testing.T) {
+	tempHome(t)
+	dir := filepath.Join(t.TempDir(), "Week 3")
+	for _, f := range []string{"a.md", ".c.md", ".hidden/b.md", "sub/d.md", "sub/.Trashes/e.md"} {
+		p := filepath.Join(dir, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := testApp(t)
+	a.addPaths([]string{dir}, -1, -1)
+	a.addPaths([]string{filepath.Join(dir, ".hidden")}, -1, -1)
+	var got []string
+	a.wait(func() {
+		for _, it := range a.cfg.Queue {
+			rel, _ := filepath.Rel(dir, it.Path)
+			got = append(got, filepath.ToSlash(rel))
+		}
+	})
+	if strings.Join(got, " ") != "a.md sub/d.md .hidden/b.md" {
+		t.Fatal(got)
+	}
+}
+
+func TestLinkForgottenWhileItIsMade(t *testing.T) {
+	tempHome(t)
+	a := testApp(t)
+	a.forgetLink(context.Background(), a.hostLinks())
+	if !a.linkForgotten.Load() {
+		t.Fatal("a quit before the link was made left shutdown to read the clipboard, after the window has gone")
+	}
+}
+
+func TestSessionEndSavesAndPutsNothingIn(t *testing.T) {
+	tempHome(t)
+	a := testApp(t)
+	staged := filepath.Join(t.TempDir(), "MouseParty-next")
+	if err := os.WriteFile(staged, []byte("next"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a.wait(func() {
+		a.cfg.Welcomed = true
+		a.update.state, a.update.staged, a.update.latest, a.update.restart = "ready", staged, "9.9.9", true
+	})
+	a.quitAtSessionEnd(nil)
+	p, _ := openTheParty(func(string) {})
+	welcomed := loadConfig(p).Welcomed
+	p.close()
+	if !welcomed {
+		t.Error("the session ended before what the app holds was saved")
+	}
+	var state string
+	a.wait(func() { state = a.update.state })
+	if log := a.LogText(); state != "ready" || strings.Contains(log, "9.9.9") || strings.Contains(log, "update in") {
+		t.Errorf("the update was put in as the session ended, where it would be cut off halfway (state %q):\n%s", state, log)
+	}
+	if _, err := os.Stat(staged); err != nil {
+		t.Error("the staged update is gone:", err)
+	}
+}
+
+func TestSessionEndLetsGoInTime(t *testing.T) {
+	tempHome(t)
+	a := testApp(t)
+	release := make(chan struct{})
+	defer close(release)
+	a.do(func() { <-release })
+	ended := make(chan time.Duration, 1)
+	began := time.Now()
+	go func() {
+		a.quitAtSessionEnd(nil)
+		ended <- time.Since(began)
+	}()
+	select {
+	case took := <-ended:
+		if took < sessionGrace {
+			t.Errorf("with its work stuck, the session's end let go after %v, without waiting %v for it", took.Round(time.Millisecond), sessionGrace)
+		}
+	case <-time.After(3 * sessionGrace):
+		t.Errorf("with its work stuck, the session's end didn't let go after %v", 3*sessionGrace)
+	}
+}
+
+func TestNoUpdateCheckWhileLocked(t *testing.T) {
+	tempHome(t)
+	a := testApp(t)
+	click := func() (state, note string) {
+		t.Helper()
+		var m *menu.Menu
+		a.wait(func() { m = a.menu() })
+		var check *menu.MenuItem
+		for _, top := range m.Items {
+			if top.SubMenu == nil {
+				continue
+			}
+			for _, it := range top.SubMenu.Items {
+				if strings.HasPrefix(strings.ReplaceAll(it.Label, "&", ""), "Check for Updates") {
+					check = it
+				}
+			}
+		}
+		if check == nil {
+			t.Fatal("no Check for Updates… in the menus")
+		}
+		if !check.Disabled {
+			check.Click(&menu.CallbackData{MenuItem: check})
+		}
+		a.wait(func() {})
+		a.wait(func() { state, note = a.update.state, a.update.note })
+		return state, note
+	}
+	a.wait(func() { a.locked = true })
+	if state, note := click(); state != "" {
+		t.Fatalf("Check for Updates… looked for one while the party was locked (%q: %s)", state, note)
+	}
+	a.wait(func() { a.locked = false })
+	if state, _ := click(); state == "" {
+		t.Fatal("Check for Updates… didn't look for one once the party was open")
+	}
+}
+
+func TestLogKeptOffAPipe(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("macOS sends Finder's apps' stderr nowhere, so the log always goes there")
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	was := os.Stderr
+	os.Stderr = w
+	defer func() {
+		os.Stderr = was
+		r.Close()
+		w.Close()
+	}()
+	if stderrForLog() {
+		t.Fatal("a pipe on stderr was taken for a terminal")
+	}
 }

@@ -2,7 +2,7 @@
     "name": "mouseparty-web",
     "private": true,
     "type": "module",
-    "description": "Mouse Party's two pages in TypeScript: the viewer page (web/viewer, built into host_web/) and the Mac app's window (web/window, built into frontend/).",
+    "description": "Mouse Party's two pages in TypeScript: the viewer page (web/viewer, built into host_web/) and the app's window (web/window, built into frontend/).",
     "license": "MIT",
     "engines": {
         "node": ">=24"

@@ -1,11 +1,19 @@
 # Mouse Party
 
-A Mac app for watching movies with friends online. Your Mac hosts the party;
-there's no server and no account, and nothing is left behind when you quit.
+An app for watching movies with friends online, for macOS, Linux (Fedora) and
+Windows. Your computer hosts the party; there's no server and no account, and
+nothing is left behind when you quit.
 
-[Website](https://ftrain.github.io/mouseparty/) ·
-[Download](https://github.com/ftrain/mouseparty/releases/latest/download/MouseParty-macos-arm64.dmg)
-(Apple Silicon, macOS 13 or later)
+[Website](https://ftrain.github.io/mouseparty/) · Downloads:
+
+- macOS: [MouseParty-macos-arm64.dmg](https://github.com/ftrain/mouseparty/releases/latest/download/MouseParty-macos-arm64.dmg)
+  (Apple Silicon, macOS 13 or later)
+- Linux: [MouseParty-linux-x86_64.AppImage](https://github.com/ftrain/mouseparty/releases/latest/download/MouseParty-linux-x86_64.AppImage),
+  which updates itself, or [MouseParty-linux-x86_64.rpm](https://github.com/ftrain/mouseparty/releases/latest/download/MouseParty-linux-x86_64.rpm)
+  for `sudo dnf install` (x86_64, Fedora 43 or later; the AppImage needs GTK 3,
+  WebKitGTK 4.1 and glibc 2.38 or later: on Fedora, `sudo dnf install webkit2gtk4.1`)
+- Windows: [MouseParty-windows-x86_64-setup.exe](https://github.com/ftrain/mouseparty/releases/latest/download/MouseParty-windows-x86_64-setup.exe)
+  (x86_64, Windows 10 or later; installs for you alone, no administrator needed)
 
 ## What it does
 
@@ -21,20 +29,33 @@ there's no server and no account, and nothing is left behind when you quit.
   call, and shared documents, slides and sheets.
 - Subtitles from the movie or a file beside it, turned on by each viewer.
 - Up to ten viewers by default (`max_viewers` in Settings).
-- Guest-facing parts run in a macOS sandbox. Only send the link to people you
-  trust.
-- Keeps one file, `~/Library/Application Support/Mouse Party/party.sqlite`,
-  which you can encrypt with a passcode or erase from the Party menu.
-- Updates itself.
+- Guest-facing parts run in a sandbox: macOS's own (Seatbelt) on a Mac, which
+  keeps them from your files, from starting programs and from all but the
+  network they need; Landlock and seccomp on Linux, the same but that their
+  ports are held on any address (and with Linux older than 6.12, they can
+  signal other programs); and on Windows a job object with a low-integrity
+  token, which keeps them from writing your files, starting programs and
+  outliving the app, though not from reading files, using the network or
+  reaching one another. Settings > Security says which, on this computer.
+  Only send the link to people you trust.
+- Keeps one file, `party.sqlite` (beside it on Linux and Windows a `window.json`
+  with the window's place, and on Windows WebView2's folder), which you can
+  encrypt with a passcode or erase from the Party menu: in `~/Library/Application Support/Mouse Party` on
+  a Mac, `~/.local/share/Mouse Party` on Linux, and
+  `%LOCALAPPDATA%\Mouse Party` on Windows.
+- Updates itself (the RPM is updated by installing the next one).
 - Contacts no one but GitHub (to check for updates), Cloudflare (for the link)
-  and the sites you add download links from. No analytics, no crash reports.
+  and the sites you add download links from, and on a Windows without WebView2,
+  Microsoft (to install it). No analytics, no crash reports.
 
 ## Building
 
 ```bash
 scripts/setup.sh                           # fetch and build what it needs
 scripts/test.sh                            # run the tests
-BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # build the app and disk image
+BUNDLE_FFMPEG=1 scripts/build_mac_app.sh   # on a Mac: the app and disk image
+RPM=1 scripts/build_linux_app.sh           # on Fedora: the AppImage (and, with RPM=1, the RPM)
+scripts/build_windows_app.sh               # on Fedora: the Windows installer
 ```
 
 `CLAUDE.md` describes every file; `docs/` has the design notes.

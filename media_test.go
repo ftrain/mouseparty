@@ -2,10 +2,14 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+
+	"golang.org/x/image/font/gofont/gomono"
 )
 
 func TestWebVTTLinesAreTimedAndCleaned(t *testing.T) {
@@ -27,6 +31,141 @@ func TestLanguagesComeOutAsTwoLetters(t *testing.T) {
 	}
 	if languageName("ger") != "German" || languageName("und") != "" || languageName("xyz") != "XYZ" {
 		t.Fatal(languageName("ger"), languageName("xyz"))
+	}
+}
+
+// The host's language from its locale settings: Linux's LANGUAGE list, then LC_ALL, LC_MESSAGES
+// and LANG; Windows's preferred languages ("en-US"); never C or POSIX
+func TestLocalesComeOutAsTwoLetters(t *testing.T) {
+	for want, env := range map[string]map[string]string{
+		"fr": {"LANGUAGE": "fr_CA:en", "LANG": "de_DE.UTF-8"},
+		"de": {"LANGUAGE": ":", "LC_MESSAGES": "de_AT@euro", "LANG": "en_US.UTF-8"},
+		"sr": {"LC_ALL": "sr@latin"},
+		"pt": {"LANG": "pt_BR.UTF-8"},
+		"":   {"LANG": "C.UTF-8", "LC_ALL": "POSIX"},
+	} {
+		if got := envLanguage(func(k string) string { return env[k] }); got != want {
+			t.Errorf("%v: %q, not %q", env, got, want)
+		}
+	}
+	if firstLanguage([]string{"zh-Hans-CN", "en-US"}) != "zh" || firstLanguage([]string{"", "nb-NO"}) != "nb" ||
+		firstLanguage(nil) != "" {
+		t.Fatal(firstLanguage([]string{"zh-Hans-CN"}))
+	}
+}
+
+// What a filter is given reaches ffmpeg whole: both levels of a filtergraph's escaping, and no quoting
+func TestFilterValuesAreEscapedTwice(t *testing.T) {
+	for in, want := range map[string]string{
+		"/tmp/mouseparty-1.txt":  "/tmp/mouseparty-1.txt",
+		"a:b":                    `a\\:b`,
+		"a'b":                    `a\\\'b`,
+		"a,b;c":                  `a\,b\;c`,
+		"[x]":                    `\[x\]`,
+		`a\b`:                    `a\\\\b`,
+		" a ":                    `\\\ a\\\ `,
+		`C:\Users\O'Brien\t.txt`: `C\\:\\\\Users\\\\O\\\'Brien\\\\t.txt`,
+		"caf\xc3\xa9 \xff":       "caf\xc3\xa9\\\\\\ \xff",
+	} {
+		if got := filterValue(in); got != want {
+			t.Errorf("%q: %s, not %s", in, got, want)
+		}
+	}
+}
+
+// ffmpeg itself reads the font, the words and the subtitles at paths with everything in them a
+// filter treats as its own (and with no fonts of the system's to fall back on); and a Windows path,
+// as a name with its backslashes and colon, the same way
+func TestFilterValuesReachFFmpeg(t *testing.T) {
+	ff := findTool("ffmpeg")
+	if ff == "" {
+		t.Skip("needs ffmpeg")
+	}
+	if out, _ := exec.Command(ff, "-hide_banner", "-filters").Output(); !strings.Contains(string(out), " drawtext ") ||
+		!strings.Contains(string(out), " subtitles ") {
+		t.Skip("needs an ffmpeg with drawtext and subtitles")
+	}
+	odd := "it's [a],b; c=d 50% é"
+	switch runtime.GOOS {
+	case "linux":
+		odd = " " + odd + `: back\slash ` + "\xff" // a byte that isn't UTF-8: only Linux's filesystems take one
+	case "darwin":
+		odd = " " + odd + `: back\slash`
+	}
+	dir := filepath.Join(t.TempDir(), odd)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	put := func(name string, b []byte) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	font := put("Go Mono, it's.ttf", gomono.TTF)
+	words := put("words [1].txt", []byte("Mouse Party"))
+	subs := put("subs; en.srt", []byte("1\n00:00:00,000 --> 00:00:05,000\nHello\n"))
+	noFonts := put("fonts.conf", []byte(`<?xml version="1.0"?><fontconfig></fontconfig>`))
+	run := func(vf string) {
+		t.Helper()
+		cmd := exec.Command(ff, "-v", "error", "-nostdin", "-f", "lavfi", "-i", "color=c=black:s=320x240:d=1", "-vf", vf,
+			"-frames:v", "1", "-c:v", "png", "-f", "null", "-")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "FONTCONFIG_FILE="+noFonts)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s: %v\n%s", vf, err, out)
+		}
+	}
+	if runtime.GOOS == "windows" {
+		font = filepath.Base(font)
+	}
+	run("drawtext=fontfile=" + filterValue(font) + ":textfile=" + filterValue(words) + ":expansion=none:fontsize=24:x=8:y=8," +
+		"subtitles=filename=" + filterValue(subs))
+	if runtime.GOOS != "windows" {
+		windowsy := `C:\Users\O'Brien\AppData\words.txt`
+		put(windowsy, []byte("Mouse Party"))
+		run("drawtext=fontfile=" + filterValue(font) + ":textfile=" + filterValue(windowsy) + ":expansion=none")
+	}
+}
+
+// A card is drawn with the app's own font, found on this system, and its words as they are
+func TestCardsDrawInTheirFont(t *testing.T) {
+	tempHome(t)
+	ff := findTool("ffmpeg")
+	if ff == "" {
+		t.Skip("needs ffmpeg")
+	}
+	if out, _ := exec.Command(ff, "-hide_banner", "-filters").Output(); !strings.Contains(string(out), " drawtext ") {
+		t.Skip("needs an ffmpeg with drawtext")
+	}
+	dir, font := cardFontRef()
+	if font == "" {
+		t.Fatal("no font for cards")
+	}
+	if dir == "" && !filepath.IsAbs(font) {
+		t.Fatal("a font by name, with nowhere to find it:", font)
+	}
+	args, temps := documentCommand("pdf", "It's [the] notes, part 1; 50%", StreamOpts{URL: "rtsp://127.0.0.1:1/live", Bitrate: "2500k", Preset: "veryfast"})
+	defer removeAll(temps)
+	vf := ""
+	for i, a := range args {
+		if a == "-vf" {
+			vf = args[i+1]
+		}
+	}
+	if !strings.Contains(vf, "fontfile=") || strings.Contains(vf, "textfile='") {
+		t.Fatal(vf)
+	}
+	noFonts := filepath.Join(t.TempDir(), "fonts.conf")
+	os.WriteFile(noFonts, []byte(`<?xml version="1.0"?><fontconfig></fontconfig>`), 0o600)
+	cmd := exec.Command(ff, "-v", "error", "-nostdin", "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=1", "-vf", vf,
+		"-frames:v", "1", "-c:v", "png", "-f", "null", "-")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "FONTCONFIG_FILE="+noFonts)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
 	}
 }
 

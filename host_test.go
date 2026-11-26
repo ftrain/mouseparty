@@ -1,13 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
-	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -90,22 +92,13 @@ func TestCloudflareIsAskedAgainAndHTTPIsNeverHandedOut(t *testing.T) {
 	if findTool("mediamtx") == "" {
 		t.Skip("needs mediamtx")
 	}
-	t.Setenv("HOME", t.TempDir())
+	tempHome(t)
 	retries, settle := tunnelRetries, cfSettle
 	tunnelRetries, cfSettle = []time.Duration{0, 50 * time.Millisecond, 50 * time.Millisecond}, 0
 	defer func() { tunnelRetries, cfSettle = retries, settle }()
 
-	unboxed(t) // the stand-in is a shell script, and a box lets its program start no other
-	dir := t.TempDir()
-	fake := filepath.Join(dir, "cloudflared") // says no twice, then gives a link and stays up
-	os.WriteFile(fake, []byte(`#!/bin/sh
-n=$(cat "`+dir+`/tries" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "`+dir+`/tries"
-echo "INF Requesting new quick Tunnel on trycloudflare.com..."
-if [ $n -lt 3 ]; then echo "quick tunnel provisioning failed with status 429: [10000] Tunnelstore request failed"; exit 1; fi
-echo "INF |  https://made-up-words-here.trycloudflare.com  |"
-echo "INF Registered tunnel connection connIndex=0 protocol=quic"
-exec sleep 60
-`), 0o755)
+	unboxed(t)
+	fake, dir := fakeTool(t, "cloudflared") // says no twice, then gives a link and stays up
 
 	h := NewHost(func(string) {}, findTool("mediamtx"), fake, standby)
 	h.HTTPPort, h.ICEPort, h.MapPorts, h.CleanLeftovers = freePort(), freeICEPort(), false, false
@@ -186,15 +179,10 @@ func TestMediaMTXTriesOtherPorts(t *testing.T) {
 	if real == "" {
 		t.Skip("needs mediamtx")
 	}
-	t.Setenv("HOME", t.TempDir())
-	unboxed(t) // the stand-in is a shell script, and a box lets its program start no other
-	dir := t.TempDir()
-	stand := filepath.Join(dir, "mediamtx")
-	script := fmt.Sprintf("#!/bin/sh\nn=$(cat %[1]s/runs 2>/dev/null || echo 0); echo $((n+1)) > %[1]s/runs; grep apiAddress \"$1\" >> %[1]s/apis\n"+
-		"[ \"$n\" -lt 2 ] && { echo 'ERR listen tcp 127.0.0.1:1: bind: address already in use'; exit 1; }\nexec %[2]q \"$@\"\n", dir, real)
-	if err := os.WriteFile(stand, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	tempHome(t)
+	unboxed(t) // a box lets its program start no other
+	stand, dir := fakeTool(t, "mediamtx")
+	t.Setenv(fakeRealEnv, real)
 	var said []string
 	var mu sync.Mutex
 	h := NewHost(func(s string) { mu.Lock(); said = append(said, s); mu.Unlock() }, stand, "", standby)
@@ -216,5 +204,221 @@ func TestMediaMTXTriesOtherPorts(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(said, "\n"), "restarting it") {
 		t.Errorf("restarted on the same ports: %q", said)
+	}
+}
+
+// A session's folder stays while the session lasts, however little of it this app can see (on Linux its
+// programs may be in a PID namespace of their own, as in a container, and no command line here names the
+// folder): the session holds a lock on a file in it, and a clean-up takes a folder only once it has taken
+// that lock. A folder whose session has gone is taken; on Linux and macOS one still being made, with no
+// lock in it yet, is left.
+func TestLeftoverFoldersGoOnlyOnceTheirLockIsFree(t *testing.T) {
+	tmp := t.TempDir()
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, tmp)
+	}
+	live, lock := sessionFolder(t)
+	defer lock.Close()
+	gone, ended := sessionFolder(t)
+	ended.Close()
+	making, err := os.MkdirTemp("", "mouseparty-host-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &Host{Log: func(string) {}, HTTPPort: freePort()}
+	h.killLeftovers()
+	h.killLeftovers()
+	if _, err := os.Stat(filepath.Join(live, mediamtxYML)); err != nil {
+		t.Error("a live session's folder was taken:", err)
+	}
+	if _, err := os.Stat(gone); !os.IsNotExist(err) {
+		t.Error("a folder whose session had gone is still there:", err)
+	}
+	if _, err := os.Stat(making); err != nil && runtime.GOOS != "windows" {
+		t.Error("a folder still being made was taken:", err)
+	}
+	lock.Close()
+	h.killLeftovers()
+	if _, err := os.Stat(live); !os.IsNotExist(err) {
+		t.Error("a folder is still there after its session let go of it:", err)
+	}
+}
+
+// A live session's programs are left alone by another app's clean-up, however often Play is pressed
+// there: its watchdog, the tool under the watchdog, and a cloudflared of the user's own that tunnels to
+// the same port. What a session left once its watchdog had gone is stopped (on Linux with this test as
+// the orphans' subreaper, as a desktop's systemd --user is), and its folder is taken once its lock is free.
+func TestLeftoversAreOnlyWhatASessionLeftBehind(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a job ends each of Windows's programs with the app: only folders are left (TestLeftoverFoldersGoOnlyOnceTheirLockIsFree)")
+	}
+	tempHome(t)
+	t.Setenv("TMPDIR", t.TempDir())
+	var live *Host
+	t.Cleanup(func() {
+		if live != nil {
+			live.Stop()
+		}
+	})
+	asSubreaper(t)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	standIn := func(name string) string {
+		p := filepath.Join(bin, name)
+		if err := os.Symlink(exe, p); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	mediamtx, cloudflared := standIn("mediamtx"), standIn("cloudflared")
+	var mu sync.Mutex
+	var said, liveSaid []string
+	sweeper := &Host{Log: func(s string) { mu.Lock(); said = append(said, s); mu.Unlock() }, HTTPPort: freePort()}
+	tunnel := []string{probeArg, "wait", "tunnel", "--no-autoupdate", "--url", tunnelOrigin(sweeper.HTTPPort)}
+
+	dir, lock := sessionFolder(t)
+	defer lock.Close()
+	held, keep, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer keep.Close()
+	session := watched(mediamtx, []string{probeArg, "wait", filepath.Join(dir, mediamtxYML)})
+	session.Stdin = held
+	sessionGone := startWaiting(t, session)
+	held.Close()
+	own := exec.Command(cloudflared, tunnel...)
+	startGroup(own)
+	ownGone := startWaiting(t, own)
+
+	if findTool("mediamtx") != "" {
+		live = NewHost(func(s string) { mu.Lock(); liveSaid = append(liveSaid, s); mu.Unlock() }, findTool("mediamtx"), "", standby)
+		live.HTTPPort, live.ICEPort, live.MapPorts, live.CleanLeftovers = freePort(), freeICEPort(), false, false
+		if err := live.Start(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	liveIsUp := func() {
+		t.Helper()
+		if live == nil {
+			return
+		}
+		live.mu.Lock()
+		tmp, api := live.tmp, live.ports["api"]
+		live.mu.Unlock()
+		if _, err := os.Stat(filepath.Join(tmp, mediamtxYML)); err != nil || !portOpen(api) {
+			t.Errorf("a live session's MediaMTX or its folder was taken: %v %v", err, portOpen(api))
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if strings.Contains(strings.Join(liveSaid, "\n"), "MediaMTX stopped") {
+			t.Errorf("a live session's MediaMTX was stopped: %q", liveSaid)
+		}
+	}
+
+	sweeper.killLeftovers()
+	sweeper.killLeftovers()
+	if goneWithin(sessionGone, time.Second) || goneWithin(ownGone, 0) {
+		mu.Lock()
+		defer mu.Unlock()
+		t.Fatalf("stopped a live session's program, or the user's own: %q", said)
+	}
+	if _, err := os.Stat(filepath.Join(dir, mediamtxYML)); err != nil {
+		t.Fatal("a live session's folder was taken:", err)
+	}
+	liveIsUp()
+
+	session.Process.Kill()
+	session.Wait()
+	left := exec.Command("/bin/sh", append([]string{"-c", `"$@" &`, "sh", cloudflared}, tunnel...)...)
+	startGroup(left)
+	leftGone := startWaiting(t, left)
+	left.Wait()
+	lock.Close()
+	sweeper.killLeftovers()
+	if !goneWithin(sessionGone, 10*time.Second) {
+		t.Error("what a session left once its watchdog had gone is still running")
+	}
+	if !goneWithin(leftGone, 10*time.Second) {
+		t.Error("a cloudflared left tunneling to the port is still running")
+	}
+	if goneWithin(ownGone, 0) {
+		t.Error("stopped the user's own cloudflared")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Error("the folder of a session that had gone is still there:", err)
+	}
+	liveIsUp()
+}
+
+func sessionFolder(t *testing.T) (string, *os.File) {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "mouseparty-host-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, mediamtxYML), []byte("logLevel: warn\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := holdSession(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir, lock
+}
+
+func startWaiting(t *testing.T, cmd *exec.Cmd) <-chan struct{} {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Stdout = w
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	up, gone := make(chan struct{}), make(chan struct{})
+	go func() {
+		lines := bufio.NewScanner(r)
+		for waiting := false; lines.Scan(); {
+			if !waiting && lines.Text() == "waiting" {
+				waiting = true
+				close(up)
+			}
+		}
+		r.Close()
+		close(gone)
+	}()
+	t.Cleanup(func() {
+		if !goneWithin(gone, 0) {
+			killGroup(cmd)
+		}
+		cmd.Wait()
+	})
+	select {
+	case <-up:
+	case <-gone:
+		t.Fatal(cmd.Args, "stopped as it started")
+	case <-time.After(20 * time.Second):
+		t.Fatal(cmd.Args, "didn't start")
+	}
+	return gone
+}
+
+func goneWithin(gone <-chan struct{}, within time.Duration) bool {
+	select {
+	case <-gone:
+		return true
+	default:
+	}
+	select {
+	case <-gone:
+		return true
+	case <-time.After(within):
+		return false
 	}
 }

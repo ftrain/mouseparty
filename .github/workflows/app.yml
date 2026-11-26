@@ -1,0 +1,646 @@
+# Build "Mouse Party.app" on an Apple Silicon runner and check it hosts, on every
+# push to main and every pull request: the disk image is kept as the run's artifact
+# (Actions tab > the run > Artifacts). A v* tag also attaches it to a release:
+#   git tag v1.0.0 && git push origin v1.0.0
+# Run it by hand from the Actions tab (workflow_dispatch) for any branch.
+#
+# Release builds carry everything: MediaMTX and cloudflared (pinned release
+# binaries) and Mouse Party's own cut-down static ffmpeg (scripts/build_ffmpeg.sh,
+# BUNDLE_FFMPEG), so they run on a Mac with nothing installed.
+#
+# A tag's build is signed with a Developer ID and notarized when the repository has these
+# secrets (Settings > Secrets and variables > Actions); without them it's signed ad hoc, and
+# the first open needs System Settings > Privacy & Security > Open Anyway (see README):
+#   MACOS_CERTIFICATE_P12        the "Developer ID Application" certificate and its key, exported
+#                                from Keychain Access as .p12, then base64 (base64 -i cert.p12 | pbcopy)
+#   MACOS_CERTIFICATE_PASSWORD   the password it was exported with
+#   APPLE_API_KEY_P8             an App Store Connect API key (Users and Access > Integrations >
+#                                App Store Connect API, "Developer" access): the .p8 file's text
+#   APPLE_API_KEY_ID             its key ID
+#   APPLE_API_ISSUER_ID          the issuer ID above the keys
+# Once a release is signed, every later one must be: the app takes only an update signed by
+# the same developer (updates_darwin.go checkBundle, updates_windows.go checkInstaller).
+#
+# Linux's and Windows's app files are also signed with Mouse Party's release key (minisign: each
+# <file>.minisig beside it, tools/signrelease), which those apps check before an update goes
+# anywhere (internal/releasesig): a tag isn't released without these secrets.
+#   MINISIGN_KEY                 the release key's secret half: the text of mouseparty.key
+#                                (go run ./tools/signrelease -new <dir> makes a pair; its public
+#                                half goes in internal/releasesig's PublicKey)
+#   MINISIGN_PASSWORD            the password it's encrypted with (mouseparty.password)
+#
+# A tag's release is published by two jobs: the Mac's as soon as the Mac's build and tests
+# pass (release), and Linux's and Windows's files added to it once theirs do
+# (release-linux-windows), so they never hold the Mac's up.
+name: App
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:                   # a newer push to the same branch replaces a build still running
+  group: app-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    runs-on: macos-15          # Apple Silicon; the app is arm64 only
+    outputs:
+      signed: ${{ steps.developer-id.outputs.signed }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v7   # the pages' TypeScript (scripts/build_web.sh)
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: MediaMTX and cloudflared
+        # their pinned, checked releases (scripts/fetch_tools.sh), as every build and test
+        # uses: not Homebrew's, which was behind (its MediaMTX 1.20.1 can't read the stand-by card)
+        run: |
+          scripts/fetch_tools.sh
+          echo "$PWD/build/tools" >> "$GITHUB_PATH"
+
+      - name: ffmpeg, cut down (cached until scripts/build_ffmpeg.sh changes)
+        id: ffmpeg
+        uses: actions/cache/restore@v6
+        with:
+          path: build/ffmpeg/bin
+          key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_ffmpeg.sh') }}
+
+      - name: Build ffmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: brew install meson ninja pkg-config && scripts/build_ffmpeg.sh
+
+      - name: Keep ffmpeg for next time
+        # saved now, not at the end: a later step failing would otherwise lose it
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: build/ffmpeg/bin
+          key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
+
+      - name: Python for Datasette, as WebAssembly (cached until scripts/build_python.sh or its packages change)
+        id: python
+        uses: actions/cache/restore@v6
+        with:
+          path: build/python/dist
+          key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_python.sh', 'scripts/python-requirements.txt', 'scripts/python-build-requirements.txt') }}
+
+      - name: Build Python
+        if: steps.python.outputs.cache-hit != 'true'
+        run: scripts/build_python.sh
+
+      - name: Keep Python for next time
+        if: steps.python.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: build/python/dist
+          key: ${{ steps.python.outputs.cache-primary-key }}
+
+      - name: The Developer ID, when the repository has one (a tag's build only)
+        id: developer-id
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          if [ -z "$CERT_P12" ]; then echo "No MACOS_CERTIFICATE_P12 secret: this build is signed ad hoc"; exit 0; fi
+          KC="$RUNNER_TEMP/signing.keychain-db"; KCPW=$(uuidgen)
+          security create-keychain -p "$KCPW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPW" "$KC"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPW" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          ID=$(security find-identity -v -p codesigning "$KC" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')
+          [ -n "$ID" ] || { echo "The certificate isn't a Developer ID Application one"; exit 1; }
+          echo "SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
+          echo "signed=yes" >> "$GITHUB_OUTPUT"
+          if [ -n "$API_KEY_P8" ]; then
+            printf '%s\n' "$API_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+            { echo "NOTARY_KEY=$RUNNER_TEMP/notary.p8"; echo "NOTARY_KEY_ID=$API_KEY_ID"; echo "NOTARY_ISSUER=$API_ISSUER"; } >> "$GITHUB_ENV"
+          else
+            echo "No APPLE_API_KEY_P8 secret: signed, but not notarized"
+          fi
+
+      - name: Build
+        env:
+          VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'dev' }} # a release knows its version, and updates itself (updates.go)
+        run: BUNDLE_FFMPEG=1 scripts/build_mac_app.sh
+
+      - name: The pages built are the ones checked in
+        # host_web/ and frontend/ hold what scripts/build_web.sh (run by the build) makes from web/: a change to the
+        # TypeScript goes in with what it builds, so Go alone builds the app from a clone
+        run: git diff --exit-code -- host_web frontend && test -z "$(git status --porcelain -- host_web frontend)"
+
+      - name: Playwright and Chromium, for the pages in a browser (browser_test.go)
+        # global, beside the pages' own pinned tools rather than in them: nothing of it is the app's
+        env:
+          PLAYWRIGHT: 1.63.0
+        run: |
+          npm install -g "playwright@$PLAYWRIGHT"
+          npx -y "playwright@$PLAYWRIGHT" install chromium
+          echo "NODE_PATH=$(npm root -g)" >> "$GITHUB_ENV"
+
+      - name: Tests
+        env:
+          NO_SKIPS: 1 # a test that skips is a layer gone missing (scripts/testreport)
+          # the app has no ffprobe, so that comparison is the nightly fuzz.yml's, with Homebrew's
+          ALLOW_SKIPS: ^(TestPreviewAudioCard|TestInspectAgreesWithFFprobe|TestLogKeptOffAPipe)$
+        run: scripts/test.sh
+
+      - name: Self-test the built app
+        # hosts from this runner (no router involved), checks the page, the
+        # stand-by stream and the WebRTC handshake, and publishes a countdown
+        # with the bundled ffmpeg
+        run: env -i HOME="$HOME" PATH=/usr/bin:/bin "dist/Mouse Party.app/Contents/MacOS/MouseParty" --selftest
+
+      - name: Fuzz the command graph, a minute of each fuzzer (fuzz.yml searches longer, nightly)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        env:
+          FUZZTIME: 1m
+        run: scripts/fuzz.sh
+
+      - name: Keep what the fuzzers found
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-failures
+          path: |
+            testdata/fuzz
+            apps/testdata/fuzz
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MouseParty-macos-arm64
+          path: dist/MouseParty-macos-arm64.dmg
+
+  linux:
+    runs-on: ubuntu-24.04
+    container: registry.fedoraproject.org/fedora:43
+    steps:
+      - name: Fedora's build tools, GTK 3 and WebKitGTK 4.1
+        run: >-
+          dnf -y install git tar xz bzip2 gzip unzip findutils diffutils which binutils make gcc gcc-c++ cmake
+          meson ninja-build nasm gperf pkgconf-pkg-config python3 openssl-devel zlib-ng-compat-devel libffi-devel
+          gtk3-devel webkit2gtk4.1-devel squashfs-tools rpm-build desktop-file-utils appstream
+
+      - uses: actions/checkout@v7
+
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: ffmpeg, cut down (cached until scripts/build_ffmpeg.sh changes)
+        id: ffmpeg
+        uses: actions/cache/restore@v6
+        with:
+          path: build/ffmpeg/bin
+          key: ffmpeg-linux-amd64-${{ hashFiles('scripts/build_ffmpeg.sh') }}
+
+      - name: Build ffmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: scripts/build_ffmpeg.sh
+
+      - name: Keep ffmpeg for next time
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: build/ffmpeg/bin
+          key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
+
+      - name: Python for Datasette, as WebAssembly (cached until scripts/build_python.sh or its packages change)
+        id: python
+        uses: actions/cache/restore@v6
+        with:
+          path: build/python/dist
+          key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_python.sh', 'scripts/python-requirements.txt', 'scripts/python-build-requirements.txt') }}
+
+      - name: Build Python
+        if: steps.python.outputs.cache-hit != 'true'
+        run: scripts/build_python.sh
+
+      - name: Keep Python for next time
+        if: steps.python.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: build/python/dist
+          key: ${{ steps.python.outputs.cache-primary-key }}
+
+      - name: Build the AppImage and the RPM
+        env:
+          VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'dev' }}
+        run: RPM=1 scripts/build_linux_app.sh
+
+      - name: The pages built are the ones checked in
+        run: git diff --exit-code -- host_web frontend && test -z "$(git status --porcelain -- host_web frontend)"
+
+      - name: Self-test the built app
+        run: env -i HOME="$HOME" PATH=/usr/bin:/bin dist/linux/mouseparty/mouseparty --selftest
+
+      - name: Self-test the AppImage
+        run: env -i HOME="$HOME" PATH=/usr/bin:/bin dist/MouseParty-linux-x86_64.AppImage --appimage-extract-and-run --selftest
+
+      - name: Install the RPM with dnf and self-test it
+        run: dnf -y install ./dist/MouseParty-linux-x86_64.rpm && env -i HOME="$HOME" PATH=/usr/bin:/bin mouseparty --selftest
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MouseParty-linux-x86_64
+          path: |
+            dist/MouseParty-linux-x86_64.AppImage
+            dist/MouseParty-linux-x86_64.rpm
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-tools
+          path: |
+            build/ffmpeg/bin/ffmpeg
+            build/python/dist
+
+  linux-test:
+    needs: linux
+    runs-on: ubuntu-24.04
+    container:
+      image: registry.fedoraproject.org/fedora:43
+      options: --security-opt seccomp=unconfined
+    steps:
+      - name: Fedora's tools, a font for the subtitles, and what Chromium needs (browser_test.go)
+        run: >-
+          dnf -y install git tar xz gzip unzip findutils diffutils which util-linux shadow-utils procps-ng python3 fontconfig
+          dejavu-sans-fonts alsa-lib at-spi2-atk at-spi2-core atk dbus-libs expat glib2 libX11 libXcomposite libXdamage libXext libXfixes
+          libXi libXrandr libXrender libdrm libxcb libxkbcommon mesa-libgbm nspr nss nss-util
+
+      - uses: actions/checkout@v7
+
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: The Linux build's ffmpeg and Python
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-tools
+          path: build
+
+      - run: chmod +x build/ffmpeg/bin/ffmpeg
+
+      - name: The AppImage the Linux build made (TestUpdateRealAppImage)
+        uses: actions/download-artifact@v4
+        with:
+          name: MouseParty-linux-x86_64
+          path: dist
+
+      - name: Playwright and Chromium, for the pages in a browser (browser_test.go)
+        env:
+          PLAYWRIGHT: 1.63.0
+          PLAYWRIGHT_BROWSERS_PATH: /opt/ms-playwright
+        run: |
+          npm install -g "playwright@$PLAYWRIGHT"
+          npx -y "playwright@$PLAYWRIGHT" install chromium
+          echo "NODE_PATH=$(npm root -g)" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" >> "$GITHUB_ENV"
+
+      - name: The kernel's Landlock and seccomp, which the boxes are made of (box_linux.go)
+        run: |
+          uname -r
+          grep -E '^(Seccomp|Seccomp_filters|NoNewPrivs):' /proc/self/status
+          python3 -I -c '
+          import ctypes, os
+          libc = ctypes.CDLL(None, use_errno=True)
+          abi = libc.syscall(ctypes.c_long(444), None, ctypes.c_long(0), ctypes.c_long(1))
+          if abi > 0:
+              print("Landlock ABI", abi)
+          else:
+              print("::error title=No Landlock::" + os.strerror(ctypes.get_errno()) + ": the boxes are off here, so the tests that need them skip")
+          '
+
+      - name: Tests, as someone who isn't root (two need a folder its owner can't delete from)
+        env:
+          NO_SKIPS: 1
+          ALLOW_SKIPS: ^(TestPreviewAudioCard|TestInspectAgreesWithFFprobe)$
+        run: |
+          useradd --create-home tester
+          chown -R tester "$GITHUB_WORKSPACE"
+          MOUSEPARTY_APPIMAGE="$GITHUB_WORKSPACE/dist/MouseParty-linux-x86_64.AppImage" runuser -u tester -- scripts/test.sh
+
+  fedora45:
+    needs: linux
+    runs-on: ubuntu-24.04
+    container: registry.fedoraproject.org/fedora:45
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: MouseParty-linux-x86_64
+          path: dist
+
+      - name: The AppImage, on a Fedora without GTK 3 or WebKitGTK 4.1, says what to install
+        run: |
+          chmod +x dist/MouseParty-linux-x86_64.AppImage
+          if env -i HOME="$HOME" PATH=/usr/bin:/bin dist/MouseParty-linux-x86_64.AppImage --appimage-extract-and-run --selftest 2>said.txt; then exit 1; fi
+          cat said.txt
+          grep -q 'sudo dnf install webkit2gtk4.1' said.txt
+
+      - name: Install the RPM with dnf and self-test it
+        run: dnf -y install ./dist/MouseParty-linux-x86_64.rpm && env -i HOME="$HOME" PATH=/usr/bin:/bin mouseparty --selftest
+
+      - name: Self-test the AppImage
+        run: |
+          chmod +x dist/MouseParty-linux-x86_64.AppImage
+          env -i HOME="$HOME" PATH=/usr/bin:/bin dist/MouseParty-linux-x86_64.AppImage --appimage-extract-and-run --selftest
+
+  windows:
+    needs: linux
+    runs-on: ubuntu-24.04
+    container: registry.fedoraproject.org/fedora:43
+    outputs:
+      signed: ${{ steps.certificate.outputs.signed }}
+    steps:
+      - name: Fedora's build tools, mingw-w64 and NSIS
+        run: >-
+          dnf -y install git tar xz bzip2 gzip unzip findutils diffutils which binutils make gcc gcc-c++ cmake
+          meson ninja-build nasm pkgconf-pkg-config python3 openssl-devel zlib-ng-compat-devel libffi-devel
+          mingw64-gcc mingw64-gcc-c++ mingw64-winpthreads-static mingw32-nsis osslsigncode
+
+      - uses: actions/checkout@v7
+
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: ffmpeg for Windows, cut down (cached until scripts/build_ffmpeg.sh changes)
+        id: ffmpeg
+        uses: actions/cache/restore@v6
+        with:
+          path: build/ffmpeg-windows-amd64/bin
+          key: ffmpeg-windows-amd64-${{ hashFiles('scripts/build_ffmpeg.sh') }}
+
+      - name: Build ffmpeg for Windows
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: TARGET=windows-amd64 scripts/build_ffmpeg.sh
+
+      - name: Keep ffmpeg for Windows for next time
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: build/ffmpeg-windows-amd64/bin
+          key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
+
+      - name: Python for Datasette, as WebAssembly (the Linux build's)
+        id: python
+        uses: actions/cache/restore@v6
+        with:
+          path: build/python/dist
+          key: python-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_python.sh', 'scripts/python-requirements.txt', 'scripts/python-build-requirements.txt') }}
+
+      - name: Build Python
+        if: steps.python.outputs.cache-hit != 'true'
+        run: scripts/build_python.sh
+
+      - name: The code-signing certificate, when the repository has one (a tag's build only)
+        id: certificate
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
+          PFX_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$PFX" ]; then echo "No WINDOWS_CERTIFICATE_PFX secret: this build is not signed"; exit 0; fi
+          echo "$PFX" | base64 --decode > "$RUNNER_TEMP/windows.pfx"
+          { echo "WINDOWS_PFX=$RUNNER_TEMP/windows.pfx"; echo "WINDOWS_TIMESTAMP_URL=http://timestamp.digicert.com"; } >> "$GITHUB_ENV"
+          { echo "WINDOWS_PFX_PASSWORD<<PFX_PASSWORD_END"; echo "$PFX_PASSWORD"; echo "PFX_PASSWORD_END"; } >> "$GITHUB_ENV"
+          echo "signed=yes" >> "$GITHUB_OUTPUT"
+
+      - name: Build the installer
+        env:
+          VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'dev' }}
+        run: scripts/build_windows_app.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MouseParty-windows-x86_64
+          path: dist/MouseParty-windows-x86_64-setup.exe
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-tools
+          path: |
+            build/ffmpeg-windows-amd64/bin/ffmpeg.exe
+            build/tools/windows-amd64
+            build/pandoc/pandoc.wasm
+            build/python/dist
+
+  windows-test:
+    needs: windows
+    runs-on: windows-latest
+    steps:
+      - name: Keep the repository's line endings (the tests compare bytes)
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: The Windows build's ffmpeg, MediaMTX, cloudflared, pandoc and Python
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-tools
+          path: build
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: MouseParty-windows-x86_64
+          path: dist
+
+      - name: Tests
+        shell: bash
+        env:
+          NO_SKIPS: 1
+          ALLOW_SKIPS: ^(TestPreviewAudioCard|TestInspectAgreesWithFFprobe|TestBrowser|TestTrimKeepsWhatItCannotDelete|TestBoxesKeepTheMacOut|TestLeftoversAreOnlyWhatASessionLeftBehind)$
+        run: |
+          export PATH="$PWD/build/ffmpeg-windows-amd64/bin:$PWD/build/tools/windows-amd64:$PATH"
+          go vet ./...
+          go test -json -timeout 30m ./... | go run ./scripts/testreport
+
+      - name: The Windows boxes with the window code linked in, as in a release
+        shell: bash
+        run: go test -tags desktop,production,wv2runtime.download -run '^TestWindows' .
+
+      - name: Install it for this user, self-test it, and uninstall it
+        shell: pwsh
+        run: |
+          $root = "$env:LOCALAPPDATA\Programs\Mouse Party"
+          $taken = "$env:RUNNER_TEMP\taken"
+          New-Item -ItemType Directory -Force "$taken\resources" | Out-Null
+          Set-Content "$taken\resources\theirs.txt" 'not the installer''s'
+          $refused = Start-Process -Wait -PassThru -FilePath dist\MouseParty-windows-x86_64-setup.exe -ArgumentList '/S', "/D=$taken"
+          if ($refused.ExitCode -ne 2) { throw "the installer took a folder of other files (it exited with $($refused.ExitCode))" }
+          if ((Test-Path "$taken\MouseParty.exe") -or (Get-Content "$taken\resources\theirs.txt") -ne 'not the installer''s') { throw "the refused installer changed the folder" }
+          $setup = Start-Process -Wait -PassThru -FilePath dist\MouseParty-windows-x86_64-setup.exe -ArgumentList '/S'
+          if ($setup.ExitCode -ne 0) { throw "the installer exited with $($setup.ExitCode)" }
+          if (-not (Test-Path "$root\MouseParty.exe")) { throw "the installer put no MouseParty.exe in $root" }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Mouse Party.lnk")) { throw "the installer made no Start menu entry" }
+          if (-not (Test-Path 'HKCU:\Software\Classes\Applications\MouseParty.exe\SupportedTypes')) { throw "the installer made no Open with entry" }
+          $test = Start-Process -Wait -PassThru -NoNewWindow -FilePath "$root\MouseParty.exe" -ArgumentList '--selftest' -RedirectStandardOutput selftest.out -RedirectStandardError selftest.err
+          Get-Content selftest.out, selftest.err
+          if ($test.ExitCode -ne 0) { throw "the self-test failed" }
+          $guid = "{$([guid]::NewGuid())}"
+          reg add 'HKCU\Software\Classes\AppUserModelId\MouseParty.exe' /v CustomActivator /d $guid /f /reg:64
+          reg add "HKCU\Software\Classes\CLSID\$guid\LocalServer32" /ve /d "$root\MouseParty.exe" /f /reg:64
+          if (-not (Test-Path -LiteralPath "HKCU:\Software\Classes\CLSID\$guid\LocalServer32")) { throw "no notifications' CLSID key to uninstall" }
+          Start-Process -Wait -FilePath "$root\uninstall.exe" -ArgumentList '/S'
+          function Gone($path) {
+            for ($i = 0; $i -lt 60 -and (Test-Path -LiteralPath $path); $i++) { Start-Sleep -Seconds 1 }
+            -not (Test-Path -LiteralPath $path)
+          }
+          if (-not (Gone $root)) { Get-ChildItem -Recurse $root | Select-Object -ExpandProperty FullName; throw "the uninstaller left $root" }
+          if (-not (Gone 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\io.github.ftrain.mouseparty')) { throw "the uninstaller left its Apps entry" }
+          if (-not (Gone 'HKCU:\Software\Classes\Applications\MouseParty.exe')) { throw "the uninstaller left its Open with entry" }
+          if (-not (Gone "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Mouse Party.lnk")) { throw "the uninstaller left the Start menu entry" }
+          if (-not (Gone "HKCU:\Software\Classes\CLSID\$guid")) { throw "the uninstaller left the notifications' CLSID key" }
+          if (-not (Gone 'HKCU:\Software\Classes\AppUserModelId\MouseParty.exe')) { throw "the uninstaller left the notifications' AppUserModelId key" }
+
+  # the release, with the Mac's disk image (and the GPL sources of every platform's), as soon as
+  # the Mac's build has passed: Linux's and Windows's follow (release-linux-windows)
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [mac]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write          # to create the release
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: MouseParty-macos-arm64
+          path: dist
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAC_SIGNED: ${{ needs.mac.outputs.signed }}
+        run: |
+          scripts/build_ffmpeg.sh --fetch
+          scripts/fetch_pandoc.sh --fetch
+          scripts/fetch_appimage_runtime.sh --fetch
+          SOURCES="MouseParty-$GITHUB_REF_NAME-gpl-sources.tar"
+          tar -cf "dist/$SOURCES" -C build/ffmpeg/src . -C "$PWD/build/pandoc/src" . -C "$PWD/build/appimage/src" . -C "$PWD" scripts/build_ffmpeg.sh
+          if [ -n "$MAC_SIGNED" ]; then
+            MAC="It's signed and notarized: it opens like any app."
+          else
+            MAC="The first time it opens: System Settings > Privacy & Security > Open Anyway."
+          fi
+          PRERELEASE=()
+          case "$GITHUB_REF_NAME" in
+          *-*) PRERELEASE=(--prerelease) ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" "${PRERELEASE[@]}" \
+            dist/MouseParty-macos-arm64.dmg \
+            "dist/$SOURCES" \
+            --title "Mouse Party $GITHUB_REF_NAME" \
+            --notes "MouseParty-macos-arm64.dmg is the app for Apple Silicon Macs with macOS 13 or later: open it and drag Mouse Party to Applications. $MAC From then on it updates itself (Settings > General).
+
+          $SOURCES is only for the GPL: the exact sources of the ffmpeg inside each app (with scripts/build_ffmpeg.sh, which builds it from them) and of the mingw-w64 runtime the Windows one is linked with; of its pandoc (its own WebAssembly release build, scripts/fetch_pandoc.sh) and the Haskell libraries compiled into it, with GHC's source for its runtime, base libraries and GMP (9.14.1.20260728, the published GHC nearest the snapshot that built it: scripts/pandoc-sources.txt); and of the AppImage runtime and the libfuse it carries (scripts/fetch_appimage_runtime.sh)."
+
+  # Linux's and Windows's files, added to the release once their builds and tests pass
+  release-linux-windows:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release, linux, linux-test, fedora45, windows, windows-test]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write          # to add to the release
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: MouseParty-linux-x86_64
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: MouseParty-windows-x86_64
+          path: dist
+
+      - name: Sign
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          go run ./tools/signrelease "$GITHUB_REF_NAME" \
+            dist/MouseParty-linux-x86_64.AppImage \
+            dist/MouseParty-linux-x86_64.rpm \
+            dist/MouseParty-windows-x86_64-setup.exe
+
+      - name: Add to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS_SIGNED: ${{ needs.windows.outputs.signed }}
+        run: |
+          if [ -n "$WINDOWS_SIGNED" ]; then
+            WINDOWS="It's signed."
+          else
+            WINDOWS="It isn't signed: the first time, Windows asks whether to run it (More info > Run anyway)."
+          fi
+          gh release upload "$GITHUB_REF_NAME" \
+            dist/MouseParty-linux-x86_64.AppImage \
+            dist/MouseParty-linux-x86_64.AppImage.minisig \
+            dist/MouseParty-linux-x86_64.rpm \
+            dist/MouseParty-linux-x86_64.rpm.minisig \
+            dist/MouseParty-windows-x86_64-setup.exe \
+            dist/MouseParty-windows-x86_64-setup.exe.minisig
+          gh release view "$GITHUB_REF_NAME" --json body --jq .body > notes.md
+          cat >> notes.md <<NOTES
+
+          MouseParty-linux-x86_64.AppImage is the app for Linux on x86-64 with GTK 3 and WebKitGTK 4.1 (Fedora 43 or later): make it executable and open it. It updates itself. MouseParty-linux-x86_64.rpm installs it with dnf instead (sudo dnf install ./MouseParty-linux-x86_64.rpm); that copy doesn't update itself, but says when a new one is out, which installs over it the same way.
+
+          MouseParty-windows-x86_64-setup.exe installs it for this user on 64-bit Windows 10 or 11, with no administrator needed. $WINDOWS It updates itself.
+
+          Each Linux and Windows file's .minisig is its signature with Mouse Party's release key, which the app checks before it updates itself.
+          NOTES
+          gh release edit "$GITHUB_REF_NAME" --notes-file notes.md

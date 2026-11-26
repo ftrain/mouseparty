@@ -29,10 +29,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/ftrain/mouseparty/apps"
@@ -41,13 +41,13 @@ import (
 const (
 	httpPort = 8765 // page, handshake, HLS fallback, chat
 	icePort  = 8189 // WebRTC media, UDP and TCP
-	// MediaMTX and cloudflared are started under this, so they stop when the app
-	// does, even if the app is killed or crashes: the app holds the write end of
-	// their stdin; when it goes, the watcher's read ends and it stops the tool. (A
-	// shell gives background jobs /dev/null for stdin, hence the explicit fd 3.)
-	watchdog = `exec 3<&0; "$@" 3<&- & child=$!; (read _ <&3; kill $child 2>/dev/null) & watcher=$!; ` +
-		`exec 3<&-; wait $child; code=$?; kill $watcher 2>/dev/null; exit $code`
+
+	mediamtxYML = "mediamtx.yml"
+	standbyMP4  = "standby_opus.mp4"
+	sessionLock = "lock"
 )
+
+var cloudflaredMetrics = []int{20241, 20242, 20243, 20244, 20245, 0}
 
 func freePort() int {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -76,6 +76,13 @@ func portOpen(port int) bool {
 		c.Close()
 	}
 	return err == nil
+}
+
+func mediamtxDir(session string) string {
+	if runtime.GOOS == "darwin" {
+		return session
+	}
+	return filepath.Join(session, "mediamtx")
 }
 
 // mediamtxConfig: MediaMTX listens only on loopback, apart from WebRTC media (the ICE port, on all interfaces)
@@ -166,6 +173,7 @@ type Host struct {
 	config    string
 	stun      bool
 	tmp       string
+	lock      *os.File
 	server    *http.Server
 	subsToken string
 	subs      []SubTrack
@@ -218,10 +226,15 @@ func (h *Host) start() error {
 	if err != nil {
 		return err
 	}
+	lock, err := holdSession(tmp)
+	if err != nil {
+		os.RemoveAll(tmp)
+		return err
+	}
 	h.mu.Lock()
 	h.key = base64.RawURLEncoding.EncodeToString(key)
 	h.ports = map[string]int{"api": freePort(), "rtsp": freePort(), "hls": freePort(), "webrtc": freePort()}
-	h.tmp = tmp
+	h.tmp, h.lock = tmp, lock
 	h.stdins = map[*exec.Cmd]io.WriteCloser{}
 	h.exited = map[*exec.Cmd]chan struct{}{}
 	h.mu.Unlock()
@@ -261,11 +274,14 @@ func (h *Host) start() error {
 		}
 	}
 
-	standby := filepath.Join(tmp, "standby_opus.mp4") // looped between movies
+	standby := filepath.Join(tmp, standbyMP4) // looped between movies
 	if err := os.WriteFile(standby, h.Standby, 0o644); err != nil {
 		return err
 	}
-	h.config = filepath.Join(tmp, "mediamtx.yml")
+	if err := os.MkdirAll(mediamtxDir(tmp), 0o700); err != nil {
+		return err
+	}
+	h.config = filepath.Join(tmp, mediamtxYML)
 	if err := h.startMediaMTX(public, standby); err != nil { // before the site, which reads its ports
 		return err
 	}
@@ -349,8 +365,8 @@ func (h *Host) Stop() {
 	procs := h.procs
 	h.procs = nil
 	h.tunnel = nil
-	mapper, tmp, site, listener := h.mapper, h.tmp, h.site, h.listener
-	h.mapper, h.tmp, h.site, h.listener = nil, "", nil, nil
+	mapper, tmp, site, listener, lock := h.mapper, h.tmp, h.site, h.listener, h.lock
+	h.mapper, h.tmp, h.site, h.listener, h.lock = nil, "", nil, nil, nil
 	h.mu.Unlock()
 	if mapper != nil {
 		mapper.Close()
@@ -365,51 +381,15 @@ func (h *Host) Stop() {
 		listener.Close()
 	}
 	h.endSession()
+	if lock != nil {
+		lock.Close()
+	}
 	if tmp != "" {
 		os.RemoveAll(tmp)
 	}
 	h.mu.Lock()
 	h.key, h.urls = "", map[string]string{}
 	h.mu.Unlock()
-}
-
-// killLeftovers: a session that crashed or was force-quit leaves MediaMTX (and
-// cloudflared) running, holding the ports. Ours are recognisable: MediaMTX runs a
-// mouseparty-host-* config, cloudflared tunnels to our port. Only orphans go (parent
-// 1: their app is gone); a live session's belong to its app, which may be another
-// copy of this one, or a self-test running beside it.
-func (h *Host) killLeftovers() {
-	out, err := exec.Command("ps", "-axo", "pid=,ppid=,command=").Output()
-	if err != nil {
-		return
-	}
-	tunnel := fmt.Sprintf("tunnel --no-autoupdate --url http://127.0.0.1:%d", h.HTTPPort)
-	for _, line := range strings.Split(string(out), "\n") {
-		f := strings.Fields(line)
-		if len(f) < 3 || f[1] != "1" {
-			continue
-		}
-		cmd := strings.Join(f[2:], " ")
-		if (strings.Contains(cmd, "mediamtx") && strings.Contains(cmd, "/mouseparty-host-") && strings.HasSuffix(cmd, "mediamtx.yml")) ||
-			(strings.Contains(cmd, "cloudflared") && strings.HasSuffix(cmd, tunnel)) {
-			h.Log("Stopping a leftover from an earlier session: " + filepath.Base(f[2]))
-			var pid int
-			fmt.Sscan(f[0], &pid)
-			syscall.Kill(pid, syscall.SIGTERM)
-		}
-	}
-	time.Sleep(300 * time.Millisecond)
-	// and the folders crashed sessions left (their config; never a key), unless something still uses them
-	out, err = exec.Command("ps", "-axo", "command=").Output()
-	if err != nil {
-		return
-	}
-	dirs, _ := filepath.Glob(filepath.Join(os.TempDir(), "mouseparty-host-*"))
-	for _, d := range dirs {
-		if !strings.Contains(string(out), d) {
-			os.RemoveAll(d)
-		}
-	}
 }
 
 func (h *Host) Running() bool {
@@ -453,10 +433,18 @@ func (h *Host) viewers() int {
 // spawn runs a tool under the watchdog, in the session's folder (anything a tool
 // writes beside itself, like MediaMTX's certificates, goes with the session)
 func (h *Host) spawn(name, bin string, args ...string) (*exec.Cmd, error) {
+	h.mu.Lock()
+	tmp := h.tmp
+	h.mu.Unlock()
+	if tmp == "" {
+		return nil, errors.New("hosting stopped")
+	}
 	run, argv := h.boxFor(name, bin).argv(args...)
-	cmd := exec.Command("/bin/sh", append([]string{"-c", watchdog, "mouseparty-watch", run}, argv...)...)
-	cmd.Dir = h.tmp
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd := watched(run, argv)
+	cmd.Dir = tmp
+	if name == "mediamtx" {
+		cmd.Dir = mediamtxDir(tmp)
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -469,6 +457,7 @@ func (h *Host) spawn(name, bin string, args ...string) (*exec.Cmd, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
+	adopt(cmd)
 	h.mu.Lock()
 	h.procs = append(h.procs, cmd)
 	h.stdins[cmd] = stdin // held open: when the app goes, so does this, and the watchdog stops the tool
@@ -478,24 +467,25 @@ func (h *Host) spawn(name, bin string, args ...string) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
-// boxFor: what a tool may do (sandbox.go). MediaMTX: the session's folder, this
-// Mac's own ports, the ICE port from anywhere, and UDP out, which is the video
-// going to viewers. cloudflared: no files; out to Cloudflare, and the site's port
-// here. Neither can start a program, whatever it's told to (MediaMTX can be
-// configured to run commands, through an API the site reaches).
+// boxFor: what a tool may do (sandbox.go). MediaMTX: its folder (mediamtxDir), its
+// config and the stand-by video, this Mac's own ports, the ICE port from anywhere,
+// and UDP out, which is the video going to viewers. cloudflared: no files; out to
+// Cloudflare, and the site's port here. Neither can start a program, whatever it's
+// told to (MediaMTX can be configured to run commands, through an API the site reaches).
 func (h *Host) boxFor(name, bin string) *box {
 	b := newBox(bin).lookups()
 	switch name {
 	case "mediamtx":
-		b.write(h.tmp).allow(
-			`(allow network-bind network-inbound (local ip "localhost:*"))`,
-			fmt.Sprintf(`(allow network-bind network-inbound (local ip "*:%d"))`, h.ICEPort),
-			`(allow network-outbound (remote udp "*:*"))`)
+		h.mu.Lock()
+		ports, tmp := h.ports, h.tmp
+		h.mu.Unlock()
+		b.write(mediamtxDir(tmp))
+		if runtime.GOOS != "darwin" {
+			b.read(filepath.Join(tmp, mediamtxYML), filepath.Join(tmp, standbyMP4))
+		}
+		b.serveLocal(ports["api"], ports["rtsp"], ports["hls"], ports["webrtc"]).serveIP(h.ICEPort).udpOut().netlink()
 	case "cloudflared":
-		b.allow(
-			`(allow network-bind network-inbound (local ip "localhost:*"))`,
-			`(allow network-outbound (remote ip "*:443") (remote ip "*:7844") (remote ip "*:53"))`,
-			fmt.Sprintf(`(allow network-outbound (remote tcp "localhost:%d"))`, h.HTTPPort))
+		b.serveLocal(cloudflaredMetrics...).reachOut(443, 7844, 53).reachLocal(h.HTTPPort)
 	}
 	return b
 }
@@ -603,23 +593,6 @@ func (h *Host) startMediaMTX(public, standby string) error {
 			h.Log("MediaMTX stopped as it started; trying it on other ports.")
 		}
 	}
-}
-
-// stopGroup stops a watched tool and its watcher: they share a process group
-func stopGroup(cmd *exec.Cmd) {
-	if cmd.Process == nil {
-		return
-	}
-	pid := cmd.Process.Pid
-	if syscall.Kill(-pid, syscall.SIGTERM) != nil {
-		return
-	}
-	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(100 * time.Millisecond) {
-		if syscall.Kill(-pid, 0) != nil {
-			return
-		}
-	}
-	syscall.Kill(-pid, syscall.SIGKILL)
 }
 
 func waitFor(port int, timeout time.Duration) error {

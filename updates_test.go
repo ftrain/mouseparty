@@ -1,18 +1,50 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"aead.dev/minisign"
+
+	"github.com/ftrain/mouseparty/internal/releasesig"
 )
+
+// testReleaseKey: a release key of the test's own, in releaseKey's place until it ends
+func testReleaseKey(t *testing.T) minisign.PrivateKey {
+	t.Helper()
+	pub, priv, err := minisign.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, _ := pub.MarshalText()
+	was := releaseKey
+	releaseKey = string(text)
+	t.Cleanup(func() { releaseKey = was })
+	return priv
+}
+
+// signedAs: body's signature, as version's updateAsset, with key
+func signedAs(t *testing.T, key minisign.PrivateKey, body []byte, version string) []byte {
+	t.Helper()
+	f := filepath.Join(t.TempDir(), "signed")
+	if err := os.WriteFile(f, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sig, err := releasesig.Sign(key, f, version, updateAsset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sig
+}
 
 func TestVersions(t *testing.T) {
 	for _, c := range []struct {
@@ -26,180 +58,230 @@ func TestVersions(t *testing.T) {
 	}
 }
 
-// fakeApp: a Mouse Party.app at dir saying it's version v (and bundle id), its program a script, signed ad hoc
-func fakeApp(t *testing.T, dir, v, id string) string {
+var everyUpdateAsset = []string{"MouseParty-macos-arm64.dmg", "MouseParty-linux-x86_64.AppImage", "MouseParty-windows-x86_64-setup.exe"}
+
+type gitHubStandIn struct {
+	*httptest.Server
+	fetches atomic.Int32
+}
+
+func standInGitHub(t *testing.T, releases func(asset func(name, sum string) map[string]any) []map[string]any, file func(name string) []byte) *gitHubStandIn {
 	t.Helper()
-	app := filepath.Join(dir, "Mouse Party.app")
-	os.MkdirAll(filepath.Join(app, "Contents", "MacOS"), 0o755)
-	plist := `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>MouseParty</string>
-<key>CFBundleIdentifier</key><string>` + id + `</string>
-<key>CFBundleShortVersionString</key><string>` + v + `</string>
-<key>CFBundleVersion</key><string>` + v + `</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-</dict></plist>`
-	os.WriteFile(filepath.Join(app, "Contents", "Info.plist"), []byte(plist), 0o644)
-	os.WriteFile(filepath.Join(app, "Contents", "MacOS", "MouseParty"), []byte("#!/bin/sh\necho "+v+"\n"), 0o755)
-	if out, err := exec.Command("/usr/bin/codesign", "--force", "--deep", "--sign", "-", app).CombinedOutput(); err != nil {
-		t.Fatal(err, string(out))
-	}
-	return app
-}
-
-func plistVersion(app string) string {
-	out, _ := exec.Command("/usr/libexec/PlistBuddy", "-c", "Print :CFBundleShortVersionString", filepath.Join(app, "Contents", "Info.plist")).Output()
-	return strings.TrimSpace(string(out))
-}
-
-// An update: the highest release with the app's disk image and its SHA-256 found (drafts, prereleases, other tags and
-// one with no SHA-256 passed over), downloaded, checked, unpacked beside the app, and put in its place
-// when it quits; one whose SHA-256 differs, or that isn't Mouse Party, refused, nothing changed; a
-// development build, or an app macOS runs from a read-only copy, never updated.
-func TestUpdate(t *testing.T) {
-	if _, err := os.Stat("/usr/bin/hdiutil"); err != nil {
-		t.Skip("needs macOS (hdiutil, ditto, codesign)")
-	}
-	t.Setenv("HOME", t.TempDir()) // never the real party file, nor the real cache
-	t.Setenv("XDG_CACHE_HOME", "")
-	dir := t.TempDir()
-	// the release: a newer app on a disk image, as the build makes it, and the SHA-256 GitHub gives it
-	made := filepath.Join(dir, "made")
-	fakeApp(t, made, "9.9.0", updateBundle)
-	os.Symlink("/Applications", filepath.Join(made, "Applications"))
-	dmg := filepath.Join(dir, updateAsset)
-	if out, err := exec.Command("/usr/bin/hdiutil", "create", "-quiet", "-volname", "Mouse Party", "-srcfolder", made,
-		"-fs", "HFS+", "-format", "UDZO", "-ov", dmg).CombinedOutput(); err != nil {
-		t.Fatal(err, string(out))
-	}
-	body, _ := os.ReadFile(dmg)
-	sum := sha256.Sum256(body)
-	good := hex.EncodeToString(sum[:])
-	served := good
+	g := &gitHubStandIn{}
+	key := testReleaseKey(t)
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		asset := func(name string) map[string]any {
-			return map[string]any{"name": name, "browser_download_url": server.URL + "/" + name, "size": len(body), "digest": "sha256:" + served}
-		}
-		bare := asset(updateAsset)
-		delete(bare, "digest")
-		switch r.URL.Path {
-		case "/releases":
-			json.NewEncoder(w).Encode([]map[string]any{
-				{"tag_name": "v9.9.0", "assets": []any{asset(updateAsset), asset("MouseParty-v9.9.0-gpl-sources.tar")}},
-				{"tag_name": "v10.0.0", "draft": true, "assets": []any{asset(updateAsset)}},
-				{"tag_name": "v9.10.0-rc1", "assets": []any{asset(updateAsset)}},
-				{"tag_name": "v9.9.5", "assets": []any{bare}},                                // no SHA-256: not a release to take
-				{"tag_name": "v9.9.7", "assets": []any{asset("MouseParty-macos-arm64.zip")}}, // an old release's zip: not the app now
-				{"tag_name": "python-wasm-3.15.2-abc", "assets": []any{asset(updateAsset)}},
-				{"tag_name": "v3.0.0", "assets": []any{asset(updateAsset)}},
-			})
-		case "/" + updateAsset:
-			w.Write(body)
-		default:
+		// a release's signature of its updateAsset, as /sig/<version it's signed as>/<name>
+		if rest, ok := strings.CutPrefix(r.URL.Path, "/sig/"); ok {
+			as, name, _ := strings.Cut(rest, "/")
+			if body := standInFile(file, name); body != nil && name == updateAsset {
+				w.Write(signedAs(t, key, body, as))
+				return
+			}
 			http.NotFound(w, r)
+			return
 		}
+		if r.URL.Path != "/releases" {
+			g.fetches.Add(1)
+			if body := standInFile(file, strings.TrimPrefix(r.URL.Path, "/")); body != nil {
+				w.Write(body)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		list := releases(func(name, sum string) map[string]any {
+			a := map[string]any{"name": name, "browser_download_url": server.URL + "/" + name, "size": 1234}
+			if body := standInFile(file, name); body != nil {
+				a["size"] = len(body)
+			}
+			if sum != "" {
+				a["digest"] = "sha256:" + sum
+			}
+			return a
+		})
+		// each release's updateAsset signed as its own version, but for one marked "unsigned",
+		// or "signed_as" another version
+		for _, rel := range list {
+			unsigned, _ := rel["unsigned"].(bool)
+			as, ok := rel["signed_as"].(string)
+			if !ok {
+				as, _ = rel["tag_name"].(string)
+				as = strings.TrimPrefix(as, "v")
+			}
+			delete(rel, "unsigned")
+			delete(rel, "signed_as")
+			assets, _ := rel["assets"].([]any)
+			for _, a := range assets {
+				if m, _ := a.(map[string]any); !unsigned && m["name"] == updateAsset {
+					rel["assets"] = append(assets, map[string]any{"name": updateAsset + ".minisig", "browser_download_url": server.URL + "/sig/" + as + "/" + updateAsset, "size": 300})
+					break
+				}
+			}
+		}
+		json.NewEncoder(w).Encode(list)
+	}))
+	t.Cleanup(server.Close)
+	was := updatesAPI
+	updatesAPI = server.URL + "/releases"
+	t.Cleanup(func() { updatesAPI = was })
+	g.Server = server
+	return g
+}
+
+func standInFile(file func(name string) []byte, name string) []byte {
+	if file == nil {
+		return nil
+	}
+	return file(name)
+}
+
+func untilUpdate(t *testing.T, a *App, what string, ok func(UpdateStatus) bool) UpdateStatus {
+	t.Helper()
+	for end := time.Now().Add(20 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+		if s := a.Prefs().Update; ok(s) {
+			return s
+		}
+	}
+	t.Fatalf("never: %s (%+v)", what, a.Prefs().Update)
+	return UpdateStatus{}
+}
+
+func withAppVersion(t *testing.T, v string) {
+	t.Helper()
+	was := version
+	version = v
+	t.Cleanup(func() { version = was })
+}
+
+func TestLatestRelease(t *testing.T) {
+	sum := strings.Repeat("ab", 32)
+	var others []string
+	for _, name := range everyUpdateAsset {
+		if name != updateAsset {
+			others = append(others, name)
+		}
+	}
+	if len(others) != len(everyUpdateAsset)-1 {
+		t.Fatalf("%s isn't one of the assets a release has", updateAsset)
+	}
+	page := "https://github.com/ftrain/mouseparty/releases/tag/v9.9.0"
+	standInGitHub(t, func(asset func(name, sum string) map[string]any) []map[string]any {
+		every := func(sum string, names ...string) []any {
+			var list []any
+			for _, n := range names {
+				list = append(list, asset(n, sum))
+			}
+			return list
+		}
+		return []map[string]any{
+			{"tag_name": "v9.9.0", "html_url": page, "assets": append(every(strings.ToUpper(sum), everyUpdateAsset...), asset("MouseParty-v9.9.0-gpl-sources.tar", sum))},
+			{"tag_name": "v10.0.0", "draft": true, "assets": every(sum, everyUpdateAsset...)},
+			{"tag_name": "v9.11.0", "prerelease": true, "assets": every(sum, everyUpdateAsset...)},
+			{"tag_name": "v9.10.0-rc1", "assets": every(sum, everyUpdateAsset...)},
+			{"tag_name": "v9.9.5", "assets": every("", everyUpdateAsset...)},
+			{"tag_name": "v9.9.6", "assets": every("1234", everyUpdateAsset...)},
+			{"tag_name": "v9.9.7", "assets": every(sum, "MouseParty-macos-arm64.zip")},
+			{"tag_name": "v9.9.8", "assets": every(sum, others...)},
+			{"tag_name": "python-wasm-3.15.2-abc", "assets": every(sum, everyUpdateAsset...)},
+			{"tag_name": "v3.0.0", "assets": every(sum, everyUpdateAsset...)},
+		}
+	}, nil)
+	rel, err := latestRelease(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel.Version != "9.9.0" || !strings.HasSuffix(rel.URL, "/"+updateAsset) || rel.Sum != sum || rel.Size != 1234 || rel.Page != page ||
+		!strings.HasSuffix(rel.SigURL, "/sig/9.9.0/"+updateAsset) {
+		t.Errorf("the release: %+v", rel)
+	}
+
+	standInGitHub(t, func(asset func(name, sum string) map[string]any) []map[string]any {
+		return []map[string]any{{"tag_name": "v9.9.8", "assets": []any{asset(others[0], sum), asset(others[1], sum)}}}
+	}, nil)
+	if _, err := latestRelease(context.Background()); err == nil || !strings.Contains(err.Error(), "no release") {
+		t.Errorf("a release for the other platforms only: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/broken" {
+			w.Write([]byte("[{"))
+			return
+		}
+		http.Error(w, "rate limited", http.StatusForbidden)
 	}))
 	defer server.Close()
 	was := updatesAPI
-	updatesAPI = server.URL + "/releases"
 	defer func() { updatesAPI = was }()
-	wasVersion := version
-	version = "3.0.0"
-	defer func() { version = wasVersion }()
+	updatesAPI = server.URL + "/releases"
+	if _, err := latestRelease(context.Background()); err == nil || !strings.Contains(err.Error(), "403") {
+		t.Errorf("GitHub saying no: %v", err)
+	}
+	updatesAPI = server.URL + "/broken"
+	if _, err := latestRelease(context.Background()); err == nil || !strings.Contains(err.Error(), "didn't read") {
+		t.Errorf("a list that doesn't read: %v", err)
+	}
+}
 
-	installed := fakeApp(t, filepath.Join(dir, "Applications"), "3.0.0", updateBundle)
-	a := NewApp(standby)
-	a.bundlePath = installed
-	go a.run()
-	defer a.shutdown(nil)
-	until := func(what string, ok func(UpdateStatus) bool) UpdateStatus {
-		t.Helper()
-		for end := time.Now().Add(20 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
-			if s := a.Prefs().Update; ok(s) {
-				return s
-			}
+func TestUpdateDir(t *testing.T) {
+	tempHome(t)
+	if dir, err := updateDir(); err != nil || cacheDir() == "" || dir != filepath.Join(cacheDir(), "update") {
+		t.Errorf("the update's folder: %q %v", dir, err)
+	}
+	for _, name := range []string{"HOME", "XDG_CACHE_HOME", "LOCALAPPDATA"} {
+		t.Setenv(name, "")
+	}
+	if dir, err := updateDir(); err == nil {
+		t.Errorf("with no cache folder, the update's folder is %q", dir)
+	}
+}
+
+// An update is taken only signed with the release key, as its own version's updateAsset: not unsigned,
+// not with another key, not signed for another version (an older release's file passed off as newer)
+func TestUpdateSigned(t *testing.T) {
+	body := []byte("the app, as released")
+	file := func(name string) []byte {
+		if name == updateAsset {
+			return body
 		}
-		t.Fatalf("never: %s (%+v)", what, a.Prefs().Update)
-		return UpdateStatus{}
+		return nil
 	}
-
-	// a SHA-256 that differs: refused, nothing unpacked
-	served = strings.Repeat("0", 64)
-	a.CheckForUpdates()
-	s := until("refused", func(s UpdateStatus) bool { return s.State == "error" })
-	if !strings.Contains(s.Text, "SHA-256") {
-		t.Errorf("why: %q", s.Text)
+	path := filepath.Join(t.TempDir(), updateAsset)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(stagingDir(installed)); !os.IsNotExist(err) {
-		t.Error("a refused update left something beside the app")
+	for _, c := range []struct {
+		name string
+		rel  map[string]any
+		want string // "" for taken
+	}{
+		{"signed", map[string]any{}, ""},
+		{"unsigned", map[string]any{"unsigned": true}, "isn't signed"},
+		{"signed for another version", map[string]any{"signed_as": "9.8.0"}, "signed as"},
+	} {
+		standInGitHub(t, func(asset func(name, sum string) map[string]any) []map[string]any {
+			c.rel["tag_name"], c.rel["assets"] = "v9.9.0", []any{asset(updateAsset, strings.Repeat("ab", 32))}
+			return []map[string]any{c.rel}
+		}, file)
+		rel, err := latestRelease(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = fetchSigned(rel, path)
+		switch {
+		case c.want == "" && err != nil:
+			t.Errorf("%s: refused: %v", c.name, err)
+		case c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)):
+			t.Errorf("%s: got %v, want an error with %q", c.name, err, c.want)
+		}
 	}
-
-	// the right one: down, checked, beside the app, and in at quitting
-	served = good
-	a.CheckForUpdates()
-	s = until("ready", func(s UpdateStatus) bool { return s.Ready })
-	if s.Latest != "9.9.0" || s.Version != "3.0.0" || !strings.Contains(s.Text, "9.9.0 is ready") {
-		t.Errorf("ready: %+v", s)
-	}
-	if plistVersion(installed) != "3.0.0" {
-		t.Fatal("the update went in before quitting")
-	}
-	a.CheckForUpdates() // one is waiting: nothing fetched over it
-	if s := a.Prefs().Update; !s.Ready {
-		t.Errorf("checking again undid the one waiting: %+v", s)
-	}
-	a.shutdown(nil)
-	if v := plistVersion(installed); v != "9.9.0" {
-		t.Fatalf("after quitting, the app is %q", v)
-	}
-	if _, err := os.Stat(stagingDir(installed)); !os.IsNotExist(err) {
-		t.Error("the update's folder is still beside the app")
-	}
-
-	// that version is the newest: up to date
-	version = "9.9.0"
-	b := NewApp(standby)
-	b.bundlePath = installed
-	go b.run()
-	defer b.shutdown(nil)
-	b.CheckForUpdates()
-	for end := time.Now().Add(10 * time.Second); time.Now().Before(end) && b.Prefs().Update.State != "current"; time.Sleep(50 * time.Millisecond) {
-	}
-	if s := b.Prefs().Update; s.State != "current" || s.Text != "Mouse Party is up to date." {
-		t.Errorf("up to date: %+v", s)
-	}
-
-	// what can't update itself: a development build; a read-only copy macOS runs
-	version = "dev"
-	b.CheckForUpdates()
-	time.Sleep(100 * time.Millisecond)
-	if s := b.Prefs().Update; !strings.Contains(s.Text, "development build") {
-		t.Errorf("a development build: %+v", s)
-	}
-	b.bundlePath = "/private/var/folders/xy/T/AppTranslocation/ABC/d/Mouse Party.app"
-	if _, why := b.thisBundle(); !strings.Contains(why, "Applications") {
-		t.Errorf("translocated: %q", why)
-	}
-
-	// an app that isn't Mouse Party, or isn't the version its release says, is refused
-	other := fakeApp(t, filepath.Join(dir, "other"), "9.9.0", "com.example.notit")
-	if why := checkBundle(other, "9.9.0", ""); !strings.Contains(why, "isn't Mouse Party") {
-		t.Errorf("another app: %q", why)
-	}
-	if why := checkBundle(installed, "9.9.1", ""); !strings.Contains(why, "version") {
-		t.Errorf("the wrong version: %q", why)
-	}
-	// signed ad hoc, it has no team; a Mouse Party with a Developer ID takes only an update from the same one
-	if team := teamOf(installed); team != "" {
-		t.Errorf("an ad hoc app's team: %q", team)
-	}
-	if why := checkBundle(installed, "3.0.0", "ABCDE12345"); !strings.Contains(why, "developer") {
-		t.Errorf("not the developer's: %q", why)
-	}
-	os.WriteFile(filepath.Join(other, "Contents", "MacOS", "MouseParty"), []byte("#!/bin/sh\necho changed\n"), 0o755)
-	if why := checkBundle(other, "9.9.0", ""); !strings.Contains(why, "signature") {
-		t.Errorf("changed after signing: %q", why)
+	// another key's signature
+	standInGitHub(t, func(asset func(name, sum string) map[string]any) []map[string]any {
+		return []map[string]any{{"tag_name": "v9.9.0", "assets": []any{asset(updateAsset, strings.Repeat("ab", 32))}}}
+	}, file)
+	rel, _ := latestRelease(context.Background())
+	testReleaseKey(t) // the app now trusts a different key from the one the stand-in signs with
+	if _, err := fetchSigned(rel, path); err == nil || !strings.Contains(err.Error(), "release key") {
+		t.Errorf("another key's signature: %v", err)
 	}
 }

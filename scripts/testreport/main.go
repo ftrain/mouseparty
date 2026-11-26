@@ -49,6 +49,23 @@ func main() {
 		case "fail":
 			if e.Test == "" { // the package: its own output is a build error, or a panic outside any test
 				fmt.Printf("FAIL\t%s\t%.1fs\n%s", e.Package, e.Elapsed, strings.Join(output[key], ""))
+				// and any of its tests still running when it went (a timeout, a panic), which never
+				// fail on their own: what they said is where it went
+				var running []string
+				for k := range output {
+					if pkg, test, _ := strings.Cut(k, " "); pkg == e.Package && test != "" {
+						running = append(running, k)
+					}
+				}
+				sort.Strings(running)
+				for _, k := range running {
+					failed = append(failed, k)
+					fmt.Printf("--- STILL RUNNING: %s\n%s", k, strings.Join(output[k], ""))
+					delete(output, k)
+				}
+				if len(running) == 0 {
+					broken = true
+				}
 			} else {
 				failed = append(failed, key)
 				fmt.Printf("--- FAIL: %s (%s)\n%s", e.Test, e.Package, strings.Join(output[key], ""))

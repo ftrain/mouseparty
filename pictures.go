@@ -134,7 +134,7 @@ type nowShowing struct {
 func (h *Host) SetPlaying(path, title string, paged bool) {
 	p := apps.Playing{}
 	if path != "" {
-		sum := sha256.Sum256([]byte(path)) // its notes are kept by it; the pages are told nothing of where it is
+		sum := sha256.Sum256([]byte(playingKey(path))) // its notes are kept by it; the pages are told nothing of where it is
 		p = apps.Playing{Key: hex.EncodeToString(sum[:8]), Title: title, Paged: paged}
 	}
 	h.setPlaying(p)

@@ -69,6 +69,8 @@ export interface App {
     RedoRemove(): Promise<void>; // Edit > Redo: out again
     LogText(): Promise<string>; // Help > Show Log: what's been logged since the app started
     Welcome(): Promise<boolean>; // at load: whether to welcome someone new (asked once)
+    About(): Promise<AboutInfo>;
+    Focused(on: boolean): Promise<void>;
     // the party file (party.go): each "" when it worked, or why not
     Unlock(passcode: string): Promise<string>;
     StartOver(): Promise<string>;
@@ -105,6 +107,7 @@ export interface Prefs {
     update: UpdateStatus; // only shown
     soundFor: string; // only shown: the movie up now ("" for none), whose sound SetSound moves
     sound: number; // only shown: how far it's moved, in seconds (positive: later)
+    sandbox: string; // only shown: what the sandbox keeps guests' bytes from, on this computer
 }
 
 // updates.go's UpdateStatus
@@ -115,11 +118,18 @@ export interface UpdateStatus {
     text: string; // what Settings says
     ready: boolean; // Restart to Update would install it
     busy: boolean; // checking or downloading
+    page?: string;
+    manual?: boolean;
 }
 
 export interface Account {
     site: string;
     user: string;
+}
+
+export interface AboutInfo {
+    version: string;
+    credits: string;
 }
 
 // prefs.go's LinkLogin: what the Add Download Link sheet fills in
@@ -131,13 +141,18 @@ export interface LinkLogin {
 }
 
 // what the Party menu asks the window for (party.go's ask)
-export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear' | 'erase' | 'prefs' | 'updates' | 'keys' | 'welcome' | 'log';
+export type Ask = 'on' | 'change' | 'off' | 'settings' | 'link' | 'clear' | 'erase' | 'prefs' | 'updates' | 'keys' | 'welcome' | 'log' | 'about' | 'security';
+
+export type Edit = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll';
 
 // as much of the Wails runtime as the window uses
 export interface Runtime {
     OnFileDrop(callback: (x: number, y: number, paths: string[]) => void, useDropTarget: boolean): void;
     EventsOn(name: 'view', callback: (v: View) => void): () => void;
     EventsOn(name: 'ask', callback: (mode: Ask) => void): () => void;
-    EventsOn(name: 'edit', callback: (what: 'undo' | 'redo') => void): () => void; // Edit > Undo, Redo (mac.go)
+    EventsOn(name: 'edit', callback: (what: Edit) => void): () => void; // Edit > Undo, Redo
     ClipboardSetText(text: string): Promise<boolean>;
+    ClipboardGetText?(): Promise<string>;
+    BrowserOpenURL(url: string): void;
+    Environment?(): Promise<{ buildType: string; platform: string; arch: string }>;
 }

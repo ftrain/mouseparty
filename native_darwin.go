@@ -91,7 +91,7 @@ func nativeSend(action string) {
 func nativeKeepFrame() { C.mpKeepFrame() }
 
 // nativeBadge: the Dock icon's badge ("" for none)
-func nativeBadge(label string) {
+func nativeBadge(label string, _ int) {
 	c := C.CString(label)
 	defer C.free(unsafe.Pointer(c))
 	C.mpBadge(c)

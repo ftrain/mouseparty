@@ -4,7 +4,7 @@
 // the settings as JSON text, Add Download Link (with the login its site wants),
 // and Clear Download Cache (download.go). Nothing here is kept: each sheet asks
 // the Go side, which says "" or why not.
-import type { Ask, View } from './wails.d.ts';
+import type { Ask, Edit, View } from './wails.d.ts';
 import { openPrefs } from './prefs.ts';
 
 const App = () => window.go.main.App;
@@ -120,11 +120,33 @@ export const sheetOpen = () => !sheet.hidden;
 const twice = (v: Record<string, string>) => (!v.next ? 'Type a passcode' : v.next !== v.again ? "The two passcodes aren't the same" : '');
 const FORGET = 'A forgotten passcode can’t be recovered.';
 
+let platform = 'darwin';
+
+export async function learnPlatform() {
+    const env = window.runtime.Environment ? await window.runtime.Environment().catch(() => null) : null;
+    if (env) platform = env.platform;
+}
+
+export function onMac() {
+    return platform === 'darwin';
+}
+
+export function onWindows() {
+    return platform === 'windows';
+}
+
+const HELP: Ask[] = ['keys', 'welcome', 'log', 'about'];
+
 // the Party menu's sheets
 export async function ask(mode: Ask) {
-    back = null;
+    if (locked && !HELP.includes(mode)) return;
+    back = locked ? passcode : null;
     if (mode === 'prefs') {
         await openPrefs();
+    } else if (mode === 'security') {
+        await openPrefs('security');
+    } else if (mode === 'about') {
+        await about();
     } else if (mode === 'updates') {
         await openPrefs('general'); // Party > Check for Updates…: where it says how that's going
     } else if (mode === 'settings') {
@@ -214,8 +236,41 @@ const KEYS: [string, string][] = [
     ['⌥⌘L', 'Show the log'],
     ['⌘?', 'Help'],
 ];
+const LINUX_KEYS: [string, string][] = [
+    ['↑ ↓', 'Select a row'],
+    ['Enter', 'Play it'],
+    ['Delete', 'Remove it'],
+    ['Ctrl+Z  Shift+Ctrl+Z', 'Undo, redo'],
+    ['← →', 'Turn the page'],
+    ['Ctrl+L', 'Add a download link'],
+    ['Ctrl+R', 'Clear played files'],
+    ['Ctrl+,', 'Preferences'],
+    ['Shift+Ctrl+L', 'Show the log'],
+    ['F1', 'Help'],
+];
+const WINDOWS_KEYS: [string, string][] = [
+    ['↑ ↓', 'Select a row'],
+    ['Enter', 'Play it'],
+    ['Delete', 'Remove it'],
+    ['Ctrl+Z  Ctrl+Y', 'Undo, redo'],
+    ['← →', 'Turn the page'],
+    ['Ctrl+L', 'Add a download link'],
+    ['Ctrl+R', 'Clear played files'],
+    ['Ctrl+,', 'Settings'],
+    ['Ctrl+Shift+L', 'Show the log'],
+    ['F1', 'Help'],
+];
+function keys() {
+    return onMac() ? KEYS : onWindows() ? WINDOWS_KEYS : LINUX_KEYS;
+}
 function shortcuts() {
-    return el('table', { className: 'keys' }, ...KEYS.map(([k, what]) => el('tr', {}, el('td', { className: 'key', textContent: k }), el('td', { textContent: what }))));
+    return el('table', { className: onMac() ? 'keys' : 'keys wide' }, ...keys().map(([k, what]) => el('tr', {}, el('td', { className: 'key', textContent: k }), el('td', { textContent: what }))));
+}
+
+async function about() {
+    const a = await App().About();
+    const credits = a.credits.split('\n\n').map((p) => el('p', { textContent: p }));
+    info('About Mouse Party', a.version === 'dev' ? 'Development build' : `Version ${a.version}`, el('div', { className: 'about' }, ...credits));
 }
 
 // Help > Welcome to Mouse Party, and the first time it opens
@@ -248,10 +303,26 @@ async function logSheet() {
 }
 
 // Edit > Undo and Redo: a sheet's field's typing while one has the focus, otherwise the list's removals
-export function edit(what: 'undo' | 'redo') {
+export function edit(what: Edit) {
     const f = document.activeElement;
+    if (what !== 'undo' && what !== 'redo') return clipboard(what, f instanceof HTMLInputElement || f instanceof HTMLTextAreaElement ? f : null);
     if (f instanceof HTMLInputElement || f instanceof HTMLTextAreaElement) document.execCommand(what);
     else if (!sheetOpen()) void (what === 'undo' ? App().UndoRemove() : App().RedoRemove());
+}
+
+function clipboard(what: Edit, field: HTMLInputElement | HTMLTextAreaElement | null) {
+    if (what === 'selectAll') return field ? field.select() : void document.execCommand('selectAll');
+    if (what === 'paste') {
+        if (field && window.runtime.ClipboardGetText)
+            void window.runtime.ClipboardGetText().then((text) => {
+                if (document.activeElement === field && text) document.execCommand('insertText', false, text);
+            });
+        return;
+    }
+    const text = field ? (field.type === 'password' ? '' : field.value.slice(field.selectionStart ?? 0, field.selectionEnd ?? 0)) : String(window.getSelection() ?? '');
+    if (!text) return;
+    void window.runtime.ClipboardSetText(text);
+    if (what === 'cut' && field) document.execCommand('delete');
 }
 
 // Add Download Link: the link, and the login its site wants, if it wants one. A site with a
@@ -301,6 +372,10 @@ export function lock(v: View) {
     if (v.locked === locked) return;
     locked = v.locked;
     if (!locked) return close();
+    passcode();
+}
+
+function passcode() {
     const startOver = el('button', { type: 'button', className: 'quiet', textContent: 'Forgot the passcode?' });
     startOver.onclick = () =>
         show({
@@ -309,7 +384,7 @@ export function lock(v: View) {
             fields: [],
             go: 'Start Over',
             done: () => App().StartOver(),
-            more: el('button', { type: 'button', className: 'quiet', textContent: 'Back', onclick: () => ((locked = false), lock(v)) }),
+            more: el('button', { type: 'button', className: 'quiet', textContent: 'Back', onclick: passcode }),
             cancel: false,
         });
     show({

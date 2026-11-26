@@ -75,7 +75,7 @@ func TestInspectAgreesWithFFprobe(t *testing.T) {
 	unboxed(t)
 	dir := t.TempDir()
 	srt := filepath.Join(dir, "s.srt")
-	exec.Command("sh", "-c", `printf '1\n00:00:01,000 --> 00:00:02,000\nHi\n' > `+srt).Run()
+	writeFile(t, srt, "1\n00:00:01,000 --> 00:00:02,000\nHi\n")
 	movie := filepath.Join(dir, "m.mkv")
 	out, err := exec.Command(findTool("ffmpeg"), "-v", "error", "-f", "lavfi", "-i", "testsrc=s=320x240:d=2", "-f", "lavfi", "-i", "sine=d=2",
 		"-f", "lavfi", "-i", "sine=f=600:d=2", "-i", srt, "-f", "lavfi", "-i", "color=c=red:s=64x64:d=0.04",
