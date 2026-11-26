@@ -64,6 +64,8 @@ func TestUpdate(t *testing.T) {
 	sum := sha256.Sum256(body)
 	good := hex.EncodeToString(sum[:])
 	served := good
+	key := testReleaseKey(t)
+	sig := signedAs(t, key, body, "9.9.0")
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asset := func(name string) map[string]any {
@@ -74,7 +76,7 @@ func TestUpdate(t *testing.T) {
 		switch r.URL.Path {
 		case "/releases":
 			json.NewEncoder(w).Encode([]map[string]any{
-				{"tag_name": "v9.9.0", "assets": []any{asset(updateAsset), asset("MouseParty-v9.9.0-gpl-sources.tar")}},
+				{"tag_name": "v9.9.0", "assets": []any{asset(updateAsset), asset(updateAsset + ".minisig"), asset("MouseParty-v9.9.0-gpl-sources.tar")}},
 				{"tag_name": "v10.0.0", "draft": true, "assets": []any{asset(updateAsset)}},
 				{"tag_name": "v9.10.0-rc1", "assets": []any{asset(updateAsset)}},
 				{"tag_name": "v9.9.5", "assets": []any{bare}},                                // no SHA-256: not a release to take
@@ -84,6 +86,8 @@ func TestUpdate(t *testing.T) {
 			})
 		case "/" + updateAsset:
 			w.Write(body)
+		case "/" + updateAsset + ".minisig":
+			w.Write(sig)
 		default:
 			http.NotFound(w, r)
 		}
@@ -123,8 +127,20 @@ func TestUpdate(t *testing.T) {
 		t.Error("a refused update left something beside the app")
 	}
 
-	// the right one: down, checked, beside the app, and in at quitting
+	// the right SHA-256, but signed for another version (an older release's file passed off as this one): refused
 	served = good
+	sig = signedAs(t, key, body, "9.8.0")
+	a.CheckForUpdates()
+	s = until("refused", func(s UpdateStatus) bool { return s.State == "error" })
+	if !strings.Contains(s.Text, "signed as") {
+		t.Errorf("why: %q", s.Text)
+	}
+	if _, err := os.Stat(stagingDir(installed)); !os.IsNotExist(err) {
+		t.Error("a refused update left something beside the app")
+	}
+
+	// the right one: down, checked, beside the app, and in at quitting
+	sig = signedAs(t, key, body, "9.9.0")
 	a.CheckForUpdates()
 	s = until("ready", func(s UpdateStatus) bool { return s.Ready })
 	if s.Latest != "9.9.0" || s.Version != "3.0.0" || !strings.Contains(s.Text, "9.9.0 is ready") {

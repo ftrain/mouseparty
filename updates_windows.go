@@ -198,6 +198,15 @@ func (a *App) installUpdate() error {
 	if why != "" {
 		return errors.New(why)
 	}
+	// checked again: it was downloaded and checked maybe hours ago
+	sig, err := os.ReadFile(u.staged + ".minisig")
+	if err == nil {
+		err = checkSigned(u.staged, sig, u.latest)
+	}
+	if err != nil {
+		u.state, u.staged = "", ""
+		return fmt.Errorf("the update didn't check again: %v", err)
+	}
 	line := installerLine(u.staged, filepath.Dir(bundle), u.restart)
 	if err := startInstaller(u.staged, line, true); err != nil {
 		if err := startInstaller(u.staged, line, false); err != nil {

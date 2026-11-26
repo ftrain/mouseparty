@@ -4,6 +4,7 @@ import (
 	"debug/elf"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -134,7 +135,11 @@ func fetchUpdate(rel *release, bundle string, step func(got, total int64)) (stri
 		return "", err
 	}
 	staged := stagedFor(bundle)
-	if err := updateCopy(got, staged, mode); err != nil {
+	err = updateCopy(got, staged, mode)
+	if err == nil { // its signature with it, to be checked again as it goes in
+		err = updateCopy(got+".minisig", stagedSig(bundle), 0o600)
+	}
+	if err != nil {
 		os.RemoveAll(stage)
 		return "", err
 	}
@@ -168,6 +173,11 @@ func stagedFor(bundle string) string {
 	return filepath.Join(stagingDir(bundle), filepath.Base(bundle))
 }
 
+// stagedSig: the staged update's signature, beside it
+func stagedSig(bundle string) string {
+	return filepath.Join(stagingDir(bundle), "update.minisig")
+}
+
 func (a *App) installUpdate() error {
 	u := &a.update
 	if u.state != "ready" || u.staged == "" {
@@ -191,6 +201,14 @@ func (a *App) putUpdateIn(staged string) error {
 	if stagedFor(bundle) != staged {
 		was := filepath.Join(filepath.Dir(filepath.Dir(staged)), filepath.Base(staged))
 		return errors.New("it was downloaded for " + was + ", not " + bundle)
+	}
+	// checked again: it was checked when it came down, maybe hours ago
+	sig, err := os.ReadFile(stagedSig(bundle))
+	if err == nil {
+		err = checkSigned(staged, sig, a.update.latest)
+	}
+	if err != nil {
+		return fmt.Errorf("the update didn't check again: %v", err)
 	}
 	return os.Rename(staged, bundle)
 }

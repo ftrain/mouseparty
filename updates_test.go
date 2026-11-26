@@ -2,15 +2,49 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"aead.dev/minisign"
+
+	"github.com/ftrain/mouseparty/internal/releasesig"
 )
+
+// testReleaseKey: a release key of the test's own, in releaseKey's place until it ends
+func testReleaseKey(t *testing.T) minisign.PrivateKey {
+	t.Helper()
+	pub, priv, err := minisign.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, _ := pub.MarshalText()
+	was := releaseKey
+	releaseKey = string(text)
+	t.Cleanup(func() { releaseKey = was })
+	return priv
+}
+
+// signedAs: body's signature, as version's updateAsset, with key
+func signedAs(t *testing.T, key minisign.PrivateKey, body []byte, version string) []byte {
+	t.Helper()
+	f := filepath.Join(t.TempDir(), "signed")
+	if err := os.WriteFile(f, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sig, err := releasesig.Sign(key, f, version, updateAsset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sig
+}
 
 func TestVersions(t *testing.T) {
 	for _, c := range []struct {
@@ -34,8 +68,19 @@ type gitHubStandIn struct {
 func standInGitHub(t *testing.T, releases func(asset func(name, sum string) map[string]any) []map[string]any, file func(name string) []byte) *gitHubStandIn {
 	t.Helper()
 	g := &gitHubStandIn{}
+	key := testReleaseKey(t)
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// a release's signature of its updateAsset, as /sig/<version it's signed as>/<name>
+		if rest, ok := strings.CutPrefix(r.URL.Path, "/sig/"); ok {
+			as, name, _ := strings.Cut(rest, "/")
+			if body := standInFile(file, name); body != nil && name == updateAsset {
+				w.Write(signedAs(t, key, body, as))
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
 		if r.URL.Path != "/releases" {
 			g.fetches.Add(1)
 			if body := standInFile(file, strings.TrimPrefix(r.URL.Path, "/")); body != nil {
@@ -45,7 +90,7 @@ func standInGitHub(t *testing.T, releases func(asset func(name, sum string) map[
 			http.NotFound(w, r)
 			return
 		}
-		json.NewEncoder(w).Encode(releases(func(name, sum string) map[string]any {
+		list := releases(func(name, sum string) map[string]any {
 			a := map[string]any{"name": name, "browser_download_url": server.URL + "/" + name, "size": 1234}
 			if body := standInFile(file, name); body != nil {
 				a["size"] = len(body)
@@ -54,7 +99,27 @@ func standInGitHub(t *testing.T, releases func(asset func(name, sum string) map[
 				a["digest"] = "sha256:" + sum
 			}
 			return a
-		}))
+		})
+		// each release's updateAsset signed as its own version, but for one marked "unsigned",
+		// or "signed_as" another version
+		for _, rel := range list {
+			unsigned, _ := rel["unsigned"].(bool)
+			as, ok := rel["signed_as"].(string)
+			if !ok {
+				as, _ = rel["tag_name"].(string)
+				as = strings.TrimPrefix(as, "v")
+			}
+			delete(rel, "unsigned")
+			delete(rel, "signed_as")
+			assets, _ := rel["assets"].([]any)
+			for _, a := range assets {
+				if m, _ := a.(map[string]any); !unsigned && m["name"] == updateAsset {
+					rel["assets"] = append(assets, map[string]any{"name": updateAsset + ".minisig", "browser_download_url": server.URL + "/sig/" + as + "/" + updateAsset, "size": 300})
+					break
+				}
+			}
+		}
+		json.NewEncoder(w).Encode(list)
 	}))
 	t.Cleanup(server.Close)
 	was := updatesAPI
@@ -126,7 +191,8 @@ func TestLatestRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rel.Version != "9.9.0" || !strings.HasSuffix(rel.URL, "/"+updateAsset) || rel.Sum != sum || rel.Size != 1234 || rel.Page != page {
+	if rel.Version != "9.9.0" || !strings.HasSuffix(rel.URL, "/"+updateAsset) || rel.Sum != sum || rel.Size != 1234 || rel.Page != page ||
+		!strings.HasSuffix(rel.SigURL, "/sig/9.9.0/"+updateAsset) {
 		t.Errorf("the release: %+v", rel)
 	}
 
@@ -167,5 +233,55 @@ func TestUpdateDir(t *testing.T) {
 	}
 	if dir, err := updateDir(); err == nil {
 		t.Errorf("with no cache folder, the update's folder is %q", dir)
+	}
+}
+
+// An update is taken only signed with the release key, as its own version's updateAsset: not unsigned,
+// not with another key, not signed for another version (an older release's file passed off as newer)
+func TestUpdateSigned(t *testing.T) {
+	body := []byte("the app, as released")
+	file := func(name string) []byte {
+		if name == updateAsset {
+			return body
+		}
+		return nil
+	}
+	path := filepath.Join(t.TempDir(), updateAsset)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name string
+		rel  map[string]any
+		want string // "" for taken
+	}{
+		{"signed", map[string]any{}, ""},
+		{"unsigned", map[string]any{"unsigned": true}, "isn't signed"},
+		{"signed for another version", map[string]any{"signed_as": "9.8.0"}, "signed as"},
+	} {
+		standInGitHub(t, func(asset func(name, sum string) map[string]any) []map[string]any {
+			c.rel["tag_name"], c.rel["assets"] = "v9.9.0", []any{asset(updateAsset, strings.Repeat("ab", 32))}
+			return []map[string]any{c.rel}
+		}, file)
+		rel, err := latestRelease(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = fetchSigned(rel, path)
+		switch {
+		case c.want == "" && err != nil:
+			t.Errorf("%s: refused: %v", c.name, err)
+		case c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)):
+			t.Errorf("%s: got %v, want an error with %q", c.name, err, c.want)
+		}
+	}
+	// another key's signature
+	standInGitHub(t, func(asset func(name, sum string) map[string]any) []map[string]any {
+		return []map[string]any{{"tag_name": "v9.9.0", "assets": []any{asset(updateAsset, strings.Repeat("ab", 32))}}}
+	}, file)
+	rel, _ := latestRelease(context.Background())
+	testReleaseKey(t) // the app now trusts a different key from the one the stand-in signs with
+	if _, err := fetchSigned(rel, path); err == nil || !strings.Contains(err.Error(), "release key") {
+		t.Errorf("another key's signature: %v", err)
 	}
 }

@@ -20,6 +20,18 @@
 #   APPLE_API_ISSUER_ID          the issuer ID above the keys
 # Once a release is signed, every later one must be: the app takes only an update signed by
 # the same developer (updates_darwin.go checkBundle, updates_windows.go checkInstaller).
+#
+# Every release's app files are also signed with Mouse Party's release key (minisign: each
+# <file>.minisig beside it, tools/signrelease), which every app checks before an update goes
+# anywhere (internal/releasesig): a tag isn't released without these secrets.
+#   MINISIGN_KEY                 the release key's secret half: the text of mouseparty.key
+#                                (go run ./tools/signrelease -new <dir> makes a pair; its public
+#                                half goes in internal/releasesig's PublicKey)
+#   MINISIGN_PASSWORD            the password it's encrypted with (mouseparty.password)
+#
+# A tag's release is published by two jobs: the Mac's as soon as the Mac's build and tests
+# pass (release), and Linux's and Windows's files added to it once theirs do
+# (release-linux-windows), so they never hold the Mac's up.
 name: App
 
 on:
@@ -528,26 +540,36 @@ jobs:
           if (-not (Gone "HKCU:\Software\Classes\CLSID\$guid")) { throw "the uninstaller left the notifications' CLSID key" }
           if (-not (Gone 'HKCU:\Software\Classes\AppUserModelId\MouseParty.exe')) { throw "the uninstaller left the notifications' AppUserModelId key" }
 
+  # the release, with the Mac's disk image (and the GPL sources of every platform's), as soon as
+  # the Mac's build has passed: Linux's and Windows's follow (release-linux-windows)
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [mac, linux, linux-test, fedora45, windows, windows-test]
+    needs: [mac]
     runs-on: ubuntu-24.04
     permissions:
       contents: write          # to create the release
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
       - uses: actions/download-artifact@v4
         with:
-          pattern: MouseParty-*
+          name: MouseParty-macos-arm64
           path: dist
-          merge-multiple: true
+
+      - name: Sign
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: go run ./tools/signrelease "$GITHUB_REF_NAME" dist/MouseParty-macos-arm64.dmg
 
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
           MAC_SIGNED: ${{ needs.mac.outputs.signed }}
-          WINDOWS_SIGNED: ${{ needs.windows.outputs.signed }}
         run: |
           scripts/build_ffmpeg.sh --fetch
           scripts/fetch_pandoc.sh --fetch
@@ -559,26 +581,77 @@ jobs:
           else
             MAC="The first time it opens: System Settings > Privacy & Security > Open Anyway."
           fi
-          if [ -n "$WINDOWS_SIGNED" ]; then
-            WINDOWS="It's signed."
-          else
-            WINDOWS="It isn't signed: the first time, Windows asks whether to run it (More info > Run anyway)."
-          fi
           PRERELEASE=()
           case "$GITHUB_REF_NAME" in
           *-*) PRERELEASE=(--prerelease) ;;
           esac
           gh release create "$GITHUB_REF_NAME" "${PRERELEASE[@]}" \
             dist/MouseParty-macos-arm64.dmg \
-            dist/MouseParty-linux-x86_64.AppImage \
-            dist/MouseParty-linux-x86_64.rpm \
-            dist/MouseParty-windows-x86_64-setup.exe \
+            dist/MouseParty-macos-arm64.dmg.minisig \
             "dist/$SOURCES" \
             --title "Mouse Party $GITHUB_REF_NAME" \
             --notes "MouseParty-macos-arm64.dmg is the app for Apple Silicon Macs with macOS 13 or later: open it and drag Mouse Party to Applications. $MAC From then on it updates itself (Settings > General).
 
+          $SOURCES is only for the GPL: the exact sources of the ffmpeg inside each app (with scripts/build_ffmpeg.sh, which builds it from them) and of the mingw-w64 runtime the Windows one is linked with; of its pandoc (its own WebAssembly release build, scripts/fetch_pandoc.sh) and the Haskell libraries compiled into it, with GHC's source for its runtime, base libraries and GMP (9.14.1.20260728, the published GHC nearest the snapshot that built it: scripts/pandoc-sources.txt); and of the AppImage runtime and the libfuse it carries (scripts/fetch_appimage_runtime.sh).
+
+          Each app's .minisig is its signature with Mouse Party's release key, which the app checks before it updates itself."
+
+  # Linux's and Windows's files, added to the release once their builds and tests pass
+  release-linux-windows:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release, linux, linux-test, fedora45, windows, windows-test]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write          # to add to the release
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: MouseParty-linux-x86_64
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: MouseParty-windows-x86_64
+          path: dist
+
+      - name: Sign
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          go run ./tools/signrelease "$GITHUB_REF_NAME" \
+            dist/MouseParty-linux-x86_64.AppImage \
+            dist/MouseParty-linux-x86_64.rpm \
+            dist/MouseParty-windows-x86_64-setup.exe
+
+      - name: Add to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS_SIGNED: ${{ needs.windows.outputs.signed }}
+        run: |
+          if [ -n "$WINDOWS_SIGNED" ]; then
+            WINDOWS="It's signed."
+          else
+            WINDOWS="It isn't signed: the first time, Windows asks whether to run it (More info > Run anyway)."
+          fi
+          gh release upload "$GITHUB_REF_NAME" \
+            dist/MouseParty-linux-x86_64.AppImage \
+            dist/MouseParty-linux-x86_64.AppImage.minisig \
+            dist/MouseParty-linux-x86_64.rpm \
+            dist/MouseParty-linux-x86_64.rpm.minisig \
+            dist/MouseParty-windows-x86_64-setup.exe \
+            dist/MouseParty-windows-x86_64-setup.exe.minisig
+          gh release view "$GITHUB_REF_NAME" --json body --jq .body > notes.md
+          cat >> notes.md <<NOTES
+
           MouseParty-linux-x86_64.AppImage is the app for Linux on x86-64 with GTK 3 and WebKitGTK 4.1 (Fedora 43 or later): make it executable and open it. It updates itself. MouseParty-linux-x86_64.rpm installs it with dnf instead (sudo dnf install ./MouseParty-linux-x86_64.rpm); that copy doesn't update itself, but says when a new one is out, which installs over it the same way.
 
           MouseParty-windows-x86_64-setup.exe installs it for this user on 64-bit Windows 10 or 11, with no administrator needed. $WINDOWS It updates itself.
-
-          $SOURCES is only for the GPL: the exact sources of the ffmpeg inside each app (with scripts/build_ffmpeg.sh, which builds it from them) and of the mingw-w64 runtime the Windows one is linked with; of its pandoc (its own WebAssembly release build, scripts/fetch_pandoc.sh) and the Haskell libraries compiled into it, with GHC's source for its runtime, base libraries and GMP (9.14.1.20260728, the published GHC nearest the snapshot that built it: scripts/pandoc-sources.txt); and of the AppImage runtime and the libfuse it carries (scripts/fetch_appimage_runtime.sh)."
+          NOTES
+          gh release edit "$GITHUB_REF_NAME" --notes-file notes.md

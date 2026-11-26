@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"github.com/ftrain/mouseparty/internal/releasesig"
 )
 
 // version: this build's, set by scripts/build_mac_app.sh (-ldflags "-X main.version=3.1.0"); "dev" otherwise
@@ -33,6 +35,9 @@ const updateEvery = 24 * time.Hour
 
 // updatesAPI: this repo's releases (tests point it at their own)
 var updatesAPI = "https://api.github.com/repos/ftrain/mouseparty/releases?per_page=30"
+
+// releaseKey: the minisign key every release's app file is signed with (tests use their own)
+var releaseKey = releasesig.PublicKey
 
 // updater: where updating has got to (on the App, touched on its goroutine)
 type updater struct {
@@ -97,6 +102,7 @@ type release struct {
 	Version string
 	URL     string // the download of its updateAsset
 	Sum     string // its SHA-256, as GitHub gives it (hex)
+	SigURL  string // the download of its minisign signature (updateAsset + ".minisig"); "" when the release has none
 	Size    int64
 	Page    string
 }
@@ -142,6 +148,9 @@ func latestRelease(ctx context.Context) (*release, error) {
 			if sum, ok := strings.CutPrefix(a.Digest, "sha256:"); a.Name == updateAsset && ok && len(sum) == 64 {
 				rel.URL, rel.Sum, rel.Size = a.URL, strings.ToLower(sum), a.Size
 			}
+			if a.Name == updateAsset+".minisig" {
+				rel.SigURL = a.URL
+			}
 		}
 		if rel.URL != "" && (best == nil || newer(rel.Version, best.Version)) {
 			best = &rel
@@ -151,6 +160,41 @@ func latestRelease(ctx context.Context) (*release, error) {
 		return nil, errors.New("no release of the app is there yet")
 	}
 	return best, nil
+}
+
+// fetchSig: the release's signature of its updateAsset (small, so in memory)
+func fetchSig(rel *release) ([]byte, error) {
+	if rel.SigURL == "" {
+		return nil, errors.New("the release isn't signed")
+	}
+	req, err := http.NewRequest("GET", rel.SigURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mouse Party")
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return nil, errors.New(shortNetError(err))
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("its signature didn't download: %s", resp.Status)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, releasesig.SigMax))
+}
+
+// checkSigned: the file at path is the release's updateAsset, signed with Mouse Party's release key for its version
+func checkSigned(path string, sig []byte, version string) error {
+	return releasesig.Check(releaseKey, path, sig, version, updateAsset)
+}
+
+// fetchSigned: the release's signature, fetched and checked against the file at path; it's returned to be checked again later
+func fetchSigned(rel *release, path string) ([]byte, error) {
+	sig, err := fetchSig(rel)
+	if err == nil {
+		err = checkSigned(path, sig, rel.Version)
+	}
+	return sig, err
 }
 
 // stagingDir: where an update is unpacked, beside the app (the same disk, so it moves in at once)

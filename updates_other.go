@@ -31,6 +31,13 @@ func fetchUpdateAsset(rel *release, step func(got, total int64)) (string, error)
 	if err == nil && got != want {
 		err = os.Rename(got, want)
 	}
+	var sig []byte
+	if err == nil {
+		sig, err = fetchSigned(rel, want)
+	}
+	if err == nil { // kept beside it, to be checked again just before it's used (Windows: at quitting)
+		err = os.WriteFile(want+".minisig", sig, 0o600)
+	}
 	if err != nil {
 		os.RemoveAll(dir)
 		return "", err
