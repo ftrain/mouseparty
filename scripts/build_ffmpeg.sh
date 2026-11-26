@@ -25,7 +25,7 @@ export PKG_CONFIG_LIBDIR=$PREFIX/lib/pkgconfig PKG_CONFIG_PATH=
 
 X264=b35605ace3ddf7c1a5d67a2eb553f034aef41d55    # the stable branch
 SOURCES=(
-    "ffmpeg-9.0.2.tar.xz https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz 8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e"
+    "ffmpeg-9.1.tar.xz https://ffmpeg.org/releases/ffmpeg-9.1.tar.xz 1a4d394ae63d190a526cd052eb4415c156b5c5e2df37efab41a7de0b8fde2433"
     "x264-b35605ac.tar.bz2 https://code.videolan.org/videolan/x264/-/archive/$X264/x264-$X264.tar.bz2 6eeb82934e69fd51e043bd8c5b0d152839638d1ce7aa4eea65a3fedcf83ff224"
     "opus-1.5.2.tar.gz https://github.com/xiph/opus/releases/download/v1.5.2/opus-1.5.2.tar.gz 65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1"
     "freetype-2.15.0.tar.xz https://download.savannah.gnu.org/releases/freetype/freetype-2.15.0.tar.xz 93cd47eb719c325107f2d3cf087d06299e944c3b48a40b55537302304dea1dd5"
@@ -111,7 +111,7 @@ FILTERS=$FILTERS,buffer,buffersink,abuffer,abuffersink,null,anull,copy,acopy,for
 FILTERS=$FILTERS,adelay # the sound moved later (Item.Sound)
 FILTERS=$FILTERS,transpose,hflip,vflip,crop,setparams
 
-unpack ffmpeg ffmpeg-9.0.2.tar.xz
+unpack ffmpeg ffmpeg-9.1.tar.xz
 ./configure --prefix="$PREFIX" --pkg-config-flags=--static \
     --extra-cflags="-I$PREFIX/include -mmacosx-version-min=13.0" \
     --extra-ldflags="-L$PREFIX/lib -mmacosx-version-min=13.0" --extra-libs=-lc++ \

@@ -9,7 +9,7 @@ its authors publish it, and the built app carries this whole folder in
 
 | | Version | Licence | Source |
 |---|---|---|---|
-| **ffmpeg**, Mouse Party's own build (`scripts/build_ffmpeg.sh`) | 9.0.2 | **GPL-2.0-or-later** as built (it includes x264); FFmpeg itself is LGPL-2.1-or-later | see below |
+| **ffmpeg**, Mouse Party's own build (`scripts/build_ffmpeg.sh`) | 9.1 | **GPL-2.0-or-later** as built (it includes x264); FFmpeg itself is LGPL-2.1-or-later | see below |
 | [MediaMTX](https://github.com/bluenviron/mediamtx) | 1.21.3 | MIT | `mediamtx/` |
 | [cloudflared](https://github.com/cloudflare/cloudflared) | 2026.10.3 | Apache-2.0 | `cloudflared/` |
 | [pandoc](https://pandoc.org), its own WebAssembly release build (`pandoc.wasm`, `scripts/fetch_pandoc.sh`), run inside the app by wazero: documents brought in (`pandoc.go`) | 3.13 | **GPL-2.0-or-later** (with the parts its `COPYRIGHT` lists under their own) | `pandoc/`; source below |
@@ -19,7 +19,7 @@ checked against its SHA-256 by `scripts/build_ffmpeg.sh`:
 
 | | Version | Licence | |
 |---|---|---|---|
-| [FFmpeg](https://ffmpeg.org) | 9.0.2 | LGPL-2.1+ (GPL-2.0+ with x264) | `ffmpeg/` |
+| [FFmpeg](https://ffmpeg.org) | 9.1 | LGPL-2.1+ (GPL-2.0+ with x264) | `ffmpeg/` |
 | [x264](https://code.videolan.org/videolan/x264) | stable, b35605ac | GPL-2.0+ | `x264/` |
 | [Opus](https://opus-codec.org) | 1.5.2 | BSD-3-Clause | `opus/` |
 | [FreeType](https://freetype.org) | 2.15.0 | FreeType License (FTL) | `freetype/` |
