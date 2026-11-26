@@ -77,9 +77,6 @@ func fetchUpdate(rel *release, bundle string, step func(got, total int64)) (stri
 	if got := hex.EncodeToString(h.Sum(nil)); got != rel.Sum {
 		return "", errors.New("it isn't what the release says it is (its SHA-256 differs)")
 	}
-	if _, err := fetchSigned(rel, dmg); err != nil {
-		return "", err
-	}
 	// opened where nothing sees it (no Finder window, not in the sidebar), read-only, and put away again
 	mount := filepath.Join(dir, "mount")
 	if out, err := exec.Command("/usr/bin/hdiutil", "attach", "-nobrowse", "-noautoopen", "-readonly", "-noverify",

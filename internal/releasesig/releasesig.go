@@ -1,6 +1,7 @@
-// Package releasesig: the minisign signature every release's app files carry (<file>.minisig
-// beside each), made by .github/workflows/app.yml's release jobs with the repo's MINISIGN_KEY
-// and checked by the app before an update goes anywhere (updates*.go). GitHub's SHA-256 only
+// Package releasesig: the minisign signature a release's Linux and Windows files carry
+// (<file>.minisig beside each), made by .github/workflows/app.yml's release-linux-windows job
+// with the repo's MINISIGN_KEY and checked by those apps before an update goes anywhere
+// (updates_other.go). The Mac's updates are held to its Developer ID instead (checkBundle). GitHub's SHA-256 only
 // says a file is the one uploaded; this says Mouse Party's own release key made it, for that
 // version and that file, so whoever can upload to a release can't hand anyone an update.
 package releasesig

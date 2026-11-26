@@ -36,7 +36,8 @@ const updateEvery = 24 * time.Hour
 // updatesAPI: this repo's releases (tests point it at their own)
 var updatesAPI = "https://api.github.com/repos/ftrain/mouseparty/releases?per_page=30"
 
-// releaseKey: the minisign key every release's app file is signed with (tests use their own)
+// releaseKey: the minisign key a release's Linux and Windows files are signed with (tests use their own);
+// the Mac's disk image isn't: its update is held to this app's Developer ID (checkBundle)
 var releaseKey = releasesig.PublicKey
 
 // updater: where updating has got to (on the App, touched on its goroutine)

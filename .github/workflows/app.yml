@@ -21,8 +21,8 @@
 # Once a release is signed, every later one must be: the app takes only an update signed by
 # the same developer (updates_darwin.go checkBundle, updates_windows.go checkInstaller).
 #
-# Every release's app files are also signed with Mouse Party's release key (minisign: each
-# <file>.minisig beside it, tools/signrelease), which every app checks before an update goes
+# Linux's and Windows's app files are also signed with Mouse Party's release key (minisign: each
+# <file>.minisig beside it, tools/signrelease), which those apps check before an update goes
 # anywhere (internal/releasesig): a tag isn't released without these secrets.
 #   MINISIGN_KEY                 the release key's secret half: the text of mouseparty.key
 #                                (go run ./tools/signrelease -new <dir> makes a pair; its public
@@ -551,20 +551,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-
       - uses: actions/download-artifact@v4
         with:
           name: MouseParty-macos-arm64
           path: dist
-
-      - name: Sign
-        env:
-          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
-          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
-        run: go run ./tools/signrelease "$GITHUB_REF_NAME" dist/MouseParty-macos-arm64.dmg
 
       - name: Release
         env:
@@ -587,14 +577,11 @@ jobs:
           esac
           gh release create "$GITHUB_REF_NAME" "${PRERELEASE[@]}" \
             dist/MouseParty-macos-arm64.dmg \
-            dist/MouseParty-macos-arm64.dmg.minisig \
             "dist/$SOURCES" \
             --title "Mouse Party $GITHUB_REF_NAME" \
             --notes "MouseParty-macos-arm64.dmg is the app for Apple Silicon Macs with macOS 13 or later: open it and drag Mouse Party to Applications. $MAC From then on it updates itself (Settings > General).
 
-          $SOURCES is only for the GPL: the exact sources of the ffmpeg inside each app (with scripts/build_ffmpeg.sh, which builds it from them) and of the mingw-w64 runtime the Windows one is linked with; of its pandoc (its own WebAssembly release build, scripts/fetch_pandoc.sh) and the Haskell libraries compiled into it, with GHC's source for its runtime, base libraries and GMP (9.14.1.20260728, the published GHC nearest the snapshot that built it: scripts/pandoc-sources.txt); and of the AppImage runtime and the libfuse it carries (scripts/fetch_appimage_runtime.sh).
-
-          Each app's .minisig is its signature with Mouse Party's release key, which the app checks before it updates itself."
+          $SOURCES is only for the GPL: the exact sources of the ffmpeg inside each app (with scripts/build_ffmpeg.sh, which builds it from them) and of the mingw-w64 runtime the Windows one is linked with; of its pandoc (its own WebAssembly release build, scripts/fetch_pandoc.sh) and the Haskell libraries compiled into it, with GHC's source for its runtime, base libraries and GMP (9.14.1.20260728, the published GHC nearest the snapshot that built it: scripts/pandoc-sources.txt); and of the AppImage runtime and the libfuse it carries (scripts/fetch_appimage_runtime.sh)."
 
   # Linux's and Windows's files, added to the release once their builds and tests pass
   release-linux-windows:
@@ -653,5 +640,7 @@ jobs:
           MouseParty-linux-x86_64.AppImage is the app for Linux on x86-64 with GTK 3 and WebKitGTK 4.1 (Fedora 43 or later): make it executable and open it. It updates itself. MouseParty-linux-x86_64.rpm installs it with dnf instead (sudo dnf install ./MouseParty-linux-x86_64.rpm); that copy doesn't update itself, but says when a new one is out, which installs over it the same way.
 
           MouseParty-windows-x86_64-setup.exe installs it for this user on 64-bit Windows 10 or 11, with no administrator needed. $WINDOWS It updates itself.
+
+          Each Linux and Windows file's .minisig is its signature with Mouse Party's release key, which the app checks before it updates itself.
           NOTES
           gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
