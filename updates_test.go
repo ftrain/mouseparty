@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,10 +12,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"aead.dev/minisign"
-
-	"github.com/ftrain/mouseparty/internal/releasesig"
 )
 
 func TestVersions(t *testing.T) {
@@ -82,8 +77,6 @@ func TestUpdate(t *testing.T) {
 	sum := sha256.Sum256(body)
 	good := hex.EncodeToString(sum[:])
 	served := good
-	key := testReleaseKey(t)
-	sig := signedAs(t, key, body, "9.9.0")
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asset := func(name string) map[string]any {
@@ -94,7 +87,7 @@ func TestUpdate(t *testing.T) {
 		switch r.URL.Path {
 		case "/releases":
 			json.NewEncoder(w).Encode([]map[string]any{
-				{"tag_name": "v9.9.0", "assets": []any{asset(updateAsset), asset(updateAsset + ".minisig"), asset("MouseParty-v9.9.0-gpl-sources.tar")}},
+				{"tag_name": "v9.9.0", "assets": []any{asset(updateAsset), asset("MouseParty-v9.9.0-gpl-sources.tar")}},
 				{"tag_name": "v10.0.0", "draft": true, "assets": []any{asset(updateAsset)}},
 				{"tag_name": "v9.10.0-rc1", "assets": []any{asset(updateAsset)}},
 				{"tag_name": "v9.9.5", "assets": []any{bare}},                                // no SHA-256: not a release to take
@@ -104,8 +97,6 @@ func TestUpdate(t *testing.T) {
 			})
 		case "/" + updateAsset:
 			w.Write(body)
-		case "/" + updateAsset + ".minisig":
-			w.Write(sig)
 		default:
 			http.NotFound(w, r)
 		}
@@ -145,20 +136,8 @@ func TestUpdate(t *testing.T) {
 		t.Error("a refused update left something beside the app")
 	}
 
-	// the right SHA-256, but signed for another version (an older release's file passed off as this one): refused
-	served = good
-	sig = signedAs(t, key, body, "9.8.0")
-	a.CheckForUpdates()
-	s = until("refused", func(s UpdateStatus) bool { return s.State == "error" })
-	if !strings.Contains(s.Text, "signed as") {
-		t.Errorf("why: %q", s.Text)
-	}
-	if _, err := os.Stat(stagingDir(installed)); !os.IsNotExist(err) {
-		t.Error("a refused update left something beside the app")
-	}
-
 	// the right one: down, checked, beside the app, and in at quitting
-	sig = signedAs(t, key, body, "9.9.0")
+	served = good
 	a.CheckForUpdates()
 	s = until("ready", func(s UpdateStatus) bool { return s.Ready })
 	if s.Latest != "9.9.0" || s.Version != "3.0.0" || !strings.Contains(s.Text, "9.9.0 is ready") {
@@ -222,74 +201,5 @@ func TestUpdate(t *testing.T) {
 	os.WriteFile(filepath.Join(other, "Contents", "MacOS", "MouseParty"), []byte("#!/bin/sh\necho changed\n"), 0o755)
 	if why := checkBundle(other, "9.9.0", ""); !strings.Contains(why, "signature") {
 		t.Errorf("changed after signing: %q", why)
-	}
-}
-
-// testReleaseKey: a release key of the test's own, in releaseKey's place until it ends
-func testReleaseKey(t *testing.T) minisign.PrivateKey {
-	t.Helper()
-	pub, priv, err := minisign.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	text, _ := pub.MarshalText()
-	was := releaseKey
-	releaseKey = string(text)
-	t.Cleanup(func() { releaseKey = was })
-	return priv
-}
-
-// signedAs: body's signature, as version's updateAsset, with key
-func signedAs(t *testing.T, key minisign.PrivateKey, body []byte, version string) []byte {
-	t.Helper()
-	f := filepath.Join(t.TempDir(), "signed")
-	if err := os.WriteFile(f, body, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	sig, err := releasesig.Sign(key, f, version, updateAsset)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return sig
-}
-
-// An update is taken only signed with the release key, as its own version's disk image
-func TestUpdateSigned(t *testing.T) {
-	body := []byte("the disk image, as released")
-	path := filepath.Join(t.TempDir(), updateAsset)
-	if err := os.WriteFile(path, body, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	key := testReleaseKey(t)
-	var sig []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(sig) }))
-	defer server.Close()
-	rel := &release{Version: "9.9.0", SigURL: server.URL + "/" + updateAsset + ".minisig"}
-	for _, c := range []struct {
-		name string
-		sig  []byte
-		want string // "" for taken
-	}{
-		{"signed", signedAs(t, key, body, "9.9.0"), ""},
-		{"signed for another version", signedAs(t, key, body, "9.8.0"), "signed as"},
-		{"signed for another file", signedAs(t, key, []byte("another"), "9.9.0"), "isn't signed with"},
-		{"no signature", []byte("not one"), "doesn't read"},
-	} {
-		sig = c.sig
-		_, err := fetchSigned(rel, path)
-		switch {
-		case c.want == "" && err != nil:
-			t.Errorf("%s: refused: %v", c.name, err)
-		case c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)):
-			t.Errorf("%s: got %v, want an error with %q", c.name, err, c.want)
-		}
-	}
-	if _, err := fetchSigned(&release{Version: "9.9.0"}, path); err == nil || !strings.Contains(err.Error(), "isn't signed") {
-		t.Errorf("a release with no signature: %v", err)
-	}
-	sig = signedAs(t, key, body, "9.9.0")
-	testReleaseKey(t) // the app now trusts another key
-	if _, err := fetchSigned(rel, path); err == nil || !strings.Contains(err.Error(), "release key") {
-		t.Errorf("another key's signature: %v", err)
 	}
 }

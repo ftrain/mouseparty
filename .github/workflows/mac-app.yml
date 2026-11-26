@@ -20,14 +20,6 @@
 #   APPLE_API_ISSUER_ID          the issuer ID above the keys
 # Once a release is signed, every later one must be: the app takes only an update signed by
 # the same developer (updates.go checkBundle).
-#
-# Every release's disk image is also signed with Mouse Party's release key (minisign: its
-# .minisig beside it, tools/signrelease), which the app checks before an update goes anywhere
-# (internal/releasesig): a tag isn't released without these secrets.
-#   MINISIGN_KEY                 the release key's secret half: the text of mouseparty.key
-#                                (go run ./tools/signrelease -new <dir> makes a pair; its public
-#                                half goes in internal/releasesig's PublicKey)
-#   MINISIGN_PASSWORD            the password it's encrypted with (mouseparty.password)
 name: Mac app
 
 on:
@@ -184,19 +176,12 @@ jobs:
           name: MouseParty-macos-arm64
           path: dist/MouseParty-macos-arm64.dmg
 
-      - name: Sign with the release key
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
-          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
-        run: go run ./tools/signrelease "$GITHUB_REF_NAME" dist/MouseParty-macos-arm64.dmg
-
       - name: Release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-        # three files: the app, its signature with the release key, and (as the GPL asks) the
-        # exact sources of the ffmpeg and pandoc inside it, in one archive
+        # two files: the app, and (as the GPL asks) the exact sources of the ffmpeg and pandoc
+        # inside it, in one archive
         run: |
           scripts/build_ffmpeg.sh --fetch
           scripts/fetch_pandoc.sh --fetch
@@ -207,6 +192,6 @@ jobs:
           else
             FIRST="The first time it opens: System Settings > Privacy & Security > Open Anyway."
           fi
-          gh release create "$GITHUB_REF_NAME" dist/MouseParty-macos-arm64.dmg dist/MouseParty-macos-arm64.dmg.minisig "dist/$SOURCES" \
+          gh release create "$GITHUB_REF_NAME" dist/MouseParty-macos-arm64.dmg "dist/$SOURCES" \
             --title "Mouse Party $GITHUB_REF_NAME" \
-            --notes "MouseParty-macos-arm64.dmg is the app, for Apple Silicon Macs with macOS 13 or later: open it and drag Mouse Party to Applications. $FIRST From then on it updates itself (Settings > General). $SOURCES is only for the GPL: the exact sources of the ffmpeg inside it, which scripts/build_ffmpeg.sh builds from, and of its pandoc (its own WebAssembly release build, scripts/fetch_pandoc.sh). MouseParty-macos-arm64.dmg.minisig is its signature with Mouse Party's release key, which the app checks before it updates itself."
+            --notes "MouseParty-macos-arm64.dmg is the app, for Apple Silicon Macs with macOS 13 or later: open it and drag Mouse Party to Applications. $FIRST From then on it updates itself (Settings > General). $SOURCES is only for the GPL: the exact sources of the ffmpeg inside it, which scripts/build_ffmpeg.sh builds from, and of its pandoc (its own WebAssembly release build, scripts/fetch_pandoc.sh)."

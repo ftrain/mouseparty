@@ -3,7 +3,6 @@ module github.com/ftrain/mouseparty
 go 1.27.4
 
 require (
-	aead.dev/minisign v0.3.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/huin/goupnp v1.3.1
 	github.com/jackpal/gateway v1.2.0

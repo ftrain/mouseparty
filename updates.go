@@ -30,8 +30,6 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
-
-	"github.com/ftrain/mouseparty/internal/releasesig"
 )
 
 // version: this build's, set by scripts/build_mac_app.sh (-ldflags "-X main.version=3.1.0"); "dev" otherwise
@@ -45,9 +43,6 @@ const (
 
 // updatesAPI: this repo's releases (tests point it at their own)
 var updatesAPI = "https://api.github.com/repos/ftrain/mouseparty/releases?per_page=30"
-
-// releaseKey: the minisign key every release's app file is signed with (tests use their own)
-var releaseKey = releasesig.PublicKey
 
 // updater: where updating has got to (on the App, touched on its goroutine)
 type updater struct {
@@ -106,7 +101,6 @@ type release struct {
 	Version string
 	URL     string // the disk image's download
 	Sum     string // its SHA-256, as GitHub gives it (hex)
-	SigURL  string // the download of its minisign signature (updateAsset + ".minisig"); "" when the release has none
 	Size    int64
 }
 
@@ -149,9 +143,6 @@ func latestRelease(ctx context.Context) (*release, error) {
 		for _, a := range r.Assets {
 			if sum, ok := strings.CutPrefix(a.Digest, "sha256:"); a.Name == updateAsset && ok && len(sum) == 64 {
 				rel.URL, rel.Sum, rel.Size = a.URL, strings.ToLower(sum), a.Size
-			}
-			if a.Name == updateAsset+".minisig" {
-				rel.SigURL = a.URL
 			}
 		}
 		if rel.URL != "" && (best == nil || newer(rel.Version, best.Version)) {
@@ -265,36 +256,6 @@ func (a *App) downloadUpdate(rel *release) {
 }
 
 // fetchUpdate: the release's disk image, its SHA-256 checked, the app in it copied out beside bundle and checked; its path
-// fetchSig: the release's signature of its updateAsset (small, so in memory)
-func fetchSig(rel *release) ([]byte, error) {
-	if rel.SigURL == "" {
-		return nil, errors.New("the release isn't signed")
-	}
-	req, err := http.NewRequest("GET", rel.SigURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Mouse Party")
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
-	if err != nil {
-		return nil, errors.New(shortNetError(err))
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("its signature didn't download: %s", resp.Status)
-	}
-	return io.ReadAll(io.LimitReader(resp.Body, releasesig.SigMax))
-}
-
-// fetchSigned: the release's signature, fetched and checked against the file at path
-func fetchSigned(rel *release, path string) ([]byte, error) {
-	sig, err := fetchSig(rel)
-	if err == nil {
-		err = releasesig.Check(releaseKey, path, sig, rel.Version, updateAsset)
-	}
-	return sig, err
-}
-
 func fetchUpdate(rel *release, bundle string, step func(got, total int64)) (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
@@ -322,11 +283,6 @@ func fetchUpdate(rel *release, bundle string, step func(got, total int64)) (stri
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != rel.Sum {
 		return "", errors.New("it isn't what the release says it is (its SHA-256 differs)")
-	}
-	// and signed with Mouse Party's release key, as this version's disk image: GitHub's SHA-256 only
-	// says it's the file uploaded; this says Mouse Party's release made it
-	if _, err := fetchSigned(rel, dmg); err != nil {
-		return "", err
 	}
 	// opened where nothing sees it (no Finder window, not in the sidebar), read-only, and put away again
 	mount := filepath.Join(dir, "mount")
