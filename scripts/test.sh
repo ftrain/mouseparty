@@ -18,5 +18,5 @@ scripts/fetch_pandoc.sh >/dev/null   # pandoc.wasm, for reading documents (pando
 go vet ./...
 # every package as it finishes, the output of what failed, and what skipped and why
 # (scripts/testreport): with NO_SKIPS=1, as CI sets, a skip fails it (ALLOW_SKIPS lets some)
-go test -json ./... "$@" | go run ./scripts/testreport
+go test -json -timeout 30m ./... "$@" | go run ./scripts/testreport # the main package takes 7 to 10 minutes
 go run . --selftest

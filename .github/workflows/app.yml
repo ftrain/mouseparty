@@ -500,7 +500,7 @@ jobs:
         run: |
           export PATH="$PWD/build/ffmpeg-windows-amd64/bin:$PWD/build/tools/windows-amd64:$PATH"
           go vet ./...
-          go test -json ./... | go run ./scripts/testreport
+          go test -json -timeout 30m ./... | go run ./scripts/testreport
 
       - name: The Windows boxes with the window code linked in, as in a release
         shell: bash
