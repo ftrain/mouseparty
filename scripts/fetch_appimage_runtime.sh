@@ -6,7 +6,7 @@ RUNTIME=20251108
 SHA256=2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
 OUT=build/appimage
 
-if command -v sha256sum >/dev/null; then CHECK=(sha256sum -c --quiet); else CHECK=(shasum -a 256 -c --quiet); fi
+if command -v shasum >/dev/null; then CHECK=(shasum -a 256 -c --quiet); else CHECK=(sha256sum -c --quiet); fi
 fetch() {
     [ -f "$2" ] || curl -fsSL -o "$2.part" "$1"
     [ ! -f "$2.part" ] || mv "$2.part" "$2"

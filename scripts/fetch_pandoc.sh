@@ -14,7 +14,7 @@ PANDOC=3.13
 SHA256=234d2020a7f3a9aab387bd35df3c17ca2ba0078a82490e2b3ede890d648d64fe   # pandoc-3.13-wasm.zip
 SOURCE_SHA256=fbf6044766b0c9be5ccbf18ffe657124449e8563a177d85662ecb6f031f9c308
 OUT=build/pandoc
-if command -v sha256sum >/dev/null; then CHECK=(sha256sum -c --quiet); else CHECK=(shasum -a 256 -c --quiet); fi
+if command -v shasum >/dev/null; then CHECK=(shasum -a 256 -c --quiet); else CHECK=(sha256sum -c --quiet); fi
 fetch() {
     mkdir -p "$(dirname "$2")"
     [ -f "$2" ] || curl -fsSL -o "$2.part" "$1"

@@ -86,11 +86,16 @@ func TestFilterValuesReachFFmpeg(t *testing.T) {
 		t.Skip("needs an ffmpeg with drawtext and subtitles")
 	}
 	odd := "it's [a],b; c=d 50% é"
-	if runtime.GOOS != "windows" {
-		odd = " " + odd + `: back\slash ` + "\xff"
+	switch runtime.GOOS {
+	case "linux":
+		odd = " " + odd + `: back\slash ` + "\xff" // a byte that isn't UTF-8: only Linux's filesystems take one
+	case "darwin":
+		odd = " " + odd + `: back\slash`
 	}
 	dir := filepath.Join(t.TempDir(), odd)
-	os.MkdirAll(dir, 0o700)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	put := func(name string, b []byte) string {
 		t.Helper()
 		p := filepath.Join(dir, name)

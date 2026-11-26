@@ -48,7 +48,7 @@ fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 sha256_check() {
-    if command -v sha256sum >/dev/null; then sha256sum -c --quiet; else shasum -a 256 -c --quiet; fi
+    if command -v shasum >/dev/null; then shasum -a 256 -c --quiet; else sha256sum -c --quiet; fi
 }
 fetch() { # url, file, sum
     curl -fsSL -o "$TMP/$2" "$1"

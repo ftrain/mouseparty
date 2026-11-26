@@ -57,7 +57,7 @@ LINKED_FROM_THE_TOOLCHAIN=(
 )
 
 sha256_check() {
-    if command -v sha256sum >/dev/null; then sha256sum -c --quiet; else shasum -a 256 -c --quiet; fi
+    if command -v shasum >/dev/null; then shasum -a 256 -c --quiet; else sha256sum -c --quiet; fi
 }
 
 FETCH=("${SOURCES[@]}")

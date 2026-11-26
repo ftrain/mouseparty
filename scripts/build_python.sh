@@ -41,7 +41,7 @@ SOURCES=(
     "wasi-sdk-$SDK.0-$SDK_HOST.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$SDK/wasi-sdk-$SDK.0-$SDK_HOST.tar.gz $SDK_SUM"
 )
 
-sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+sha256() { if command -v shasum >/dev/null; then shasum -a 256 "$@"; else sha256sum "$@"; fi; }
 STAMP="$PY sqlite $SQLITE zlib $ZLIB sdk $SDK $(sha256 "$0" | cut -c1-12)"   # what CPython is built from
 READY="$STAMP $(cat scripts/python-requirements.txt scripts/python-build-requirements.txt | sha256 | cut -c1-12)"   # and what's installed in it
 case "${1:-}" in   # what a build from these sources is called, without building (scripts/fetch_python.sh, the release workflow)
